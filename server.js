@@ -6,6 +6,9 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// Log para debug inicial
+console.log("Iniciando servidor...");
+
 const prisma = new PrismaClient();
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -17,6 +20,9 @@ app.use(express.static(path.join(__dirname, 'dist')));
 
 // --- API ROUTES ---
 
+// Health Check (Para o Railway saber que está vivo)
+app.get('/health', (req, res) => res.send('OK'));
+
 // Auth: Login
 app.post('/api/auth/login', async (req, res) => {
   const { email, password } = req.body;
@@ -27,7 +33,6 @@ app.post('/api/auth/login', async (req, res) => {
     });
 
     if (user && user.password === password) {
-      // In production, NEVER return password. 
       const { password, ...userWithoutPass } = user;
       res.json(userWithoutPass);
     } else {
@@ -35,24 +40,26 @@ app.post('/api/auth/login', async (req, res) => {
     }
   } catch (e) {
     console.error("Login Error:", e);
-    res.status(500).json({ error: 'Erro no servidor ao fazer login. Tente novamente.' });
+    res.status(500).json({ error: 'Erro no servidor ao fazer login.' });
   }
 });
 
 // Auth: Register
 app.post('/api/auth/register', async (req, res) => {
   const data = req.body;
-  console.log("Registering user:", data.email, data.role);
+  console.log("Tentativa de registro:", data.email, data.role);
   
   try {
+    // 1. Check existing
     const existing = await prisma.user.findUnique({ where: { email: data.email } });
     if (existing) {
-      console.log("User already exists:", data.email);
+      console.log("Usuário já existe:", data.email);
       return res.status(400).json({ error: 'Email já cadastrado' });
     }
 
-    // Transaction to create User, SubTeams, and Field if needed
+    // 2. Transaction
     const result = await prisma.$transaction(async (tx) => {
+      // Create User
       const user = await tx.user.create({
         data: {
           email: data.email,
@@ -70,8 +77,9 @@ app.post('/api/auth/register', async (req, res) => {
         }
       });
 
+      // Create Field if needed
       if (data.role === 'FIELD_OWNER' && data.fieldData) {
-        console.log("Creating field for user:", user.id);
+        console.log("Criando campo para usuário:", user.id);
         await tx.field.create({
           data: {
             name: data.fieldData.name,
@@ -80,7 +88,7 @@ app.post('/api/auth/register', async (req, res) => {
             cancellationFeePercent: Number(data.fieldData.cancellationFeePercent),
             pixKey: data.fieldData.pixConfig.key,
             pixName: data.fieldData.pixConfig.name,
-            imageUrl: 'https://picsum.photos/400/300?grayscale',
+            imageUrl: 'https://images.unsplash.com/photo-1529900748604-07564a03e7a6?q=80&w=1470&auto=format&fit=crop', // Imagem padrão melhor
             contactPhone: data.fieldData.contactPhone,
             latitude: user.latitude || 0,
             longitude: user.longitude || 0,
@@ -92,18 +100,21 @@ app.post('/api/auth/register', async (req, res) => {
       return user;
     });
 
+    console.log("Registro sucesso:", result.id);
+    
+    // 3. Return full object
     const { password, ...userWithoutPass } = result;
     const fullUser = await prisma.user.findUnique({
       where: { id: result.id },
       include: { subTeams: true }
     });
     
-    console.log("Registration successful for:", fullUser.email);
     res.json(fullUser);
 
   } catch (e) {
-    console.error("Registration Error:", e);
-    res.status(500).json({ error: `Erro ao criar conta: ${e.message || 'Erro interno'}` });
+    console.error("Registration Critical Error:", e);
+    // Retornar o erro exato ajuda a debugar
+    res.status(500).json({ error: `Erro no banco de dados: ${e.message}` });
   }
 });
 
@@ -118,7 +129,6 @@ app.put('/api/users/:id', async (req, res) => {
       data: { name, phoneNumber, subscription }
     });
 
-    // Handle SubTeams (Delete all and recreate for simplicity)
     await prisma.subTeam.deleteMany({ where: { userId: id } });
     if (subTeams && subTeams.length > 0) {
       await prisma.subTeam.createMany({
@@ -167,8 +177,6 @@ app.get('/api/slots', async (req, res) => {
 app.post('/api/slots', async (req, res) => {
   const slotsData = req.body;
   try {
-    // Need to manually handle `allowedCategories` if it's not supported directly by your DB provider in Prisma lists
-    // Postgres supports String[], so it's fine.
     await prisma.matchSlot.createMany({
       data: slotsData
     });
