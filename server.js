@@ -14,7 +14,7 @@ const PORT = process.env.PORT || 3000;
 app.use(cors());
 app.use(express.json());
 
-// Logging middleware
+// Logging middleware for Railway debugging
 app.use((req, res, next) => {
   console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
   next();
@@ -26,7 +26,7 @@ app.use((req, res, next) => {
 app.post('/api/auth/login', async (req, res) => {
   try {
     const { email, password } = req.body;
-    // In production, use bcrypt to compare hashes!
+    
     const user = await prisma.user.findUnique({
       where: { email },
       include: { subTeams: true, field: true }
@@ -36,11 +36,9 @@ app.post('/api/auth/login', async (req, res) => {
       return res.status(401).json({ error: 'Credenciais inválidas' });
     }
 
-    // Adapt structure for frontend
     const userData = {
       ...user,
-      field: undefined, // Don't send field object inside user, handled separately
-      // Ensure subTeams is always an array
+      field: undefined, 
       subTeams: user.subTeams || []
     };
 
@@ -56,13 +54,11 @@ app.post('/api/auth/register', async (req, res) => {
   try {
     const { subTeams, fieldData, ...userData } = req.body;
 
-    // Check if email exists
     const existing = await prisma.user.findUnique({ where: { email: userData.email } });
     if (existing) {
       return res.status(400).json({ error: 'Email já cadastrado' });
     }
 
-    // Transaction to create user, subteams, and field
     const newUser = await prisma.$transaction(async (tx) => {
       const user = await tx.user.create({
         data: {
@@ -86,7 +82,7 @@ app.post('/api/auth/register', async (req, res) => {
             pixName: fieldData.pixConfig.name,
             imageUrl: 'https://images.unsplash.com/photo-1529900748604-07564a03e7a6?auto=format&fit=crop&q=80&w=1000',
             contactPhone: fieldData.contactPhone,
-            latitude: -23.5505, // Mock default
+            latitude: -23.5505, 
             longitude: -46.6333
           }
         });
@@ -108,7 +104,6 @@ app.put('/api/users/:id', async (req, res) => {
     const { id } = req.params;
     const { subTeams, ...data } = req.body;
 
-    // First delete existing subteams to replace them (simple approach)
     await prisma.subTeam.deleteMany({ where: { userId: id } });
 
     const updated = await prisma.user.update({
@@ -133,7 +128,6 @@ app.put('/api/users/:id', async (req, res) => {
 app.get('/api/fields', async (req, res) => {
   try {
     const fields = await prisma.field.findMany();
-    // Map backend structure to frontend structure (pixConfig)
     const formattedFields = fields.map(f => ({
       ...f,
       pixConfig: { key: f.pixKey, name: f.pixName }
@@ -154,17 +148,16 @@ app.get('/api/slots', async (req, res) => {
   }
 });
 
-// Create Slots (Batch)
+// Create Slots
 app.post('/api/slots', async (req, res) => {
   try {
-    const slotsData = req.body; // Array of slots
+    const slotsData = req.body;
     if (!Array.isArray(slotsData)) return res.status(400).json({ error: 'Esperado array' });
 
     await prisma.matchSlot.createMany({
       data: slotsData
     });
 
-    // Return all slots for simplicity
     const allSlots = await prisma.matchSlot.findMany();
     res.json(allSlots);
   } catch (error) {
@@ -192,11 +185,9 @@ app.put('/api/slots/:id', async (req, res) => {
 app.use(express.static(path.join(__dirname, 'dist')));
 
 app.get('*', (req, res) => {
-  // If it's an API request that wasn't handled, return 404 JSON
   if (req.url.startsWith('/api')) {
     return res.status(404).json({ error: 'Endpoint não encontrado' });
   }
-  // Otherwise serve index.html for React Router
   res.sendFile(path.join(__dirname, 'dist', 'index.html'));
 });
 
