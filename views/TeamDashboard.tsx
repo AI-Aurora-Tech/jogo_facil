@@ -1,15 +1,14 @@
 import React, { useState } from 'react';
-import { Search, MapPin, Clock, Check, AlertTriangle, X, MessageCircle, Filter, Trophy, Users, AlertCircle } from 'lucide-react';
+import { Search, MapPin, Clock, Check, AlertTriangle, X, MessageCircle, Filter, Trophy, Users, AlertCircle, CalendarCheck } from 'lucide-react';
 import { Button } from '../components/Button';
-import { Field, MatchSlot, VerificationResult, User, SubTeam, COMMON_CATEGORIES } from '../types';
-import { verifyPixReceipt } from '../services/aiService';
+import { Field, MatchSlot, User, SubTeam, COMMON_CATEGORIES } from '../types';
 import { calculateDistance } from '../utils';
 
 interface TeamDashboardProps {
   currentUser: User;
   fields: Field[];
   slots: MatchSlot[];
-  onBookSlot: (slotId: string, team: SubTeam, receipt?: File) => void;
+  onBookSlot: (slotId: string, team: SubTeam) => void;
   userLocation?: { lat: number, lng: number };
 }
 
@@ -27,36 +26,21 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
   // Booking State
   const [selectedSlot, setSelectedSlot] = useState<MatchSlot | null>(null);
   const [selectedTeamId, setSelectedTeamId] = useState<string>('');
-  const [receiptFile, setReceiptFile] = useState<File | null>(null);
-  
-  // AI Verification State
-  const [isVerifying, setIsVerifying] = useState(false);
-  const [verificationResult, setVerificationResult] = useState<VerificationResult | null>(null);
-
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      setReceiptFile(e.target.files[0]);
-      setVerificationResult(null); 
-    }
-  };
-
-  const handleVerifyPayment = async () => {
-    if (!receiptFile || !selectedSlot) return;
-    const field = fields.find(f => f.id === selectedSlot.fieldId);
-    if (!field) return;
-    setIsVerifying(true);
-    const result = await verifyPixReceipt(receiptFile, selectedSlot.price, field.pixConfig.name);
-    setVerificationResult(result);
-    setIsVerifying(false);
-  };
 
   const handleFinalizeBooking = () => {
     const team = currentUser.subTeams.find(t => t.id === selectedTeamId);
-    if (selectedSlot && verificationResult?.isValid && team) {
-      onBookSlot(selectedSlot.id, team, receiptFile!);
+    if (selectedSlot && team) {
+      onBookSlot(selectedSlot.id, team);
+      // Optional: Send message to owner immediately
+      const field = fields.find(f => f.id === selectedSlot?.fieldId);
+      if (field?.contactPhone) {
+         const cleanPhone = field.contactPhone.replace(/\D/g, '');
+         const text = `Olá, acabei de solicitar o agendamento para o dia ${selectedSlot.date} às ${selectedSlot.time} com o time ${team.name}. Aguardo confirmação!`;
+         const url = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(text)}`;
+         window.open(url, '_blank');
+      }
+
       setSelectedSlot(null);
-      setVerificationResult(null);
-      setReceiptFile(null);
       setSelectedTeamId('');
     }
   };
@@ -101,7 +85,7 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
 
   const filteredSlots = getFilteredSlots();
   const myBookings = getMyBookings();
-  const inputClass = "w-full bg-gray-700 border border-gray-600 rounded-lg p-2 text-white placeholder-gray-400 focus:ring-2 focus:ring-grass-500 outline-none";
+  const inputClass = "w-full bg-gray-700 border border-gray-600 rounded-lg p-3 text-white placeholder-gray-400 focus:ring-2 focus:ring-grass-500 outline-none";
 
   // Calculate available teams for the selected slot
   const getEligibleTeams = () => {
@@ -254,7 +238,7 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
                           onClick={() => setSelectedSlot(slot)}
                           disabled={isOwner}
                        >
-                         {isOwner ? 'Seu Campo' : 'Reservar'}
+                         {isOwner ? 'Seu Campo' : 'Solicitar'}
                        </Button>
                      </div>
                   </div>
@@ -281,8 +265,8 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
              myBookings.map(slot => {
                const field = fields.find(f => f.id === slot.fieldId);
                return (
-                 <div key={slot.id} className="bg-white p-5 rounded-xl border shadow-sm flex justify-between items-center">
-                    <div>
+                 <div key={slot.id} className="bg-white p-5 rounded-xl border shadow-sm flex flex-col md:flex-row justify-between items-center gap-4">
+                    <div className="flex-1">
                        <h3 className="font-bold text-lg">{field?.name}</h3>
                        <p className="text-gray-600 flex items-center gap-2">
                          <Clock className="w-4 h-4"/> {slot.date} - {slot.time}
@@ -291,16 +275,22 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
                           <span className={`px-2 py-1 rounded text-xs font-bold ${
                             slot.status === 'confirmed' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'
                           }`}>
-                            {slot.status === 'confirmed' ? 'Confirmado' : 'Aguardando Confirmação'}
+                            {slot.status === 'confirmed' ? 'Confirmado' : 'Aguardando Aprovação'}
                           </span>
                           <span className="bg-blue-50 text-blue-700 px-2 py-1 rounded text-xs font-bold flex items-center gap-1">
                              <Users className="w-3 h-3"/> {slot.bookedByTeamName} ({slot.bookedByCategory})
                           </span>
                        </div>
                     </div>
-                    <div className="text-right">
-                       <p className="font-bold text-xl">R$ {slot.price}</p>
-                    </div>
+                    
+                    {field?.contactPhone && (
+                        <button 
+                            onClick={() => handleWhatsAppField(field)} 
+                            className="bg-green-100 text-green-700 px-4 py-2 rounded-lg font-bold flex items-center gap-2 hover:bg-green-200 transition"
+                        >
+                             <MessageCircle className="w-4 h-4" /> Falar com Campo
+                        </button>
+                    )}
                  </div>
                )
              })
@@ -313,7 +303,9 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-gray-800 border border-gray-700 rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden max-h-[90vh] overflow-y-auto text-white">
             <div className="bg-pitch p-4 flex justify-between items-center sticky top-0 z-10 border-b border-gray-700">
-              <h3 className="text-white font-bold text-lg">Confirmar Agendamento</h3>
+              <h3 className="text-white font-bold text-lg flex items-center gap-2">
+                <CalendarCheck className="w-5 h-5 text-grass-400" /> Solicitar Agendamento
+              </h3>
               <button onClick={() => setSelectedSlot(null)} className="text-white/70 hover:text-white">
                 <X className="w-6 h-6" />
               </button>
@@ -322,21 +314,22 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
             <div className="p-6">
               <div className="mb-6 bg-gray-700 p-4 rounded-lg border border-gray-600">
                 <p className="text-sm text-gray-400 mb-1">Detalhes do Jogo</p>
-                <div className="flex justify-between font-semibold">
+                <div className="flex justify-between font-semibold text-lg">
                    <span>{fields.find(f => f.id === selectedSlot.fieldId)?.name}</span>
-                   <span>{selectedSlot.date} - {selectedSlot.time}</span>
                 </div>
-                <div className="mt-2 text-right text-grass-400 font-bold text-xl">
-                  R$ {selectedSlot.price},00
+                <div className="flex justify-between items-center mt-2 text-gray-300">
+                    <span>{selectedSlot.date.split('-').reverse().join('/')}</span>
+                    <span>{selectedSlot.time}</span>
                 </div>
-                <div className="mt-2 pt-2 border-t border-gray-600 text-xs text-gray-400">
-                   Permitido: {selectedSlot.allowedCategories.join(', ')}
+                <div className="mt-4 pt-4 border-t border-gray-600 flex justify-between items-center">
+                    <span className="text-sm text-gray-400">Valor a pagar no local</span>
+                    <span className="text-xl font-bold text-grass-400">R$ {selectedSlot.price},00</span>
                 </div>
               </div>
 
-              <div className="space-y-4">
+              <div className="space-y-6">
                 <div>
-                  <label className="block text-sm font-medium mb-1 text-gray-300">Qual time vai jogar?</label>
+                  <label className="block text-sm font-medium mb-2 text-gray-300">Qual time vai jogar?</label>
                   
                   {eligibleTeams.length > 0 ? (
                     <select 
@@ -352,86 +345,29 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
                   ) : (
                     <div className="bg-red-900/20 border border-red-500/50 p-3 rounded text-red-200 text-sm flex items-start gap-2">
                        <AlertTriangle className="w-5 h-5 shrink-0" />
-                       <p>Você não tem nenhum time nas categorias permitidas para este jogo ({selectedSlot.allowedCategories.join(', ')}). Vá em Editar Perfil para cadastrar um time compatível.</p>
+                       <p>Você não tem nenhum time nas categorias permitidas para este jogo ({selectedSlot.allowedCategories.join(', ')}). Cadastre um time compatível no seu perfil.</p>
                     </div>
                   )}
-                  
-                  {currentUser.subTeams?.length === 0 && (
-                     <p className="text-xs text-yellow-500 mt-1">Dica: Adicione seus times no seu perfil para facilitar.</p>
-                  )}
+                </div>
+                
+                <div className="bg-blue-900/20 border border-blue-800 p-4 rounded-lg">
+                    <p className="text-sm text-blue-200 flex items-start gap-2">
+                        <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
+                        Ao confirmar, uma notificação será enviada ao dono do campo. O pagamento deve ser combinado diretamente com o local.
+                    </p>
                 </div>
 
-                <div className="border-t border-gray-600 pt-4">
-                  <p className="font-semibold mb-2 flex items-center gap-2">
-                    <span className="bg-yellow-600 text-white text-xs px-2 py-1 rounded">Passo 1</span>
-                    Faça o PIX
-                  </p>
-                  <div className="bg-gray-900 p-3 rounded text-sm break-all font-mono text-center text-gray-200 border border-gray-700">
-                    {fields.find(f => f.id === selectedSlot.fieldId)?.pixConfig.key}
-                  </div>
-                  <p className="text-xs text-center text-gray-400 mt-1">
-                    Beneficiário: {fields.find(f => f.id === selectedSlot.fieldId)?.pixConfig.name}
-                  </p>
-                </div>
-
-                <div>
-                   <p className="font-semibold mb-2 flex items-center gap-2">
-                    <span className="bg-yellow-600 text-white text-xs px-2 py-1 rounded">Passo 2</span>
-                    Envie o Comprovante para Análise da IA
-                  </p>
-                  <input 
-                    type="file" 
-                    accept="image/*"
-                    onChange={handleFileChange}
-                    className="block w-full text-sm text-gray-400
-                      file:mr-4 file:py-2 file:px-4
-                      file:rounded-full file:border-0
-                      file:text-sm file:font-semibold
-                      file:bg-grass-600 file:text-white
-                      hover:file:bg-grass-700 cursor-pointer"
-                  />
-                </div>
-
-                {receiptFile && !verificationResult && (
+                <div className="mt-4">
                   <Button 
-                    variant="secondary" 
-                    className="w-full bg-gray-600 hover:bg-gray-500 text-white" 
-                    onClick={handleVerifyPayment}
-                    isLoading={isVerifying}
+                    className="w-full py-3 text-lg" 
+                    disabled={!selectedTeamId}
+                    onClick={handleFinalizeBooking}
                   >
-                    Validar Comprovante com IA
+                    Confirmar Solicitação
                   </Button>
-                )}
+                </div>
 
-                {verificationResult && (
-                  <div className={`p-4 rounded-lg border ${verificationResult.isValid ? 'bg-green-900/30 border-green-700' : 'bg-red-900/30 border-red-700'}`}>
-                    <div className="flex items-start gap-3">
-                      {verificationResult.isValid ? (
-                        <Check className="w-5 h-5 text-green-400 mt-0.5" />
-                      ) : (
-                        <AlertTriangle className="w-5 h-5 text-red-400 mt-0.5" />
-                      )}
-                      <div>
-                        <h4 className={`font-bold ${verificationResult.isValid ? 'text-green-300' : 'text-red-300'}`}>
-                          {verificationResult.isValid ? "Comprovante Validado!" : "Problema no Comprovante"}
-                        </h4>
-                        <p className="text-sm text-gray-300 mt-1">{verificationResult.reason}</p>
-                      </div>
-                    </div>
-                  </div>
-                )}
               </div>
-
-              <div className="mt-6">
-                <Button 
-                  className="w-full" 
-                  disabled={!verificationResult?.isValid || !selectedTeamId}
-                  onClick={handleFinalizeBooking}
-                >
-                  Confirmar Jogo
-                </Button>
-              </div>
-
             </div>
           </div>
         </div>

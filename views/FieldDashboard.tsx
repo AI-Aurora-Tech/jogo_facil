@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Plus, Users, DollarSign, Calendar as CalendarIcon, CheckCircle, XCircle, Repeat, MessageCircle, Tag } from 'lucide-react';
+import { Plus, Users, DollarSign, Calendar as CalendarIcon, CheckCircle, XCircle, Repeat, MessageCircle, Tag, AlertCircle } from 'lucide-react';
 import { Button } from '../components/Button';
 import { Field, MatchSlot, COMMON_CATEGORIES } from '../types';
 
@@ -74,6 +74,17 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
       window.open(url, '_blank');
   };
 
+  const handleConfirmAndNotify = (slot: MatchSlot) => {
+    onConfirmBooking(slot.id);
+    // Open WhatsApp to notify team
+    if (slot.bookedByPhone) {
+        const cleanPhone = slot.bookedByPhone.replace(/\D/g, '');
+        const text = `Olá ${slot.bookedByTeamName}, confirmei seu agendamento no ${field.name} para o dia ${slot.date} às ${slot.time}. Tudo certo!`;
+        const url = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(text)}`;
+        window.open(url, '_blank');
+    }
+  };
+
   const sortedSlots = [...slots].sort((a, b) => new Date(`${a.date}T${a.time}`).getTime() - new Date(`${b.date}T${b.time}`).getTime());
   
   const inputClass = "w-full bg-gray-700 border border-gray-600 rounded-lg p-3 text-white placeholder-gray-400 focus:ring-2 focus:ring-grass-500 outline-none";
@@ -109,7 +120,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
           {sortedSlots.map(slot => (
             <div key={slot.id} className={`border rounded-xl p-5 relative shadow-sm transition-all flex flex-col justify-between ${
               slot.status === 'confirmed' ? 'bg-green-50 border-green-200' :
-              slot.status === 'pending_verification' ? 'bg-yellow-50 border-yellow-200' : 'bg-white'
+              slot.status === 'pending_verification' ? 'bg-orange-50 border-orange-200' : 'bg-white'
             }`}>
               <div>
                   <div className="flex justify-between items-start mb-3">
@@ -123,10 +134,10 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                     <span className={`px-2 py-1 rounded-full text-xs font-semibold ${
                       slot.status === 'available' ? 'bg-blue-100 text-blue-700' :
                       slot.status === 'confirmed' ? 'bg-green-100 text-green-700' :
-                      'bg-yellow-100 text-yellow-800'
+                      'bg-orange-100 text-orange-800'
                     }`}>
                       {slot.status === 'available' ? 'Disponível' : 
-                       slot.status === 'confirmed' ? 'Agendado' : 'Validar'}
+                       slot.status === 'confirmed' ? 'Agendado' : 'Solicitação'}
                     </span>
                   </div>
 
@@ -157,7 +168,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                                 onClick={() => handleWhatsAppClick(slot.bookedByPhone!, slot.bookedByTeamName!, slot.date, slot.time)}
                                 className="text-green-600 hover:text-green-800 text-xs flex items-center gap-1 mt-1 font-semibold"
                              >
-                                 <MessageCircle className="w-3 h-3" /> WhatsApp
+                                 <MessageCircle className="w-3 h-3" /> Falar no WhatsApp
                              </button>
                           )}
                       </div>
@@ -167,13 +178,15 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
               <div className="border-t pt-3 mt-2">
                 {slot.status === 'pending_verification' && (
                   <div>
-                     <p className="text-sm font-semibold mb-2 text-gray-700">Aprovar Reserva?</p>
+                     <p className="text-sm font-semibold mb-2 text-orange-700 flex items-center gap-2">
+                        <AlertCircle className="w-4 h-4" /> Aprovar Solicitação?
+                     </p>
                      <div className="flex gap-2">
-                        <Button size="sm" variant="primary" className="flex-1 text-xs" onClick={() => onConfirmBooking(slot.id)}>
-                           <CheckCircle className="w-3 h-3" /> Sim
+                        <Button size="sm" variant="primary" className="flex-1 text-xs" onClick={() => handleConfirmAndNotify(slot)}>
+                           <CheckCircle className="w-3 h-3" /> Sim, Avisar
                         </Button>
                         <Button size="sm" variant="danger" className="flex-1 text-xs" onClick={() => onRejectBooking(slot.id)}>
-                           <XCircle className="w-3 h-3" /> Não
+                           <XCircle className="w-3 h-3" /> Recusar
                         </Button>
                      </div>
                   </div>

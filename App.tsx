@@ -150,7 +150,7 @@ const App: React.FC = () => {
     } catch(e) { alert("Erro ao rejeitar"); }
   };
 
-  const bookSlot = async (slotId: string, team: SubTeam, receipt: File) => {
+  const bookSlot = async (slotId: string, team: SubTeam) => {
     try {
       await api.updateSlot(slotId, { 
         isBooked: true, 
@@ -161,7 +161,7 @@ const App: React.FC = () => {
         bookedByPhone: user?.phoneNumber
       });
       refreshData();
-      alert(`Solicitação enviada!`);
+      // alert(`Solicitação enviada!`); // Removed alert to use inline success msg instead
     } catch(e) { alert("Erro ao agendar"); }
   };
 
