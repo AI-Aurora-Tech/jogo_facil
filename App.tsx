@@ -122,8 +122,9 @@ const App: React.FC = () => {
       await api.createSlots(slotsToCreate);
       // Force refresh to guarantee UI sync
       await refreshData();
-    } catch (e) {
-      alert("Erro ao criar horário");
+    } catch (e: any) {
+      console.error("Erro ao criar slot:", e);
+      alert(`Erro ao criar horário: ${e.message || "Verifique se a tabela MatchSlot possui as colunas 'customImageUrl' e 'matchType'."}`);
     }
   };
 
@@ -131,8 +132,8 @@ const App: React.FC = () => {
     try {
         await api.updateSlot(slotId, updates);
         await refreshData();
-    } catch (e) {
-        alert("Erro ao editar horário");
+    } catch (e: any) {
+        alert("Erro ao editar horário: " + e.message);
     }
   };
 
@@ -229,7 +230,7 @@ const App: React.FC = () => {
           </button>
       </div>
 
-      <main className="flex-grow">
+      <main className="flex-grow pb-20 md:pb-0">
         {currentTab === 'MY_FIELD' && (
           myField ? (
             <FieldDashboard 

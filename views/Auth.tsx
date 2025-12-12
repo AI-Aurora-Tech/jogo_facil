@@ -38,8 +38,8 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, onCancel }) => {
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      if (file.size > 2 * 1024 * 1024) {
-        setError('A imagem deve ter no máximo 2MB.');
+      if (file.size > 1024 * 1024) { // 1MB limit check
+        setError('A imagem deve ter no máximo 1MB.');
         return;
       }
       try {
@@ -225,7 +225,7 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, onCancel }) => {
                             />
                             <div className="flex flex-col items-center justify-center gap-2 text-gray-400 group-hover:text-white">
                                 <Upload className="w-8 h-8" />
-                                <span className="text-sm">Toque para enviar uma foto</span>
+                                <span className="text-sm">Toque para enviar uma foto (Máx 1MB)</span>
                             </div>
                          </div>
                        ) : (

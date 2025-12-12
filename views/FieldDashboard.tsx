@@ -61,6 +61,10 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
+      if (file.size > 1024 * 1024) { // 1MB limit check
+          alert("A imagem deve ter no máximo 1MB.");
+          return;
+      }
       try {
         const base64 = await convertFileToBase64(file);
         setCustomImageUrl(base64);
@@ -162,14 +166,14 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
     <div className="p-4 md:p-6 max-w-6xl mx-auto">
       <header className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4 bg-white p-6 rounded-xl shadow-sm border">
         <div>
-          <h2 className="text-3xl font-bold text-pitch">{field.name}</h2>
-          <p className="text-gray-500 flex items-center gap-1"><DollarSign className="w-4 h-4" /> Taxa Base: R$ {field.hourlyRate}/hr</p>
-          <div className="flex gap-2 mt-2">
+          <h2 className="text-2xl md:text-3xl font-bold text-pitch">{field.name}</h2>
+          <p className="text-gray-500 flex items-center gap-1 text-sm md:text-base"><DollarSign className="w-4 h-4" /> Taxa Base: R$ {field.hourlyRate}/hr</p>
+          <div className="flex flex-wrap gap-2 mt-2">
              <span className="bg-gray-100 text-gray-600 px-2 py-1 rounded text-xs">Multa: {field.cancellationFeePercent}%</span>
              <span className="bg-gray-100 text-gray-600 px-2 py-1 rounded text-xs">{field.location}</span>
           </div>
         </div>
-        <Button onClick={() => setShowAddModal(true)}>
+        <Button onClick={() => setShowAddModal(true)} className="w-full md:w-auto mt-4 md:mt-0">
           <Plus className="w-4 h-4" /> Novo Horário
         </Button>
       </header>
@@ -349,7 +353,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
 
       {/* Modal Add Slot */}
       {showAddModal && (
-        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4 overflow-hidden">
           <div className="bg-gray-800 border border-gray-700 rounded-2xl p-6 w-full max-w-md shadow-2xl text-white my-auto max-h-[90vh] overflow-y-auto">
             <h3 className="text-xl font-bold mb-4">Adicionar Horário na Agenda</h3>
             
@@ -435,11 +439,11 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                    <label className="block text-xs font-medium text-gray-300 mb-1">Foto/Banner (Opcional)</label>
                    
                    {!customImageUrl ? (
-                        <div className="relative border border-dashed border-gray-500 rounded bg-gray-700/50 p-4 hover:bg-gray-700 transition">
+                        <div className="relative border border-dashed border-gray-500 rounded bg-gray-700/50 p-4 hover:bg-gray-700 transition cursor-pointer">
                             <input type="file" accept="image/*" onChange={handleFileChange} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
                             <div className="flex items-center justify-center gap-2 text-gray-400">
                                 <Upload className="w-5 h-5" />
-                                <span className="text-sm">Carregar imagem</span>
+                                <span className="text-sm">Carregar imagem (Máx 1MB)</span>
                             </div>
                         </div>
                    ) : (

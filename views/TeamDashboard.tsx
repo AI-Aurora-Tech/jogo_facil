@@ -121,19 +121,19 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
   const getFieldInfo = (slot: MatchSlot) => fields.find(f => f.id === slot.fieldId);
 
   return (
-    <div className="p-6 max-w-6xl mx-auto">
+    <div className="p-4 md:p-6 max-w-6xl mx-auto">
       
       {/* Sub-Nav Tabs */}
-      <div className="flex gap-4 mb-6 border-b border-gray-300 pb-1">
+      <div className="flex gap-4 mb-6 border-b border-gray-300 pb-1 overflow-x-auto">
         <button 
           onClick={() => setActiveTab('SEARCH')}
-          className={`pb-2 px-4 font-bold transition ${activeTab === 'SEARCH' ? 'text-grass-600 border-b-2 border-grass-600' : 'text-gray-500 hover:text-gray-700'}`}
+          className={`pb-2 px-4 font-bold transition whitespace-nowrap ${activeTab === 'SEARCH' ? 'text-grass-600 border-b-2 border-grass-600' : 'text-gray-500 hover:text-gray-700'}`}
         >
           Buscar Jogos
         </button>
         <button 
           onClick={() => setActiveTab('MY_BOOKINGS')}
-          className={`pb-2 px-4 font-bold transition ${activeTab === 'MY_BOOKINGS' ? 'text-grass-600 border-b-2 border-grass-600' : 'text-gray-500 hover:text-gray-700'}`}
+          className={`pb-2 px-4 font-bold transition whitespace-nowrap ${activeTab === 'MY_BOOKINGS' ? 'text-grass-600 border-b-2 border-grass-600' : 'text-gray-500 hover:text-gray-700'}`}
         >
           Meus Agendamentos
         </button>
@@ -142,7 +142,7 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
       {activeTab === 'SEARCH' && (
         <>
           <div className="mb-6 bg-white p-4 rounded-xl shadow-sm border space-y-4">
-             <div className="flex gap-2">
+             <div className="flex flex-col md:flex-row gap-2">
                 <div className="relative flex-1">
                   <Search className="absolute left-3 top-3 text-gray-400 w-5 h-5" />
                   <input 
@@ -153,7 +153,7 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
                     onChange={e => setSearchTerm(e.target.value)}
                   />
                 </div>
-                <Button variant="secondary" onClick={() => setShowFilters(!showFilters)}>
+                <Button variant="secondary" onClick={() => setShowFilters(!showFilters)} className="w-full md:w-auto">
                   <Filter className="w-4 h-4" /> Filtros
                 </Button>
              </div>
@@ -213,9 +213,9 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
               return (
                 <div key={slot.id} className="bg-white p-4 rounded-xl border hover:shadow-md transition flex flex-col md:flex-row justify-between items-stretch gap-4">
                   <div className="flex items-start gap-4 flex-1">
-                    <img src={field.imageUrl} alt={field.name} className="w-24 h-24 rounded-lg object-cover bg-gray-200" />
-                    <div>
-                      <h3 className="font-bold text-lg text-pitch">{field.name}</h3>
+                    <img src={field.imageUrl} alt={field.name} className="w-20 h-20 md:w-24 md:h-24 rounded-lg object-cover bg-gray-200" />
+                    <div className="flex-1">
+                      <h3 className="font-bold text-lg text-pitch leading-tight">{field.name}</h3>
                       <div className="flex flex-col text-sm text-gray-500 gap-1 mt-1">
                         <span className="flex items-center gap-1">
                           <MapPin className="w-3 h-3" /> {field.location} 
@@ -234,7 +234,7 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
                         ))}
                       </div>
                         
-                      <div className="mt-2 flex gap-2">
+                      <div className="mt-2 flex flex-wrap gap-2">
                           <span className={`text-xs font-bold px-2 py-0.5 rounded border ${
                             slot.matchType === 'FESTIVAL' ? 'bg-yellow-100 text-yellow-800 border-yellow-200' :
                             slot.matchType === 'ALUGUEL' ? 'bg-purple-100 text-purple-800 border-purple-200' :
@@ -257,14 +257,14 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
                     </div>
                   </div>
 
-                  <div className="flex flex-col justify-between items-end min-w-[140px] border-l pl-4 border-gray-100">
-                     <div className="text-right">
+                  <div className="flex flex-row md:flex-col justify-between items-center md:items-end min-w-[140px] border-t md:border-t-0 md:border-l pt-3 md:pt-0 pl-0 md:pl-4 border-gray-100 mt-2 md:mt-0">
+                     <div className="text-left md:text-right">
                         <span className="text-xs text-gray-400 uppercase">Valor</span>
-                        <p className="text-2xl font-bold text-grass-700">R$ {slot.price}</p>
+                        <p className="text-xl md:text-2xl font-bold text-grass-700">R$ {slot.price}</p>
                      </div>
-                     <div className="flex flex-col gap-2 w-full">
+                     <div className="flex flex-col gap-2 w-1/2 md:w-full">
                        {field.contactPhone && !isOwner && (
-                        <button onClick={() => handleWhatsAppField(field)} className="text-green-600 text-xs font-bold hover:underline flex items-center justify-end gap-1">
+                        <button onClick={() => handleWhatsAppField(field)} className="text-green-600 text-xs font-bold hover:underline flex items-center justify-end gap-1 hidden md:flex">
                             <MessageCircle className="w-3 h-3" /> Dúvidas?
                         </button>
                        )}
@@ -328,7 +328,7 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
                     {field?.contactPhone && (
                         <button 
                             onClick={() => handleWhatsAppField(field)} 
-                            className="bg-green-100 text-green-700 px-4 py-2 rounded-lg font-bold flex items-center gap-2 hover:bg-green-200 transition"
+                            className="bg-green-100 text-green-700 px-4 py-2 rounded-lg font-bold flex items-center gap-2 hover:bg-green-200 transition w-full md:w-auto justify-center"
                         >
                              <MessageCircle className="w-4 h-4" /> Falar com Campo
                         </button>
