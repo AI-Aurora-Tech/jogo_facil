@@ -25,14 +25,7 @@ const App: React.FC = () => {
   useEffect(() => {
     const storedUser = storageService.getCurrentUser();
     if (storedUser) {
-      setUser(storedUser);
-      if (storedUser.subscription === SubscriptionPlan.NONE) {
-        setView('SUBSCRIPTION');
-      } else {
-        setView('APP');
-        setCurrentTab(storedUser.role === UserRole.FIELD_OWNER ? 'MY_FIELD' : 'SEARCH');
-        refreshData();
-      }
+      handleAuthSuccess(storedUser);
     }
 
     if (navigator.geolocation) {
@@ -63,13 +56,17 @@ const App: React.FC = () => {
     setUser(loggedUser);
     storageService.setCurrentUser(loggedUser);
     
-    refreshData();
-
-    if (loggedUser.subscription === SubscriptionPlan.NONE) {
+    // Logic: 
+    // If Admin -> App
+    // If Team Captain -> App (Free)
+    // If Field Owner -> Check Subscription (Must be PRO_FIELD)
+    
+    if (loggedUser.role === UserRole.FIELD_OWNER && loggedUser.subscription === SubscriptionPlan.NONE) {
       setView('SUBSCRIPTION');
     } else {
       setView('APP');
       setCurrentTab(loggedUser.role === UserRole.FIELD_OWNER ? 'MY_FIELD' : 'SEARCH');
+      refreshData();
     }
   };
 
@@ -122,16 +119,27 @@ const App: React.FC = () => {
     }
     
     try {
-      const updatedSlots = await api.createSlots(slotsToCreate);
-      setSlots(updatedSlots); // API returns all slots
+      await api.createSlots(slotsToCreate);
+      // Force refresh to guarantee UI sync
+      await refreshData();
     } catch (e) {
       alert("Erro ao criar horário");
+    }
+  };
+
+  const editSlot = async (slotId: string, updates: Partial<MatchSlot>) => {
+    try {
+        await api.updateSlot(slotId, updates);
+        await refreshData();
+    } catch (e) {
+        alert("Erro ao editar horário");
     }
   };
 
   const confirmBooking = async (slotId: string) => {
     try {
       await api.updateSlot(slotId, { status: 'confirmed' });
+      // Update local state directly for speed, refresh background
       setSlots(prev => prev.map(s => s.id === slotId ? { ...s, status: 'confirmed' } : s));
     } catch(e) { alert("Erro ao confirmar"); }
   };
@@ -144,7 +152,9 @@ const App: React.FC = () => {
         bookedByTeamName: null, 
         bookedByUserId: null, 
         bookedByPhone: null,
-        bookedByCategory: null
+        bookedByCategory: null,
+        opponentTeamName: null,
+        opponentTeamPhone: null
       } as any);
       refreshData();
     } catch(e) { alert("Erro ao rejeitar"); }
@@ -161,7 +171,6 @@ const App: React.FC = () => {
         bookedByPhone: user?.phoneNumber
       });
       refreshData();
-      // alert(`Solicitação enviada!`); // Removed alert to use inline success msg instead
     } catch(e) { alert("Erro ao agendar"); }
   };
 
@@ -227,6 +236,7 @@ const App: React.FC = () => {
               field={myField} 
               slots={mySlots} 
               onAddSlot={addSlot}
+              onEditSlot={editSlot}
               onConfirmBooking={confirmBooking}
               onRejectBooking={rejectBooking}
             />

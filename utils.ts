@@ -14,3 +14,12 @@ export const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2
 function deg2rad(deg: number) {
   return deg * (Math.PI / 180);
 }
+
+export const convertFileToBase64 = (file: File): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = (error) => reject(error);
+  });
+};

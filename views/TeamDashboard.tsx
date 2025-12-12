@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Search, MapPin, Clock, Check, AlertTriangle, X, MessageCircle, Filter, Trophy, Users, AlertCircle, CalendarCheck } from 'lucide-react';
+import { Search, MapPin, Clock, Check, AlertTriangle, X, MessageCircle, Filter, Trophy, Users, AlertCircle, CalendarCheck, Copy, Share2, Phone } from 'lucide-react';
 import { Button } from '../components/Button';
 import { Field, MatchSlot, User, SubTeam, COMMON_CATEGORIES } from '../types';
 import { calculateDistance } from '../utils';
@@ -26,22 +26,41 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
   // Booking State
   const [selectedSlot, setSelectedSlot] = useState<MatchSlot | null>(null);
   const [selectedTeamId, setSelectedTeamId] = useState<string>('');
+  
+  // Extra Info for Rentals
+  const [opponentName, setOpponentName] = useState('');
+  const [opponentPhone, setOpponentPhone] = useState('');
 
   const handleFinalizeBooking = () => {
     const team = currentUser.subTeams.find(t => t.id === selectedTeamId);
     if (selectedSlot && team) {
+      
+      // Inject opponent info into the slot object if it's a rental (hacky for this frontend-only mock, normally sent in payload)
+      if (selectedSlot.matchType === 'ALUGUEL') {
+          (selectedSlot as any).opponentTeamName = opponentName;
+          (selectedSlot as any).opponentTeamPhone = opponentPhone;
+      }
+
       onBookSlot(selectedSlot.id, team);
-      // Optional: Send message to owner immediately
+      
+      // Notificar Dono do Campo via WhatsApp
       const field = fields.find(f => f.id === selectedSlot?.fieldId);
       if (field?.contactPhone) {
          const cleanPhone = field.contactPhone.replace(/\D/g, '');
-         const text = `Olá, acabei de solicitar o agendamento para o dia ${selectedSlot.date} às ${selectedSlot.time} com o time ${team.name}. Aguardo confirmação!`;
+         let text = `Olá, sou do time ${team.name}. Solicitei o agendamento (${selectedSlot.matchType}) no App Jogo Fácil para o dia ${selectedSlot.date.split('-').reverse().join('/')} às ${selectedSlot.time}.`;
+         if (selectedSlot.matchType === 'ALUGUEL' && opponentName) {
+            text += ` Jogo contra: ${opponentName}.`;
+         }
+         text += ` Aguardo a chave PIX.`;
+         
          const url = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(text)}`;
          window.open(url, '_blank');
       }
 
       setSelectedSlot(null);
       setSelectedTeamId('');
+      setOpponentName('');
+      setOpponentPhone('');
     }
   };
 
@@ -98,6 +117,8 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
   };
 
   const eligibleTeams = getEligibleTeams();
+
+  const getFieldInfo = (slot: MatchSlot) => fields.find(f => f.id === slot.fieldId);
 
   return (
     <div className="p-6 max-w-6xl mx-auto">
@@ -201,7 +222,7 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
                           {dist !== null && <span className="text-grass-600 font-bold ml-1">({dist} km)</span>}
                         </span>
                         <span className="flex items-center gap-1 font-semibold text-gray-700">
-                          <Clock className="w-3 h-3" /> {slot.date.split('-').reverse().join('/')} às {slot.time}
+                          <Clock className="w-3 h-3" /> {slot.date.split('-').reverse().join('/')} às {slot.time} <span className="text-gray-400 font-normal">({slot.durationMinutes} min)</span>
                         </span>
                       </div>
                       
@@ -212,18 +233,33 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
                            </span>
                         ))}
                       </div>
+                        
+                      <div className="mt-2 flex gap-2">
+                          <span className={`text-xs font-bold px-2 py-0.5 rounded border ${
+                            slot.matchType === 'FESTIVAL' ? 'bg-yellow-100 text-yellow-800 border-yellow-200' :
+                            slot.matchType === 'ALUGUEL' ? 'bg-purple-100 text-purple-800 border-purple-200' :
+                            'bg-gray-100 text-gray-800 border-gray-200'
+                          }`}>
+                            {slot.matchType}
+                          </span>
 
-                      {slot.hasLocalTeam && (
-                        <div className="mt-2 text-indigo-700 text-xs font-bold flex items-center gap-1">
-                          <Trophy className="w-3 h-3" /> Desafio vs {slot.localTeamName || 'Time da Casa'}
-                        </div>
-                      )}
+                          {slot.hasLocalTeam && (
+                            <div className="text-indigo-700 text-xs font-bold flex items-center gap-1">
+                              <Trophy className="w-3 h-3" /> vs {slot.localTeamName || 'Time da Casa'}
+                            </div>
+                          )}
+                          {!slot.hasLocalTeam && slot.matchType === 'ALUGUEL' && (
+                            <div className="text-purple-700 text-xs font-bold flex items-center gap-1">
+                              <Share2 className="w-3 h-3" /> 2 Times de Fora
+                            </div>
+                          )}
+                      </div>
                     </div>
                   </div>
 
                   <div className="flex flex-col justify-between items-end min-w-[140px] border-l pl-4 border-gray-100">
                      <div className="text-right">
-                        <span className="text-xs text-gray-400 uppercase">Preço</span>
+                        <span className="text-xs text-gray-400 uppercase">Valor</span>
                         <p className="text-2xl font-bold text-grass-700">R$ {slot.price}</p>
                      </div>
                      <div className="flex flex-col gap-2 w-full">
@@ -269,18 +305,24 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
                     <div className="flex-1">
                        <h3 className="font-bold text-lg">{field?.name}</h3>
                        <p className="text-gray-600 flex items-center gap-2">
-                         <Clock className="w-4 h-4"/> {slot.date} - {slot.time}
+                         <Clock className="w-4 h-4"/> {slot.date.split('-').reverse().join('/')} - {slot.time} <span className="text-xs bg-gray-200 px-1 rounded">{slot.durationMinutes} min</span>
                        </p>
                        <div className="mt-2 flex gap-2">
                           <span className={`px-2 py-1 rounded text-xs font-bold ${
-                            slot.status === 'confirmed' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'
+                            slot.status === 'confirmed' ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-800'
                           }`}>
-                            {slot.status === 'confirmed' ? 'Confirmado' : 'Aguardando Aprovação'}
+                            {slot.status === 'confirmed' ? 'Confirmado' : 'Aguardando Pagamento'}
                           </span>
                           <span className="bg-blue-50 text-blue-700 px-2 py-1 rounded text-xs font-bold flex items-center gap-1">
                              <Users className="w-3 h-3"/> {slot.bookedByTeamName} ({slot.bookedByCategory})
                           </span>
                        </div>
+                       
+                       {slot.status === 'pending_verification' && (
+                          <div className="mt-2 text-xs text-orange-700 bg-orange-50 p-2 rounded border border-orange-100">
+                              ℹ️ Faça o PIX para o dono do campo e aguarde a confirmação dele.
+                          </div>
+                       )}
                     </div>
                     
                     {field?.contactPhone && (
@@ -315,21 +357,40 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
               <div className="mb-6 bg-gray-700 p-4 rounded-lg border border-gray-600">
                 <p className="text-sm text-gray-400 mb-1">Detalhes do Jogo</p>
                 <div className="flex justify-between font-semibold text-lg">
-                   <span>{fields.find(f => f.id === selectedSlot.fieldId)?.name}</span>
+                   <span>{getFieldInfo(selectedSlot)?.name}</span>
                 </div>
                 <div className="flex justify-between items-center mt-2 text-gray-300">
                     <span>{selectedSlot.date.split('-').reverse().join('/')}</span>
-                    <span>{selectedSlot.time}</span>
+                    <span>{selectedSlot.time} <span className="text-sm text-gray-500">({selectedSlot.durationMinutes} min)</span></span>
+                </div>
+                <div className="mt-2">
+                    <span className="text-xs font-bold text-yellow-500 border border-yellow-500 px-2 py-0.5 rounded">{selectedSlot.matchType}</span>
                 </div>
                 <div className="mt-4 pt-4 border-t border-gray-600 flex justify-between items-center">
                     <span className="text-sm text-gray-400">Valor a pagar no local</span>
                     <span className="text-xl font-bold text-grass-400">R$ {selectedSlot.price},00</span>
                 </div>
+                
+                {getFieldInfo(selectedSlot)?.pixConfig.key && (
+                    <div className="mt-3 bg-gray-900/50 p-2 rounded border border-gray-600">
+                        <p className="text-xs text-gray-400 mb-1">Chave PIX do Campo:</p>
+                        <div className="flex justify-between items-center">
+                            <code className="text-sm text-grass-300">{getFieldInfo(selectedSlot)?.pixConfig.key}</code>
+                            <button 
+                                onClick={() => navigator.clipboard.writeText(getFieldInfo(selectedSlot)?.pixConfig.key || '')}
+                                className="text-xs bg-gray-700 p-1 rounded hover:bg-gray-600"
+                            >
+                                <Copy className="w-3 h-3" />
+                            </button>
+                        </div>
+                        <p className="text-xs text-gray-500 mt-1">{getFieldInfo(selectedSlot)?.pixConfig.name}</p>
+                    </div>
+                )}
               </div>
 
               <div className="space-y-6">
                 <div>
-                  <label className="block text-sm font-medium mb-2 text-gray-300">Qual time vai jogar?</label>
+                  <label className="block text-sm font-medium mb-2 text-gray-300">Qual time vai jogar (Pagante)?</label>
                   
                   {eligibleTeams.length > 0 ? (
                     <select 
@@ -349,18 +410,50 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
                     </div>
                   )}
                 </div>
+
+                {selectedSlot.matchType === 'ALUGUEL' && (
+                    <div className="space-y-4 border-t border-gray-600 pt-4">
+                        <p className="text-sm font-bold text-purple-300 flex items-center gap-2">
+                            <Share2 className="w-4 h-4" /> Dados do 2º Time (Adversário)
+                        </p>
+                        <p className="text-xs text-gray-400">Como não há time da casa, precisamos dos dados do seu adversário para que o campo possa notificar a ambos.</p>
+                        <div>
+                             <label className="block text-xs font-medium mb-1 text-gray-400">Nome do Adversário</label>
+                             <input 
+                                type="text"
+                                className={inputClass}
+                                placeholder="Nome do outro time"
+                                value={opponentName}
+                                onChange={e => setOpponentName(e.target.value)}
+                             />
+                        </div>
+                        <div>
+                             <label className="block text-xs font-medium mb-1 text-gray-400">WhatsApp do Adversário</label>
+                             <div className="relative">
+                                <Phone className="absolute left-3 top-3 text-gray-400 w-4 h-4" />
+                                <input 
+                                    type="tel"
+                                    className={inputClass}
+                                    placeholder="(11) 99999-9999"
+                                    value={opponentPhone}
+                                    onChange={e => setOpponentPhone(e.target.value)}
+                                />
+                             </div>
+                        </div>
+                    </div>
+                )}
                 
                 <div className="bg-blue-900/20 border border-blue-800 p-4 rounded-lg">
                     <p className="text-sm text-blue-200 flex items-start gap-2">
-                        <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
-                        Ao confirmar, uma notificação será enviada ao dono do campo. O pagamento deve ser combinado diretamente com o local.
+                        <MessageCircle className="w-5 h-5 shrink-0 mt-0.5" />
+                        Ao confirmar, você será redirecionado para o WhatsApp do dono do campo para enviar o comprovante.
                     </p>
                 </div>
 
                 <div className="mt-4">
                   <Button 
                     className="w-full py-3 text-lg" 
-                    disabled={!selectedTeamId}
+                    disabled={!selectedTeamId || (selectedSlot.matchType === 'ALUGUEL' && (!opponentName || !opponentPhone))}
                     onClick={handleFinalizeBooking}
                   >
                     Confirmar Solicitação

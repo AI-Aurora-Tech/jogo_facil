@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import { UserRole, COMMON_CATEGORIES, SubscriptionPlan } from '../types';
 import { Button } from '../components/Button';
-import { Mail, Lock, User as UserIcon, ArrowRight, Phone, MapPin, DollarSign, Key, AlertCircle } from 'lucide-react';
+import { Mail, Lock, User as UserIcon, ArrowRight, Phone, MapPin, DollarSign, Key, AlertCircle, Image as ImageIcon, Upload, X } from 'lucide-react';
 import { api } from '../services/api';
+import { convertFileToBase64 } from '../utils';
 
 interface AuthProps {
   onLogin: (user: any) => void;
@@ -32,6 +33,23 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, onCancel }) => {
   // Team Specific
   const [teamName, setTeamName] = useState('');
   const [teamCategory, setTeamCategory] = useState(COMMON_CATEGORIES[6]);
+  const [teamLogo, setTeamLogo] = useState('');
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.size > 2 * 1024 * 1024) {
+        setError('A imagem deve ter no máximo 2MB.');
+        return;
+      }
+      try {
+        const base64 = await convertFileToBase64(file);
+        setTeamLogo(base64);
+      } catch (err) {
+        setError('Erro ao processar imagem.');
+      }
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -40,17 +58,24 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, onCancel }) => {
 
     try {
       if (isRegistering) {
+        
+        // Define initial subscription based on role
+        let initialSubscription = SubscriptionPlan.NONE;
+        if (role === UserRole.TEAM_CAPTAIN) {
+            initialSubscription = SubscriptionPlan.FREE;
+        }
+
         const payload: any = {
           email,
           password,
           role: email.includes('admin') ? UserRole.ADMIN : role,
           name,
           phoneNumber: phone,
-          subscription: email.includes('admin') ? SubscriptionPlan.ANNUAL : SubscriptionPlan.NONE,
-          subscriptionExpiry: email.includes('admin') ? '2099-12-31' : null,
+          subscription: initialSubscription,
+          subscriptionExpiry: null,
           latitude: -23.55, // Mock geo for now
           longitude: -46.63,
-          subTeams: role === UserRole.TEAM_CAPTAIN ? [{ name: teamName, category: teamCategory }] : [],
+          subTeams: role === UserRole.TEAM_CAPTAIN ? [{ name: teamName, category: teamCategory, logoUrl: teamLogo }] : [],
           fieldData: role === UserRole.FIELD_OWNER ? {
             name: arenaName,
             location: address,
@@ -78,7 +103,7 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, onCancel }) => {
 
   return (
     <div className="min-h-screen bg-gray-900 flex items-center justify-center p-4">
-      <div className="bg-gray-800 rounded-2xl shadow-2xl overflow-hidden w-full max-w-2xl my-10 border border-gray-700">
+      <div className="bg-gray-800 rounded-2xl shadow-2xl overflow-hidden w-full max-w-2xl my-4 md:my-10 border border-gray-700">
         <div className="bg-grass-600 p-6 text-center">
           <h2 className="text-2xl font-bold text-white">
             {isRegistering ? 'Criar Conta' : 'Bem-vindo de volta'}
@@ -86,11 +111,11 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, onCancel }) => {
           <p className="text-grass-100 mt-2">Acesse o Jogo Fácil</p>
         </div>
         
-        <form onSubmit={handleSubmit} className="p-8 space-y-4">
+        <form onSubmit={handleSubmit} className="p-6 md:p-8 space-y-4">
           
           {error && (
-            <div className="bg-red-500/20 border border-red-500 text-red-200 p-3 rounded flex items-center gap-2">
-              <AlertCircle className="w-5 h-5" />
+            <div className="bg-red-500/20 border border-red-500 text-red-200 p-3 rounded flex items-center gap-2 text-sm">
+              <AlertCircle className="w-5 h-5 shrink-0" />
               {error}
             </div>
           )}
@@ -121,15 +146,17 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, onCancel }) => {
                 <div className="grid grid-cols-2 gap-3">
                   <div 
                     onClick={() => setRole(UserRole.TEAM_CAPTAIN)}
-                    className={`cursor-pointer p-4 border-2 rounded-xl text-center transition ${role === UserRole.TEAM_CAPTAIN ? 'bg-grass-900 border-grass-500 text-white font-bold' : 'hover:bg-gray-700 border-gray-600 text-gray-300'}`}
+                    className={`cursor-pointer p-4 border-2 rounded-xl text-center transition flex flex-col items-center justify-center gap-2 ${role === UserRole.TEAM_CAPTAIN ? 'bg-grass-900 border-grass-500 text-white font-bold' : 'hover:bg-gray-700 border-gray-600 text-gray-300'}`}
                   >
-                    ⚽ Capitão de Time
+                    <span className="text-2xl">⚽</span> 
+                    <span className="text-sm md:text-base">Capitão de Time</span>
                   </div>
                   <div 
                     onClick={() => setRole(UserRole.FIELD_OWNER)}
-                    className={`cursor-pointer p-4 border-2 rounded-xl text-center transition ${role === UserRole.FIELD_OWNER ? 'bg-grass-900 border-grass-500 text-white font-bold' : 'hover:bg-gray-700 border-gray-600 text-gray-300'}`}
+                    className={`cursor-pointer p-4 border-2 rounded-xl text-center transition flex flex-col items-center justify-center gap-2 ${role === UserRole.FIELD_OWNER ? 'bg-grass-900 border-grass-500 text-white font-bold' : 'hover:bg-gray-700 border-gray-600 text-gray-300'}`}
                   >
-                    🏟️ Dono de Campo
+                    <span className="text-2xl">🏟️</span>
+                    <span className="text-sm md:text-base">Dono de Campo</span>
                   </div>
                 </div>
               </div>
@@ -184,6 +211,35 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, onCancel }) => {
                       >
                         {COMMON_CATEGORIES.map(cat => <option key={cat} value={cat}>{cat}</option>)}
                       </select>
+                    </div>
+                    <div className="col-span-2">
+                       <label className="block text-sm font-medium text-gray-300 mb-1">Logo do Time</label>
+                       
+                       {!teamLogo ? (
+                         <div className="relative border-2 border-dashed border-gray-500 rounded-lg p-4 hover:border-grass-500 hover:bg-gray-600 transition cursor-pointer text-center group">
+                            <input 
+                              type="file" 
+                              accept="image/*" 
+                              onChange={handleFileChange}
+                              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                            />
+                            <div className="flex flex-col items-center justify-center gap-2 text-gray-400 group-hover:text-white">
+                                <Upload className="w-8 h-8" />
+                                <span className="text-sm">Toque para enviar uma foto</span>
+                            </div>
+                         </div>
+                       ) : (
+                          <div className="relative w-24 h-24 mx-auto bg-gray-800 rounded-full border-2 border-grass-500 overflow-hidden group">
+                             <img src={teamLogo} alt="Logo Preview" className="w-full h-full object-cover" />
+                             <button 
+                                type="button"
+                                onClick={() => setTeamLogo('')}
+                                className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition"
+                             >
+                                <X className="text-white w-6 h-6" />
+                             </button>
+                          </div>
+                       )}
                     </div>
                   </div>
                 </div>

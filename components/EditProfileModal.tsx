@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { User, SubTeam, COMMON_CATEGORIES } from '../types';
 import { Button } from './Button';
-import { X, Plus, Trash, User as UserIcon, Shield } from 'lucide-react';
+import { X, Plus, Trash, User as UserIcon, Shield, Upload } from 'lucide-react';
+import { convertFileToBase64 } from '../utils';
 
 interface EditProfileModalProps {
   user: User;
@@ -17,17 +18,32 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({ user, onUpda
   // Team Management
   const [newTeamName, setNewTeamName] = useState('');
   const [newTeamCategory, setNewTeamCategory] = useState(COMMON_CATEGORIES[6]); // Default Sub-20
+  const [newTeamLogo, setNewTeamLogo] = useState('');
   const [teams, setTeams] = useState<SubTeam[]>(user.subTeams || []);
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      try {
+        const base64 = await convertFileToBase64(file);
+        setNewTeamLogo(base64);
+      } catch (err) {
+        alert('Erro ao processar imagem.');
+      }
+    }
+  };
 
   const handleAddTeam = () => {
     if (newTeamName.trim()) {
       const newTeam: SubTeam = {
         id: Math.random().toString(36).substr(2, 9),
         name: newTeamName.trim(),
-        category: newTeamCategory
+        category: newTeamCategory,
+        logoUrl: newTeamLogo || undefined
       };
       setTeams([...teams, newTeam]);
       setNewTeamName('');
+      setNewTeamLogo('');
     }
   };
 
@@ -92,30 +108,48 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({ user, onUpda
             {/* Add Team Form */}
             <div className="bg-gray-900/50 p-4 rounded-xl border border-gray-700">
                <label className="block text-sm text-gray-300 mb-2 font-bold">Adicionar Novo Time</label>
-               <div className="flex flex-col md:flex-row gap-3">
-                 <div className="flex-1">
-                    <input 
-                      type="text" 
-                      className={inputClass} 
-                      placeholder="Nome do Time (Ex: Os Boleiros)"
-                      value={newTeamName}
-                      onChange={e => setNewTeamName(e.target.value)}
-                    />
+               <div className="flex flex-col gap-3">
+                 <div className="flex flex-col md:flex-row gap-3">
+                    <div className="flex-1">
+                        <input 
+                        type="text" 
+                        className={inputClass} 
+                        placeholder="Nome do Time (Ex: Os Boleiros)"
+                        value={newTeamName}
+                        onChange={e => setNewTeamName(e.target.value)}
+                        />
+                    </div>
+                    <div className="md:w-1/3">
+                        <select 
+                        className={inputClass}
+                        value={newTeamCategory}
+                        onChange={e => setNewTeamCategory(e.target.value)}
+                        >
+                        {COMMON_CATEGORIES.map(cat => (
+                            <option key={cat} value={cat}>{cat}</option>
+                        ))}
+                        </select>
+                    </div>
                  </div>
-                 <div className="md:w-1/3">
-                    <select 
-                      className={inputClass}
-                      value={newTeamCategory}
-                      onChange={e => setNewTeamCategory(e.target.value)}
-                    >
-                      {COMMON_CATEGORIES.map(cat => (
-                        <option key={cat} value={cat}>{cat}</option>
-                      ))}
-                    </select>
+                 
+                 <div className="flex items-center gap-3">
+                    <div className="relative flex-1">
+                       {!newTeamLogo ? (
+                           <div className="border border-dashed border-gray-600 rounded p-2 text-center text-xs text-gray-400 hover:bg-gray-700 cursor-pointer relative">
+                              <input type="file" accept="image/*" onChange={handleFileChange} className="absolute inset-0 w-full h-full opacity-0" />
+                              <span className="flex items-center justify-center gap-2"><Upload className="w-4 h-4"/> Logo do Time (Upload)</span>
+                           </div>
+                       ) : (
+                           <div className="flex items-center gap-2 text-green-400 text-xs bg-green-400/10 p-2 rounded border border-green-400/30">
+                              <Shield className="w-4 h-4" /> Logo carregada
+                              <button type="button" onClick={() => setNewTeamLogo('')}><X className="w-3 h-3 text-red-400"/></button>
+                           </div>
+                       )}
+                    </div>
+                    <Button type="button" onClick={handleAddTeam} className="w-auto">
+                        <Plus className="w-5 h-5" /> Adicionar
+                    </Button>
                  </div>
-                 <Button type="button" onClick={handleAddTeam} className="h-[50px]">
-                   <Plus className="w-5 h-5" /> Adicionar
-                 </Button>
                </div>
             </div>
             
@@ -130,9 +164,13 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({ user, onUpda
               {teams.map((t) => (
                 <div key={t.id} className="bg-gray-700 flex justify-between items-center p-3 rounded-lg border border-gray-600 shadow-sm">
                   <div className="flex items-center gap-3">
-                    <div className="bg-grass-600 w-10 h-10 rounded-full flex items-center justify-center text-white font-bold">
-                       {t.name.substring(0,2).toUpperCase()}
-                    </div>
+                    {t.logoUrl ? (
+                         <img src={t.logoUrl} className="w-10 h-10 rounded-full object-cover border border-gray-500" />
+                    ) : (
+                        <div className="bg-grass-600 w-10 h-10 rounded-full flex items-center justify-center text-white font-bold">
+                            {t.name.substring(0,2).toUpperCase()}
+                        </div>
+                    )}
                     <div>
                       <p className="font-bold text-white">{t.name}</p>
                       <span className="text-xs bg-gray-900 text-gray-300 px-2 py-0.5 rounded border border-gray-700">{t.category}</span>

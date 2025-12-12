@@ -47,6 +47,7 @@ export const api = {
       const teamsToInsert = subTeams.map((t: any) => ({
         name: t.name,
         category: t.category,
+        logoUrl: t.logoUrl, // New field
         userId: newUser.id
       }));
       await supabase.from('SubTeam').insert(teamsToInsert);
@@ -101,6 +102,7 @@ export const api = {
         const teamsToInsert = subTeams.map((t: any) => ({
             name: t.name,
             category: t.category,
+            logoUrl: t.logoUrl,
             userId: user.id
         }));
         await supabase.from('SubTeam').insert(teamsToInsert);

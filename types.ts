@@ -7,15 +7,17 @@ export enum UserRole {
 
 export enum SubscriptionPlan {
   NONE = 'NONE',
-  WEEKLY = 'WEEKLY', // Avulso
-  MONTHLY = 'MONTHLY',
-  ANNUAL = 'ANNUAL'
+  FREE = 'FREE', // Times não pagam mensalidade
+  PRO_FIELD = 'PRO_FIELD' // Campos pagam R$ 50,00 fixo
 }
+
+export type MatchType = 'AMISTOSO' | 'FESTIVAL' | 'ALUGUEL';
 
 export interface SubTeam {
   id: string;
   name: string;
   category: string; // e.g., "Sub-20", "Principal"
+  logoUrl?: string; // Novo: Logo do time
 }
 
 export interface User {
@@ -57,22 +59,32 @@ export interface MatchSlot {
   fieldId: string;
   date: string; // YYYY-MM-DD
   time: string; // HH:MM
+  durationMinutes: number; // Nova duração (60, 90, 120)
+  matchType: MatchType; // Novo tipo
+  customImageUrl?: string; // Novo: Foto do evento/time
+  
   isBooked: boolean;
   
   // Host Team Info
-  hasLocalTeam: boolean;
+  hasLocalTeam: boolean; // Se false = ALUGUEL (2 times de fora)
   localTeamName?: string; 
   allowedCategories: string[]; // e.g., ["Sub-20", "Adulto"]
   
-  // Visitor/Booker Info
-  bookedByTeamName?: string; // The specific sub-team name
+  // Visitor/Booker Info (Time A)
+  bookedByTeamName?: string; 
   bookedByUserId?: string;
   bookedByPhone?: string;
-  bookedByCategory?: string; // Which category filled the slot
+  bookedByCategory?: string; 
   
+  // Opponent Info (Time B - Apenas se for Aluguel/2 de fora)
+  opponentTeamName?: string;
+  opponentTeamPhone?: string;
+
   status: 'available' | 'pending_verification' | 'confirmed';
   price: number;
 }
+
+export const COMMON_CATEGORIES = ["Sub-09", "Sub-11", "Sub-13", "Sub-15", "Sub-17", "Sub-20", "Principal", "Veteranos", "Feminino"];
 
 export interface VerificationResult {
   isValid: boolean;
@@ -80,5 +92,3 @@ export interface VerificationResult {
   dateFound: string | null;
   reason: string;
 }
-
-export const COMMON_CATEGORIES = ["Sub-09", "Sub-11", "Sub-13", "Sub-15", "Sub-17", "Sub-20", "Principal", "Veteranos", "Feminino"];
