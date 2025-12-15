@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { UserRole, Field, MatchSlot, User, SubscriptionPlan, SubTeam } from './types';
 import { Landing } from './views/Landing';
@@ -58,16 +59,20 @@ const App: React.FC = () => {
     
     // Logic: 
     // If Admin -> App
-    // If Team Captain -> App (Free)
-    // If Field Owner -> Check Subscription (Must be PRO_FIELD)
+    // If Team Captain -> Must have PRO_TEAM subscription to access
+    // If Field Owner -> Free access (PRO_FIELD or FREE)
     
-    if (loggedUser.role === UserRole.FIELD_OWNER && loggedUser.subscription === SubscriptionPlan.NONE) {
-      setView('SUBSCRIPTION');
-    } else {
-      setView('APP');
-      setCurrentTab(loggedUser.role === UserRole.FIELD_OWNER ? 'MY_FIELD' : 'SEARCH');
-      refreshData();
+    if (loggedUser.role === UserRole.TEAM_CAPTAIN) {
+        if (loggedUser.subscription === SubscriptionPlan.NONE || loggedUser.subscription === SubscriptionPlan.FREE) {
+            setView('SUBSCRIPTION');
+            return;
+        }
     }
+    
+    // Field owners or Paid Team Captains go here
+    setView('APP');
+    setCurrentTab(loggedUser.role === UserRole.FIELD_OWNER ? 'MY_FIELD' : 'SEARCH');
+    refreshData();
   };
 
   const handleLogout = () => {
@@ -86,6 +91,17 @@ const App: React.FC = () => {
     }
   };
 
+  const handleUpdateField = async (fieldId: string, updates: Partial<Field>) => {
+    try {
+        const updatedField = await api.updateField(fieldId, updates);
+        setFields(prev => prev.map(f => f.id === fieldId ? updatedField : f));
+        return true;
+    } catch (e: any) {
+        alert("Erro ao atualizar campo: " + e.message);
+        return false;
+    }
+  };
+
   const handleSubscribe = async (plan: SubscriptionPlan) => {
     if (!user) return;
     const updated = { 
@@ -95,6 +111,7 @@ const App: React.FC = () => {
     };
     await handleUpdateUser(updated);
     setView('APP');
+    refreshData();
   };
 
   // --- Actions ---
@@ -240,6 +257,7 @@ const App: React.FC = () => {
               onEditSlot={editSlot}
               onConfirmBooking={confirmBooking}
               onRejectBooking={rejectBooking}
+              onUpdateField={handleUpdateField}
             />
           ) : (
              <div className="p-10 text-center text-gray-500">

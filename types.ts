@@ -1,3 +1,4 @@
+
 export enum UserRole {
   GUEST = 'GUEST',
   ADMIN = 'ADMIN', // You
@@ -7,8 +8,9 @@ export enum UserRole {
 
 export enum SubscriptionPlan {
   NONE = 'NONE',
-  FREE = 'FREE', // Times não pagam mensalidade
-  PRO_FIELD = 'PRO_FIELD' // Campos pagam R$ 50,00 fixo
+  FREE = 'FREE', // Campos não pagam mensalidade
+  PRO_FIELD = 'PRO_FIELD', // Deprecated but kept for compatibility
+  PRO_TEAM = 'PRO_TEAM' // Times pagam R$ 50,00 fixo
 }
 
 export type MatchType = 'AMISTOSO' | 'FESTIVAL' | 'ALUGUEL';

@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { UserRole, COMMON_CATEGORIES, SubscriptionPlan } from '../types';
 import { Button } from '../components/Button';
@@ -61,7 +62,12 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, onCancel }) => {
         
         // Define initial subscription based on role
         let initialSubscription = SubscriptionPlan.NONE;
+        
         if (role === UserRole.TEAM_CAPTAIN) {
+            // Times precisam pagar, então começam com NONE
+            initialSubscription = SubscriptionPlan.NONE;
+        } else if (role === UserRole.FIELD_OWNER) {
+            // Donos de campo agora são gratuitos
             initialSubscription = SubscriptionPlan.FREE;
         }
 

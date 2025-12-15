@@ -1,5 +1,6 @@
+
 import React, { useState } from 'react';
-import { Plus, Users, DollarSign, Calendar as CalendarIcon, CheckCircle, XCircle, Repeat, MessageCircle, Tag, AlertCircle, Wallet, Clock, Trophy, Share2, Image as ImageIcon, Pencil, Upload, X } from 'lucide-react';
+import { Plus, Users, DollarSign, Calendar as CalendarIcon, CheckCircle, XCircle, Repeat, MessageCircle, Tag, AlertCircle, Wallet, Clock, Trophy, Share2, Image as ImageIcon, Pencil, Upload, X, Settings, MapPin, Key, Phone } from 'lucide-react';
 import { Button } from '../components/Button';
 import { Field, MatchSlot, COMMON_CATEGORIES, MatchType } from '../types';
 import { convertFileToBase64 } from '../utils';
@@ -11,6 +12,7 @@ interface FieldDashboardProps {
   onEditSlot: (slotId: string, updates: Partial<MatchSlot>) => void;
   onConfirmBooking: (slotId: string) => void;
   onRejectBooking: (slotId: string) => void;
+  onUpdateField: (fieldId: string, updates: Partial<Field>) => Promise<boolean>;
 }
 
 export const FieldDashboard: React.FC<FieldDashboardProps> = ({ 
@@ -19,14 +21,16 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
   onAddSlot,
   onEditSlot,
   onConfirmBooking,
-  onRejectBooking
+  onRejectBooking,
+  onUpdateField
 }) => {
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showEditFieldModal, setShowEditFieldModal] = useState(false);
   const [editingSlot, setEditingSlot] = useState<MatchSlot | null>(null);
   const [showNotifyModal, setShowNotifyModal] = useState<MatchSlot | null>(null);
   const [successMsg, setSuccessMsg] = useState('');
   
-  // Form State (Create)
+  // Create Slot Form State
   const [newDate, setNewDate] = useState('');
   const [newTime, setNewTime] = useState('');
   const [duration, setDuration] = useState<number>(60);
@@ -39,7 +43,27 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
   const [isRecurring, setIsRecurring] = useState(false);
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
 
-  // Quando muda o tipo de jogo, ajusta defaults
+  // Edit Field Form State
+  const [editFieldName, setEditFieldName] = useState(field.name);
+  const [editFieldLoc, setEditFieldLoc] = useState(field.location);
+  const [editFieldRate, setEditFieldRate] = useState(field.hourlyRate.toString());
+  const [editFieldPixKey, setEditFieldPixKey] = useState(field.pixConfig.key);
+  const [editFieldPixName, setEditFieldPixName] = useState(field.pixConfig.name);
+  const [editFieldPhone, setEditFieldPhone] = useState(field.contactPhone || '');
+  const [editFieldImage, setEditFieldImage] = useState(field.imageUrl || '');
+
+  // Init edit field state when opening modal
+  const openEditFieldModal = () => {
+    setEditFieldName(field.name);
+    setEditFieldLoc(field.location);
+    setEditFieldRate(field.hourlyRate.toString());
+    setEditFieldPixKey(field.pixConfig.key);
+    setEditFieldPixName(field.pixConfig.name);
+    setEditFieldPhone(field.contactPhone || '');
+    setEditFieldImage(field.imageUrl || '');
+    setShowEditFieldModal(true);
+  };
+
   const handleTypeChange = (type: MatchType) => {
     setMatchType(type);
     if (type === 'ALUGUEL') {
@@ -58,16 +82,16 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
     }
   };
 
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>, setter: (s: string) => void) => {
     const file = e.target.files?.[0];
     if (file) {
-      if (file.size > 1024 * 1024) { // 1MB limit check
+      if (file.size > 1024 * 1024) { 
           alert("A imagem deve ter no máximo 1MB.");
           return;
       }
       try {
         const base64 = await convertFileToBase64(file);
-        setCustomImageUrl(base64);
+        setter(base64);
       } catch (err) {
         alert('Erro ao processar imagem.');
       }
@@ -78,7 +102,6 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
     e.preventDefault();
     if (!newDate || !newTime) return;
 
-    // Se o usuário não digitar preço, usa o padrão do campo (proporcional à hora seria ideal, mas usaremos a taxa base ou o input)
     const finalPrice = customPrice ? Number(customPrice) : field.hourlyRate;
 
     onAddSlot({
@@ -116,10 +139,8 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
       setSelectedCategories([]);
   };
 
-  // --- Edit Logic ---
   const handleEditClick = (slot: MatchSlot) => {
       setEditingSlot(slot);
-      // Pre-fill fields for edit form logic (using a separate simple form inside modal for clarity)
   };
 
   const handleSaveEdit = (e: React.FormEvent) => {
@@ -146,6 +167,26 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
       setEditingSlot(null);
   };
 
+  const handleSaveFieldSettings = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    const success = await onUpdateField(field.id, {
+        name: editFieldName,
+        location: editFieldLoc,
+        hourlyRate: Number(editFieldRate),
+        contactPhone: editFieldPhone,
+        imageUrl: editFieldImage,
+        pixConfig: {
+            key: editFieldPixKey,
+            name: editFieldPixName
+        }
+    });
+
+    if (success) {
+        setShowEditFieldModal(false);
+    }
+  };
+
   const handleWhatsAppClick = (phone: string, text: string) => {
       const cleanPhone = phone.replace(/\D/g, '');
       const url = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(text)}`;
@@ -154,7 +195,6 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
 
   const handleConfirmPayment = (slot: MatchSlot) => {
     onConfirmBooking(slot.id);
-    // Abre modal para o dono escolher quem notificar (browsers bloqueiam múltiplos popups automáticos)
     setShowNotifyModal(slot);
   };
 
@@ -173,9 +213,14 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
              <span className="bg-gray-100 text-gray-600 px-2 py-1 rounded text-xs">{field.location}</span>
           </div>
         </div>
-        <Button onClick={() => setShowAddModal(true)} className="w-full md:w-auto mt-4 md:mt-0">
-          <Plus className="w-4 h-4" /> Novo Horário
-        </Button>
+        <div className="flex gap-2 w-full md:w-auto mt-4 md:mt-0">
+            <Button variant="secondary" onClick={openEditFieldModal} className="flex-1 md:flex-none">
+                <Settings className="w-4 h-4" /> Configurar
+            </Button>
+            <Button onClick={() => setShowAddModal(true)} className="flex-1 md:flex-none">
+                <Plus className="w-4 h-4" /> Novo Horário
+            </Button>
+        </div>
       </header>
 
       <div className="mb-4 flex items-center gap-2">
@@ -196,7 +241,6 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
               slot.status === 'pending_verification' ? 'bg-orange-50 border-orange-200' : 'bg-white'
             }`}>
               
-              {/* Edit Icon */}
               <button 
                 onClick={() => handleEditClick(slot)}
                 className="absolute top-3 right-3 p-1.5 text-gray-400 hover:text-blue-500 hover:bg-blue-50 rounded-full transition z-10"
@@ -205,7 +249,6 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                   <Pencil className="w-4 h-4" />
               </button>
 
-              {/* Header do Card */}
               <div>
                   <div className="flex justify-between items-start mb-2 pr-6">
                     <div className="flex items-center gap-2">
@@ -217,7 +260,6 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                     </div>
                   </div>
                   
-                  {/* Status & Info */}
                   <div className="flex justify-between items-center mb-2">
                        <span className={`px-2 py-1 rounded-full text-xs font-semibold ${
                         slot.status === 'available' ? 'bg-blue-100 text-blue-700' :
@@ -232,7 +274,6 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                       </span>
                   </div>
                   
-                  {/* Tipo de Jogo Badge */}
                   <div className="mb-3 flex justify-between items-center">
                     <span className={`text-xs font-bold px-2 py-0.5 rounded border ${
                         slot.matchType === 'FESTIVAL' ? 'bg-yellow-100 text-yellow-800 border-yellow-200' :
@@ -440,7 +481,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                    
                    {!customImageUrl ? (
                         <div className="relative border border-dashed border-gray-500 rounded bg-gray-700/50 p-4 hover:bg-gray-700 transition cursor-pointer">
-                            <input type="file" accept="image/*" onChange={handleFileChange} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
+                            <input type="file" accept="image/*" onChange={(e) => handleFileChange(e, setCustomImageUrl)} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
                             <div className="flex items-center justify-center gap-2 text-gray-400">
                                 <Upload className="w-5 h-5" />
                                 <span className="text-sm">Carregar imagem (Máx 1MB)</span>
@@ -577,6 +618,82 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
              </form>
            </div>
          </div>
+      )}
+
+      {/* Modal EDIT FIELD */}
+      {showEditFieldModal && (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
+            <div className="bg-gray-800 border border-gray-700 rounded-2xl p-6 w-full max-w-lg shadow-2xl text-white my-auto max-h-[90vh] overflow-y-auto">
+                <div className="flex justify-between items-center mb-6 border-b border-gray-700 pb-2">
+                    <h3 className="text-xl font-bold flex items-center gap-2"><Settings className="w-5 h-5" /> Configurar Arena</h3>
+                    <button onClick={() => setShowEditFieldModal(false)}><X className="text-gray-400 hover:text-white" /></button>
+                </div>
+
+                <form onSubmit={handleSaveFieldSettings} className="space-y-4">
+                    
+                    <div className="grid md:grid-cols-2 gap-4">
+                        <div className="col-span-2">
+                            <label className="block text-xs font-medium text-gray-300 mb-1">Nome da Arena</label>
+                            <input type="text" className={inputClass} value={editFieldName} onChange={e => setEditFieldName(e.target.value)} required />
+                        </div>
+                        <div className="col-span-2">
+                            <label className="block text-xs font-medium text-gray-300 mb-1">Endereço</label>
+                            <div className="relative">
+                                <MapPin className="absolute left-3 top-3 text-gray-400 w-4 h-4" />
+                                <input type="text" className={inputClass} value={editFieldLoc} onChange={e => setEditFieldLoc(e.target.value)} required />
+                            </div>
+                        </div>
+                        <div>
+                             <label className="block text-xs font-medium text-gray-300 mb-1">Taxa Base (R$/h)</label>
+                             <div className="relative">
+                                <DollarSign className="absolute left-3 top-3 text-gray-400 w-4 h-4" />
+                                <input type="number" className={inputClass} value={editFieldRate} onChange={e => setEditFieldRate(e.target.value)} required />
+                             </div>
+                        </div>
+                         <div>
+                             <label className="block text-xs font-medium text-gray-300 mb-1">WhatsApp Contato</label>
+                             <div className="relative">
+                                <Phone className="absolute left-3 top-3 text-gray-400 w-4 h-4" />
+                                <input type="text" className={inputClass} value={editFieldPhone} onChange={e => setEditFieldPhone(e.target.value)} required />
+                             </div>
+                        </div>
+                    </div>
+
+                    <div className="bg-gray-700/50 p-3 rounded border border-gray-600 mt-2">
+                         <h4 className="text-sm font-bold text-gray-300 mb-3 flex items-center gap-2"><Key className="w-4 h-4"/> Dados PIX</h4>
+                         <div className="grid grid-cols-2 gap-3">
+                             <div>
+                                 <label className="block text-[10px] text-gray-400 mb-1">Chave PIX</label>
+                                 <input type="text" className={inputClass} value={editFieldPixKey} onChange={e => setEditFieldPixKey(e.target.value)} />
+                             </div>
+                             <div>
+                                 <label className="block text-[10px] text-gray-400 mb-1">Nome Titular</label>
+                                 <input type="text" className={inputClass} value={editFieldPixName} onChange={e => setEditFieldPixName(e.target.value)} />
+                             </div>
+                         </div>
+                    </div>
+
+                    <div>
+                        <label className="block text-xs font-medium text-gray-300 mb-1">Imagem de Capa</label>
+                        {!editFieldImage ? (
+                            <div className="border border-dashed border-gray-500 p-4 rounded text-center cursor-pointer hover:bg-gray-700 relative">
+                                <input type="file" accept="image/*" className="absolute inset-0 w-full h-full opacity-0" onChange={(e) => handleFileChange(e, setEditFieldImage)} />
+                                <span className="text-sm text-gray-400 flex items-center justify-center gap-2"><Upload className="w-4 h-4" /> Upload Foto</span>
+                            </div>
+                        ) : (
+                            <div className="relative h-32 rounded overflow-hidden border border-gray-600">
+                                <img src={editFieldImage} className="w-full h-full object-cover" />
+                                <button type="button" onClick={() => setEditFieldImage('')} className="absolute top-2 right-2 bg-black/50 p-1 rounded-full text-white hover:bg-red-500"><X className="w-4 h-4"/></button>
+                            </div>
+                        )}
+                    </div>
+
+                    <div className="pt-4 border-t border-gray-700">
+                        <Button type="submit" className="w-full">Salvar Configurações</Button>
+                    </div>
+                </form>
+            </div>
+        </div>
       )}
 
       {/* Modal Notification (Confirmation) */}

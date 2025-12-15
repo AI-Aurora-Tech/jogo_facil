@@ -1,3 +1,4 @@
+
 import { supabase } from '../supabaseClient';
 import { User, Field, MatchSlot } from '../types';
 
@@ -127,6 +128,40 @@ export const api = {
         ...f,
         pixConfig: { key: f.pixKey, name: f.pixName }
     }));
+  },
+  
+  updateField: async (fieldId: string, updates: Partial<Field>): Promise<Field> => {
+    // Mapear objeto Field para colunas do banco (flatten pixConfig)
+    const dbUpdates: any = {
+        name: updates.name,
+        location: updates.location,
+        hourlyRate: updates.hourlyRate,
+        cancellationFeePercent: updates.cancellationFeePercent,
+        contactPhone: updates.contactPhone,
+        imageUrl: updates.imageUrl
+    };
+
+    if (updates.pixConfig) {
+        dbUpdates.pixKey = updates.pixConfig.key;
+        dbUpdates.pixName = updates.pixConfig.name;
+    }
+
+    // Remover chaves undefined
+    Object.keys(dbUpdates).forEach(key => dbUpdates[key] === undefined && delete dbUpdates[key]);
+
+    const { data, error } = await supabase
+        .from('Field')
+        .update(dbUpdates)
+        .eq('id', fieldId)
+        .select()
+        .single();
+
+    if (error) throw new Error('Erro ao atualizar campo: ' + error.message);
+
+    return {
+        ...data,
+        pixConfig: { key: data.pixKey, name: data.pixName }
+    } as Field;
   },
 
   getSlots: async (): Promise<MatchSlot[]> => {
