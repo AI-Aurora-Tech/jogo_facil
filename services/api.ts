@@ -132,14 +132,22 @@ export const api = {
   getSlots: async (): Promise<MatchSlot[]> => {
     const { data, error } = await supabase.from('MatchSlot').select('*');
     if (error) throw error;
-    return data as MatchSlot[];
+    
+    // Mapeia para garantir que campos opcionais ou novos tenham valor default
+    // Isso evita undefined na UI se o banco não tiver as colunas
+    return data.map((s: any) => ({
+       ...s,
+       durationMinutes: s.durationMinutes || 60,
+       matchType: s.matchType || 'AMISTOSO',
+       allowedCategories: s.allowedCategories || ["Livre"]
+    })) as MatchSlot[];
   },
 
   createSlots: async (slots: Partial<MatchSlot>[]): Promise<MatchSlot[]> => {
-    // Sanitização: Remove customImageUrl antes de enviar para o Supabase
-    // pois a coluna não existe no banco de dados atual.
+    // Sanitização: Remove customImageUrl, durationMinutes e matchType antes de enviar para o Supabase
+    // pois essas colunas não existem no banco de dados atual.
     const sanitizedSlots = slots.map(slot => {
-        const { customImageUrl, ...rest } = slot;
+        const { customImageUrl, durationMinutes, matchType, ...rest } = slot;
         return rest;
     });
 
@@ -148,12 +156,18 @@ export const api = {
     
     // Return all slots to refresh UI
     const { data: allSlots } = await supabase.from('MatchSlot').select('*');
-    return allSlots as MatchSlot[];
+    
+    return (allSlots || []).map((s: any) => ({
+       ...s,
+       durationMinutes: s.durationMinutes || 60,
+       matchType: s.matchType || 'AMISTOSO',
+       allowedCategories: s.allowedCategories || ["Livre"]
+    })) as MatchSlot[];
   },
 
   updateSlot: async (slotId: string, data: Partial<MatchSlot>): Promise<MatchSlot> => {
     // Sanitização também no update
-    const { customImageUrl, ...rest } = data;
+    const { customImageUrl, durationMinutes, matchType, ...rest } = data;
 
     const { data: updated, error } = await supabase
       .from('MatchSlot')
@@ -163,6 +177,13 @@ export const api = {
       .single();
 
     if (error) throw new Error('Erro ao atualizar horário');
-    return updated as MatchSlot;
+    
+    // Aplica defaults no retorno para manter compatibilidade com Typescript
+    return {
+        ...updated,
+        durationMinutes: updated.durationMinutes || 60,
+        matchType: updated.matchType || 'AMISTOSO',
+        allowedCategories: updated.allowedCategories || ["Livre"]
+    } as MatchSlot;
   }
 };
