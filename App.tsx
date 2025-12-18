@@ -22,25 +22,19 @@ const App: React.FC = () => {
   const [slots, setSlots] = useState<MatchSlot[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
-  // Geolocation Watcher - High Accuracy and Instant Feedback
+  // Geolocation Watcher
   useEffect(() => {
     if (navigator.geolocation) {
       const watchId = navigator.geolocation.watchPosition(
         (pos) => {
-          console.log("Localização atualizada:", pos.coords.latitude, pos.coords.longitude);
           setUserLocation({ 
             lat: pos.coords.latitude, 
             lng: pos.coords.longitude 
           });
         },
-        (err) => console.error("Erro GPS:", err),
-        { 
-          enableHighAccuracy: true, 
-          timeout: 10000, 
-          maximumAge: 0 
-        }
+        (err) => console.log("GPS Error:", err),
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
       );
-
       return () => navigator.geolocation.clearWatch(watchId);
     }
   }, []);
@@ -53,12 +47,54 @@ const App: React.FC = () => {
     }
   }, []);
 
+  // Auto-refresh for expiration checks every 1 minute
+  useEffect(() => {
+    if (view === 'APP') {
+        const interval = setInterval(() => {
+            refreshData();
+        }, 60000); // 1 minuto
+        return () => clearInterval(interval);
+    }
+  }, [view]);
+
   const refreshData = async () => {
     setIsLoading(true);
     try {
       const [f, s] = await Promise.all([api.getFields(), api.getSlots()]);
+      
+      // Lógica de Expiração Automática (30 minutos)
+      const now = new Date().getTime();
+      const expiredSlots = s.filter(slot => {
+         if (slot.status === 'pending_verification' && slot.statusUpdatedAt) {
+            const updatedAt = new Date(slot.statusUpdatedAt).getTime();
+            const diffMinutes = (now - updatedAt) / (1000 * 60);
+            return diffMinutes >= 30; // 30 minutos
+         }
+         return false;
+      });
+
+      if (expiredSlots.length > 0) {
+          console.log(`Limpando ${expiredSlots.length} horários expirados...`);
+          await Promise.all(expiredSlots.map(slot => 
+            api.updateSlot(slot.id, { 
+                status: 'available', 
+                isBooked: false, 
+                bookedByTeamName: null, 
+                bookedByUserId: null, 
+                bookedByPhone: null,
+                bookedByCategory: null,
+                opponentTeamName: null,
+                opponentTeamPhone: null
+            } as any)
+          ));
+          // Recarregar slots após limpeza
+          const updatedSlots = await api.getSlots();
+          setSlots(updatedSlots);
+      } else {
+          setSlots(s);
+      }
+      
       setFields(f);
-      setSlots(s);
     } catch (e) {
       console.error(e);
     } finally {
@@ -106,7 +142,7 @@ const App: React.FC = () => {
         setFields(prev => prev.map(f => f.id === fieldId ? updatedField : f));
         return true;
     } catch (e: any) {
-        alert("Erro ao atualizar campo: " + e.message);
+        alert("Erro ao atualizar campo");
         return false;
     }
   };
@@ -126,7 +162,6 @@ const App: React.FC = () => {
   const addSlot = async (newSlot: Omit<MatchSlot, 'id'>, isRecurring: boolean) => {
     const slotsToCreate: any[] = [];
     slotsToCreate.push(newSlot);
-
     if (isRecurring) {
       for (let i = 1; i <= 3; i++) {
         const dateObj = new Date(newSlot.date);
@@ -135,7 +170,6 @@ const App: React.FC = () => {
         slotsToCreate.push({ ...newSlot, date: nextDate });
       }
     }
-    
     try {
       await api.createSlots(slotsToCreate);
       await refreshData();
@@ -149,7 +183,7 @@ const App: React.FC = () => {
         await api.updateSlot(slotId, updates);
         await refreshData();
     } catch (e: any) {
-        alert("Erro ao editar horário: " + e.message);
+        alert("Erro ao editar horário");
     }
   };
 

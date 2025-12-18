@@ -1,16 +1,16 @@
 
 export enum UserRole {
   GUEST = 'GUEST',
-  ADMIN = 'ADMIN', // You
+  ADMIN = 'ADMIN',
   FIELD_OWNER = 'FIELD_OWNER',
   TEAM_CAPTAIN = 'TEAM_CAPTAIN'
 }
 
 export enum SubscriptionPlan {
   NONE = 'NONE',
-  FREE = 'FREE', // Campos não pagam mensalidade
-  PRO_FIELD = 'PRO_FIELD', // Deprecated but kept for compatibility
-  PRO_TEAM = 'PRO_TEAM' // Times pagam R$ 50,00 fixo
+  FREE = 'FREE',
+  PRO_FIELD = 'PRO_FIELD',
+  PRO_TEAM = 'PRO_TEAM'
 }
 
 export type MatchType = 'AMISTOSO' | 'FESTIVAL' | 'ALUGUEL';
@@ -18,20 +18,19 @@ export type MatchType = 'AMISTOSO' | 'FESTIVAL' | 'ALUGUEL';
 export interface SubTeam {
   id: string;
   name: string;
-  category: string; // e.g., "Sub-20", "Principal"
-  logoUrl?: string; // Novo: Logo do time
+  category: string;
+  logoUrl?: string;
 }
 
 export interface User {
   id: string;
   name: string;
   email: string;
-  password?: string; // Stored for "fake" auth simulation
+  password?: string;
   phoneNumber: string;
   role: UserRole;
   subscription: SubscriptionPlan;
   subscriptionExpiry: string | null;
-  // New fields
   subTeams: SubTeam[]; 
   latitude?: number;
   longitude?: number;
@@ -59,30 +58,23 @@ export interface Field {
 export interface MatchSlot {
   id: string;
   fieldId: string;
-  date: string; // YYYY-MM-DD
-  time: string; // HH:MM
-  durationMinutes: number; // Nova duração (60, 90, 120)
-  matchType: MatchType; // Novo tipo
-  customImageUrl?: string; // Novo: Foto do evento/time
-  
+  date: string;
+  time: string;
+  durationMinutes: number;
+  matchType: MatchType;
+  customImageUrl?: string;
   isBooked: boolean;
-  
-  // Host Team Info
-  hasLocalTeam: boolean; // Se false = ALUGUEL (2 times de fora)
+  hasLocalTeam: boolean;
   localTeamName?: string; 
-  allowedCategories: string[]; // e.g., ["Sub-20", "Adulto"]
-  
-  // Visitor/Booker Info (Time A)
+  allowedCategories: string[];
   bookedByTeamName?: string; 
   bookedByUserId?: string;
   bookedByPhone?: string;
   bookedByCategory?: string; 
-  
-  // Opponent Info (Time B - Apenas se for Aluguel/2 de fora)
   opponentTeamName?: string;
   opponentTeamPhone?: string;
-
   status: 'available' | 'pending_verification' | 'confirmed';
+  statusUpdatedAt?: string; // Novo: para rastrear expiração
   price: number;
 }
 

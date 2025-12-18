@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { Search, MapPin, Clock, Check, AlertTriangle, X, MessageCircle, Filter, Trophy, Users, AlertCircle, CalendarCheck, Copy, Share2, Phone, Navigation } from 'lucide-react';
+import { Search, MapPin, Clock, Check, AlertTriangle, X, MessageCircle, Filter, Trophy, Users, AlertCircle, CalendarCheck, Copy, Share2, Phone, Navigation, ExternalLink } from 'lucide-react';
 import { Button } from '../components/Button';
 import { Field, MatchSlot, User, SubTeam, COMMON_CATEGORIES } from '../types';
 import { calculateDistance } from '../utils';
@@ -36,7 +36,7 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
     const team = currentUser.subTeams.find(t => t.id === selectedTeamId);
     if (selectedSlot && team) {
       
-      // Inject opponent info into the slot object if it's a rental (hacky for this frontend-only mock, normally sent in payload)
+      // Inject opponent info into the slot object if it's a rental
       if (selectedSlot.matchType === 'ALUGUEL') {
           (selectedSlot as any).opponentTeamName = opponentName;
           (selectedSlot as any).opponentTeamPhone = opponentPhone;
@@ -70,6 +70,11 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
      const cleanPhone = field.contactPhone.replace(/\D/g, '');
      const text = `Olá, vi seu campo ${field.name} no Jogo Fácil e tenho uma dúvida.`;
      const url = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(text)}`;
+     window.open(url, '_blank');
+  };
+
+  const handleOpenMaps = (location: string) => {
+     const url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(location)}`;
      window.open(url, '_blank');
   };
 
@@ -226,10 +231,18 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
                     <div className="flex-1">
                       <h3 className="font-bold text-lg text-pitch leading-tight">{field.name}</h3>
                       <div className="flex flex-col text-sm text-gray-500 gap-1 mt-1">
-                        <span className="flex items-center gap-1">
-                          <MapPin className="w-3 h-3" /> {field.location} 
+                        <div className="flex items-center gap-1">
+                          <MapPin className="w-3 h-3 shrink-0" /> 
+                          <span className="truncate max-w-[150px] md:max-w-none">{field.location}</span>
+                          <button 
+                            onClick={() => handleOpenMaps(field.location)}
+                            className="p-1 hover:bg-gray-100 rounded-full text-blue-600 transition"
+                            title="Abrir no Google Maps"
+                          >
+                             <ExternalLink className="w-3 h-3" />
+                          </button>
                           {dist !== null && <span className="text-grass-600 font-bold ml-1">({dist} km)</span>}
-                        </span>
+                        </div>
                         <span className="flex items-center gap-1 font-semibold text-gray-700">
                           <Clock className="w-3 h-3" /> {slot.date.split('-').reverse().join('/')} às {slot.time} <span className="text-gray-400 font-normal">({slot.durationMinutes} min)</span>
                         </span>
@@ -313,6 +326,15 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
                  <div key={slot.id} className="bg-white p-5 rounded-xl border shadow-sm flex flex-col md:flex-row justify-between items-center gap-4">
                     <div className="flex-1">
                        <h3 className="font-bold text-lg">{field?.name}</h3>
+                       <div className="text-gray-600 flex items-center gap-2 mb-1">
+                          <MapPin className="w-3 h-3 shrink-0" />
+                          <span className="text-sm">{field?.location}</span>
+                          {field && (
+                            <button onClick={() => handleOpenMaps(field.location)} className="text-blue-500 p-1">
+                                <ExternalLink className="w-3 h-3" />
+                            </button>
+                          )}
+                       </div>
                        <p className="text-gray-600 flex items-center gap-2">
                          <Clock className="w-4 h-4"/> {slot.date.split('-').reverse().join('/')} - {slot.time} <span className="text-xs bg-gray-200 px-1 rounded">{slot.durationMinutes} min</span>
                        </p>
@@ -329,7 +351,7 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
                        
                        {slot.status === 'pending_verification' && (
                           <div className="mt-2 text-xs text-orange-700 bg-orange-50 p-2 rounded border border-orange-100">
-                              ℹ️ Faça o PIX para o dono do campo e aguarde a confirmação dele.
+                              ℹ️ Faça o PIX para o dono do campo e aguarde a confirmação dele. Seu agendamento expira em 30 minutos se não houver confirmação.
                           </div>
                        )}
                     </div>
@@ -455,7 +477,7 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
                 <div className="bg-blue-900/20 border border-blue-800 p-4 rounded-lg">
                     <p className="text-sm text-blue-200 flex items-start gap-2">
                         <MessageCircle className="w-5 h-5 shrink-0 mt-0.5" />
-                        Ao confirmar, você será redirecionado para o WhatsApp do dono do campo para enviar o comprovante.
+                        Ao confirmar, você será redirecionado para o WhatsApp do dono do campo para enviar o comprovante. **Lembre-se: Você tem 30 minutos para confirmar o pagamento ou o horário será liberado.**
                     </p>
                 </div>
 
