@@ -70,8 +70,8 @@ export const api = {
         pixName: fieldData.pixConfig.name,
         imageUrl: 'https://images.unsplash.com/photo-1529900748604-07564a03e7a6?auto=format&fit=crop&q=80&w=1000',
         contactPhone: fieldData.contactPhone,
-        latitude: -23.5505, // Mock
-        longitude: -46.6333
+        latitude: -23.6337, // Atualizado para região dos testes (Taboão/SP)
+        longitude: -46.7905
       }]);
     }
 

@@ -1,5 +1,6 @@
+
 import React, { useState } from 'react';
-import { Search, MapPin, Clock, Check, AlertTriangle, X, MessageCircle, Filter, Trophy, Users, AlertCircle, CalendarCheck, Copy, Share2, Phone } from 'lucide-react';
+import { Search, MapPin, Clock, Check, AlertTriangle, X, MessageCircle, Filter, Trophy, Users, AlertCircle, CalendarCheck, Copy, Share2, Phone, Navigation } from 'lucide-react';
 import { Button } from '../components/Button';
 import { Field, MatchSlot, User, SubTeam, COMMON_CATEGORIES } from '../types';
 import { calculateDistance } from '../utils';
@@ -124,19 +125,27 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
     <div className="p-4 md:p-6 max-w-6xl mx-auto">
       
       {/* Sub-Nav Tabs */}
-      <div className="flex gap-4 mb-6 border-b border-gray-300 pb-1 overflow-x-auto">
-        <button 
-          onClick={() => setActiveTab('SEARCH')}
-          className={`pb-2 px-4 font-bold transition whitespace-nowrap ${activeTab === 'SEARCH' ? 'text-grass-600 border-b-2 border-grass-600' : 'text-gray-500 hover:text-gray-700'}`}
-        >
-          Buscar Jogos
-        </button>
-        <button 
-          onClick={() => setActiveTab('MY_BOOKINGS')}
-          className={`pb-2 px-4 font-bold transition whitespace-nowrap ${activeTab === 'MY_BOOKINGS' ? 'text-grass-600 border-b-2 border-grass-600' : 'text-gray-500 hover:text-gray-700'}`}
-        >
-          Meus Agendamentos
-        </button>
+      <div className="flex gap-4 mb-6 border-b border-gray-300 pb-1 overflow-x-auto justify-between items-center">
+        <div className="flex gap-4">
+            <button 
+            onClick={() => setActiveTab('SEARCH')}
+            className={`pb-2 px-4 font-bold transition whitespace-nowrap ${activeTab === 'SEARCH' ? 'text-grass-600 border-b-2 border-grass-600' : 'text-gray-500 hover:text-gray-700'}`}
+            >
+            Buscar Jogos
+            </button>
+            <button 
+            onClick={() => setActiveTab('MY_BOOKINGS')}
+            className={`pb-2 px-4 font-bold transition whitespace-nowrap ${activeTab === 'MY_BOOKINGS' ? 'text-grass-600 border-b-2 border-grass-600' : 'text-gray-500 hover:text-gray-700'}`}
+            >
+            Meus Agendamentos
+            </button>
+        </div>
+        
+        {/* GPS Indicator */}
+        <div className={`flex items-center gap-2 px-3 py-1 rounded-full text-[10px] font-bold ${userLocation ? 'text-green-600 bg-green-50' : 'text-orange-600 bg-orange-50 animate-pulse'}`}>
+            <Navigation className="w-3 h-3" />
+            {userLocation ? 'LOCALIZAÇÃO ATIVA' : 'OBTENDO GPS...'}
+        </div>
       </div>
 
       {activeTab === 'SEARCH' && (

@@ -79,8 +79,8 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, onCancel }) => {
           phoneNumber: phone,
           subscription: initialSubscription,
           subscriptionExpiry: null,
-          latitude: -23.55, // Mock geo for now
-          longitude: -46.63,
+          latitude: -23.6337, // Atualizado para região dos testes (Taboão/SP)
+          longitude: -46.7905,
           subTeams: role === UserRole.TEAM_CAPTAIN ? [{ name: teamName, category: teamCategory, logoUrl: teamLogo }] : [],
           fieldData: role === UserRole.FIELD_OWNER ? {
             name: arenaName,
@@ -307,7 +307,7 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, onCancel }) => {
             <button 
               type="button"
               onClick={() => { setIsRegistering(!isRegistering); setError(''); }}
-              className="text-sm text-white hover:text-grass-300 font-semibold"
+              className="text-sm text-white hover:text-white/80 font-bold underline"
             >
               {isRegistering ? 'Já tenho conta? Entrar' : 'Não tem conta? Cadastre-se'}
             </button>

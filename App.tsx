@@ -22,18 +22,23 @@ const App: React.FC = () => {
   const [slots, setSlots] = useState<MatchSlot[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
-  // Geolocation Watcher
+  // Geolocation Watcher - High Accuracy and Instant Feedback
   useEffect(() => {
     if (navigator.geolocation) {
       const watchId = navigator.geolocation.watchPosition(
         (pos) => {
+          console.log("Localização atualizada:", pos.coords.latitude, pos.coords.longitude);
           setUserLocation({ 
             lat: pos.coords.latitude, 
             lng: pos.coords.longitude 
           });
         },
-        (err) => console.log("Erro ao acessar localização:", err),
-        { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
+        (err) => console.error("Erro GPS:", err),
+        { 
+          enableHighAccuracy: true, 
+          timeout: 10000, 
+          maximumAge: 0 
+        }
       );
 
       return () => navigator.geolocation.clearWatch(watchId);
