@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { Search, MapPin, Clock, Check, AlertTriangle, X, MessageCircle, Filter, Trophy, Users, AlertCircle, CalendarCheck, Copy, Share2, Phone, Navigation, ExternalLink } from 'lucide-react';
+import { Search, MapPin, Clock, Check, AlertTriangle, X, MessageCircle, Filter, Trophy, Users, AlertCircle, CalendarCheck, Copy, Share2, Phone, Navigation, ExternalLink, XCircle } from 'lucide-react';
 import { Button } from '../components/Button';
 import { Field, MatchSlot, User, SubTeam, COMMON_CATEGORIES } from '../types';
 import { calculateDistance } from '../utils';
@@ -10,10 +10,11 @@ interface TeamDashboardProps {
   fields: Field[];
   slots: MatchSlot[];
   onBookSlot: (slotId: string, team: SubTeam) => void;
+  onCancelBooking: (slotId: string) => void;
   userLocation?: { lat: number, lng: number };
 }
 
-export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, fields, slots, onBookSlot, userLocation }) => {
+export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, fields, slots, onBookSlot, onCancelBooking, userLocation }) => {
   // Tabs: 'SEARCH' | 'MY_BOOKINGS'
   const [activeTab, setActiveTab] = useState<'SEARCH' | 'MY_BOOKINGS'>('SEARCH');
 
@@ -333,7 +334,7 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
                        <p className="text-gray-600 flex items-center gap-2">
                          <Clock className="w-4 h-4"/> {slot.date.split('-').reverse().join('/')} - {slot.time} <span className="text-xs bg-gray-200 px-1 rounded">{slot.durationMinutes} min</span>
                        </p>
-                       <div className="mt-2 flex gap-2">
+                       <div className="mt-2 flex flex-wrap gap-2">
                           <span className={`px-2 py-1 rounded text-xs font-bold ${
                             slot.status === 'confirmed' ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-800'
                           }`}>
@@ -351,14 +352,22 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
                        )}
                     </div>
                     
-                    {field?.contactPhone && (
+                    <div className="flex flex-col gap-2 w-full md:w-auto">
+                        {field?.contactPhone && (
+                            <button 
+                                onClick={() => handleWhatsAppField(field)} 
+                                className="bg-green-100 text-green-700 px-4 py-2 rounded-lg font-bold flex items-center gap-2 hover:bg-green-200 transition justify-center"
+                            >
+                                <MessageCircle className="w-4 h-4" /> Falar com Campo
+                            </button>
+                        )}
                         <button 
-                            onClick={() => handleWhatsAppField(field)} 
-                            className="bg-green-100 text-green-700 px-4 py-2 rounded-lg font-bold flex items-center gap-2 hover:bg-green-200 transition w-full md:w-auto justify-center"
+                            onClick={() => onCancelBooking(slot.id)}
+                            className="text-red-500 hover:text-red-700 text-xs font-bold flex items-center justify-center gap-1 hover:underline p-2"
                         >
-                             <MessageCircle className="w-4 h-4" /> Falar com Campo
+                            <XCircle className="w-4 h-4" /> Cancelar Agendamento
                         </button>
-                    )}
+                    </div>
                  </div>
                )
              })

@@ -210,6 +210,27 @@ const App: React.FC = () => {
     } catch(e) { alert("Erro ao rejeitar"); }
   };
 
+  const handleCancelBooking = async (slotId: string) => {
+    if (!window.confirm("Tem certeza que deseja cancelar seu agendamento? O horário voltará a ficar disponível para outros times.")) return;
+    
+    try {
+      await api.updateSlot(slotId, { 
+        status: 'available', 
+        isBooked: false, 
+        bookedByTeamName: null, 
+        bookedByUserId: null, 
+        bookedByPhone: null,
+        bookedByCategory: null,
+        opponentTeamName: null,
+        opponentTeamPhone: null
+      } as any);
+      refreshData();
+      alert("Agendamento cancelado com sucesso.");
+    } catch(e) { 
+      alert("Erro ao cancelar agendamento"); 
+    }
+  };
+
   const bookSlot = async (slotId: string, team: SubTeam) => {
     try {
       await api.updateSlot(slotId, { 
@@ -303,6 +324,7 @@ const App: React.FC = () => {
             fields={fields}
             slots={slots}
             onBookSlot={bookSlot}
+            onCancelBooking={handleCancelBooking}
             userLocation={userLocation}
           />
         )}
