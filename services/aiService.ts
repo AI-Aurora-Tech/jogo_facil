@@ -1,4 +1,4 @@
-import { GoogleGenAI, Type, Schema } from "@google/genai";
+import { GoogleGenAI, Type } from "@google/genai";
 import { VerificationResult } from '../types';
 
 // Helper to convert file to base64
@@ -16,7 +16,8 @@ export const fileToGenerativePart = async (file: File): Promise<string> => {
   });
 };
 
-const verificationSchema: Schema = {
+/* Define the JSON schema for validation results using Type from @google/genai */
+const verificationSchema = {
   type: Type.OBJECT,
   properties: {
     isValid: {
@@ -45,6 +46,7 @@ export const verifyPixReceipt = async (
   expectedReceiverName: string
 ): Promise<VerificationResult> => {
   try {
+    /* Always use named parameter for apiKey initialization */
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     const base64Data = await fileToGenerativePart(file);
 
@@ -64,8 +66,9 @@ export const verifyPixReceipt = async (
       Responda estritamente em JSON.
     `;
 
+    /* Use gemini-3-flash-preview for fast text and image extraction tasks */
     const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
+      model: "gemini-3-flash-preview",
       contents: {
         parts: [
           {
@@ -84,8 +87,10 @@ export const verifyPixReceipt = async (
       },
     });
 
-    if (response.text) {
-      const result = JSON.parse(response.text) as VerificationResult;
+    /* Access response.text as a property, not a method */
+    const textOutput = response.text;
+    if (textOutput) {
+      const result = JSON.parse(textOutput.trim()) as VerificationResult;
       return result;
     }
 

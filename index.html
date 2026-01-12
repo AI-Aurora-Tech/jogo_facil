@@ -6,7 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
     <title>Jogo Fácil</title>
     
-    <!-- PWA Meta Tags -->
+    <!-- PWA / Mobile Meta Tags -->
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="Jogo Fácil" />
@@ -29,21 +29,48 @@
                 900: '#064e3b',
               },
               pitch: '#022c22',
+            },
+            borderRadius: {
+              '2xl': '1.25rem',
+              '3xl': '1.5rem',
             }
           }
         }
       }
     </script>
     <style>
-      /* Previne o scroll elástico no iOS e melhora a sensação de app */
-      html, body {
+      @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+      
+      body {
+        font-family: 'Inter', sans-serif;
         overscroll-behavior-y: none;
         -webkit-tap-highlight-color: transparent;
         user-select: none;
+        background-color: #f9fafb;
       }
-      /* Ajuste para Notch/Safe Areas em celulares modernos */
-      .safe-top { padding-top: env(safe-area-inset-top); }
-      .safe-bottom { padding-bottom: env(safe-area-inset-bottom); }
+      
+      /* Safe area adjustments for iOS notches */
+      .pb-safe {
+        padding-bottom: env(safe-area-inset-bottom);
+      }
+      .pt-safe {
+        padding-top: env(safe-area-inset-top);
+      }
+
+      /* Custom scrollbar for desktop preview */
+      ::-webkit-scrollbar {
+        width: 0px;
+      }
+
+      /* Bottom Nav styling */
+      .active-tab {
+        color: #10b981;
+      }
+      
+      /* Card shadows */
+      .app-card {
+        box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+      }
     </style>
   <script type="importmap">
 {
@@ -60,7 +87,7 @@
 }
 </script>
 </head>
-  <body class="bg-gray-50 text-gray-900 overflow-x-hidden">
+  <body class="bg-gray-50 text-gray-900 overflow-x-hidden antialiased">
     <div id="root"></div>
     <script type="module" src="/index.tsx"></script>
   </body>

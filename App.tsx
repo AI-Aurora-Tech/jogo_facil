@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { UserRole, Field, MatchSlot, User, SubscriptionPlan, SubTeam } from './types';
 import { Landing } from './views/Landing';
@@ -7,14 +6,15 @@ import { Subscription } from './views/Subscription';
 import { FieldDashboard } from './views/FieldDashboard';
 import { TeamDashboard } from './views/TeamDashboard';
 import { EditProfileModal } from './components/EditProfileModal';
-import { LogOut, Settings, Search as SearchIcon, Shield, RefreshCw } from 'lucide-react';
+import { Button } from './components/Button';
+import { LogOut, Settings, Search, Shield, RefreshCw, Calendar, User as UserIcon, Bell } from 'lucide-react';
 import { api } from './services/api';
 import { storageService } from './services/storage';
 
 const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
   const [view, setView] = useState<'LANDING' | 'AUTH' | 'SUBSCRIPTION' | 'APP'>('LANDING');
-  const [currentTab, setCurrentTab] = useState<'MY_FIELD' | 'SEARCH'>('SEARCH');
+  const [activeTab, setActiveTab] = useState<'EXPLORE' | 'MY_GAMES' | 'ADMIN' | 'PROFILE'>('EXPLORE');
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [userLocation, setUserLocation] = useState<{lat: number, lng: number} | undefined>(undefined);
   
@@ -22,15 +22,11 @@ const App: React.FC = () => {
   const [slots, setSlots] = useState<MatchSlot[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
-  // Geolocation Watcher
   useEffect(() => {
     if (navigator.geolocation) {
       const watchId = navigator.geolocation.watchPosition(
         (pos) => {
-          setUserLocation({ 
-            lat: pos.coords.latitude, 
-            lng: pos.coords.longitude 
-          });
+          setUserLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude });
         },
         (err) => console.log("GPS Error:", err),
         { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
@@ -39,7 +35,6 @@ const App: React.FC = () => {
     }
   }, []);
 
-  // Init User Session
   useEffect(() => {
     const storedUser = storageService.getCurrentUser();
     if (storedUser) {
@@ -47,12 +42,11 @@ const App: React.FC = () => {
     }
   }, []);
 
-  // Auto-refresh for expiration checks every 1 minute
   useEffect(() => {
     if (view === 'APP') {
         const interval = setInterval(() => {
             refreshData();
-        }, 60000); // 1 minuto
+        }, 60000);
         return () => clearInterval(interval);
     }
   }, [view]);
@@ -61,39 +55,7 @@ const App: React.FC = () => {
     setIsLoading(true);
     try {
       const [f, s] = await Promise.all([api.getFields(), api.getSlots()]);
-      
-      // Lógica de Expiração Automática (30 minutos)
-      const now = new Date().getTime();
-      const expiredSlots = s.filter(slot => {
-         if (slot.status === 'pending_verification' && slot.statusUpdatedAt) {
-            const updatedAt = new Date(slot.statusUpdatedAt).getTime();
-            const diffMinutes = (now - updatedAt) / (1000 * 60);
-            return diffMinutes >= 30; // 30 minutos
-         }
-         return false;
-      });
-
-      if (expiredSlots.length > 0) {
-          console.log(`Limpando ${expiredSlots.length} horários expirados...`);
-          await Promise.all(expiredSlots.map(slot => 
-            api.updateSlot(slot.id, { 
-                status: 'available', 
-                isBooked: false, 
-                bookedByTeamName: null, 
-                bookedByUserId: null, 
-                bookedByPhone: null,
-                bookedByCategory: null,
-                opponentTeamName: null,
-                opponentTeamPhone: null
-            } as any)
-          ));
-          // Recarregar slots após limpeza
-          const updatedSlots = await api.getSlots();
-          setSlots(updatedSlots);
-      } else {
-          setSlots(s);
-      }
-      
+      setSlots(s);
       setFields(f);
     } catch (e) {
       console.error(e);
@@ -109,14 +71,14 @@ const App: React.FC = () => {
     storageService.setCurrentUser(loggedUser);
     
     if (loggedUser.role === UserRole.TEAM_CAPTAIN) {
-        if (loggedUser.subscription === SubscriptionPlan.NONE || loggedUser.subscription === SubscriptionPlan.FREE) {
+        if (loggedUser.subscription === SubscriptionPlan.NONE) {
             setView('SUBSCRIPTION');
             return;
         }
     }
     
     setView('APP');
-    setCurrentTab(loggedUser.role === UserRole.FIELD_OWNER ? 'MY_FIELD' : 'SEARCH');
+    setActiveTab('EXPLORE');
     refreshData();
   };
 
@@ -142,7 +104,6 @@ const App: React.FC = () => {
         setFields(prev => prev.map(f => f.id === fieldId ? updatedField : f));
         return true;
     } catch (e: any) {
-        alert("Erro ao atualizar campo");
         return false;
     }
   };
@@ -166,15 +127,14 @@ const App: React.FC = () => {
       for (let i = 1; i <= 3; i++) {
         const dateObj = new Date(newSlot.date);
         dateObj.setDate(dateObj.getDate() + (i * 7)); 
-        const nextDate = dateObj.toISOString().split('T')[0];
-        slotsToCreate.push({ ...newSlot, date: nextDate });
+        slotsToCreate.push({ ...newSlot, date: dateObj.toISOString().split('T')[0] });
       }
     }
     try {
       await api.createSlots(slotsToCreate);
       await refreshData();
     } catch (e: any) {
-      alert(`Erro ao criar horário: ${e.message}`);
+      alert(`Erro: ${e.message}`);
     }
   };
 
@@ -183,18 +143,29 @@ const App: React.FC = () => {
         await api.updateSlot(slotId, updates);
         await refreshData();
     } catch (e: any) {
-        alert("Erro ao editar horário");
+        alert("Erro ao editar");
     }
   };
+
+  const deleteSlot = async (slotId: string) => {
+    if (!window.confirm("Remover este horário da grade?")) return;
+    try {
+      await api.updateSlot(slotId, { status: 'available', isBooked: false, bookedByUserId: 'DELETED' } as any);
+      await refreshData();
+    } catch (e) {
+      alert("Erro ao excluir");
+    }
+  }
 
   const confirmBooking = async (slotId: string) => {
     try {
       await api.updateSlot(slotId, { status: 'confirmed' });
-      setSlots(prev => prev.map(s => s.id === slotId ? { ...s, status: 'confirmed' } : s));
+      await refreshData();
     } catch(e) { alert("Erro ao confirmar"); }
   };
 
   const rejectBooking = async (slotId: string) => {
+    if (!window.confirm("Cancelar esta reserva?")) return;
     try {
       await api.updateSlot(slotId, { 
         status: 'available', 
@@ -211,8 +182,7 @@ const App: React.FC = () => {
   };
 
   const handleCancelBooking = async (slotId: string) => {
-    if (!window.confirm("Tem certeza que deseja cancelar seu agendamento? O horário voltará a ficar disponível para outros times.")) return;
-    
+    if (!window.confirm("Cancelar seu agendamento? O horário será liberado.")) return;
     try {
       await api.updateSlot(slotId, { 
         status: 'available', 
@@ -225,10 +195,7 @@ const App: React.FC = () => {
         opponentTeamPhone: null
       } as any);
       refreshData();
-      alert("Agendamento cancelado com sucesso.");
-    } catch(e) { 
-      alert("Erro ao cancelar agendamento"); 
-    }
+    } catch(e) { alert("Erro ao cancelar"); }
   };
 
   const bookSlot = async (slotId: string, team: SubTeam) => {
@@ -250,85 +217,127 @@ const App: React.FC = () => {
   if (view === 'SUBSCRIPTION' && user) return <Subscription userRole={user.role} onSubscribe={handleSubscribe} onBack={handleLogout} />;
 
   const myField = user?.role === UserRole.FIELD_OWNER ? fields.find(f => f.ownerId === user.id) : null;
-  const mySlots = myField ? slots.filter(s => s.fieldId === myField.id) : [];
+  const mySlots = myField ? slots.filter(s => s.fieldId === myField.id && s.bookedByUserId !== 'DELETED') : [];
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col">
-      <nav className="bg-pitch text-white px-4 md:px-6 py-4 flex justify-between items-center shadow-lg sticky top-0 z-40">
-        <div className="font-bold text-xl flex items-center gap-2">
-          ⚽ Jogo Fácil 
+    <div className="min-h-screen bg-gray-50 flex flex-col pb-safe">
+      {/* Mobile Top Bar */}
+      <header className="bg-pitch pt-safe text-white px-5 py-4 flex justify-between items-center shadow-md sticky top-0 z-50">
+        <div className="flex items-center gap-2">
+            <span className="text-xl font-black italic tracking-tighter text-grass-500">JOGO FÁCIL</span>
         </div>
         <div className="flex items-center gap-4">
-           <div className="hidden md:flex bg-white/10 rounded-lg p-1 gap-1">
-              {(user?.role === UserRole.FIELD_OWNER || user?.role === UserRole.ADMIN) && (
-                <button 
-                  onClick={() => setCurrentTab('MY_FIELD')}
-                  className={`px-3 py-1.5 rounded-md text-sm font-medium transition ${currentTab === 'MY_FIELD' ? 'bg-grass-600 text-white shadow' : 'hover:bg-white/10 text-gray-300'}`}
-                >
-                  Meu Campo
-                </button>
-              )}
-              <button 
-                onClick={() => setCurrentTab('SEARCH')}
-                className={`px-3 py-1.5 rounded-md text-sm font-medium transition ${currentTab === 'SEARCH' ? 'bg-grass-600 text-white shadow' : 'hover:bg-white/10 text-gray-300'}`}
-              >
-                Buscar Jogos
-              </button>
-           </div>
-           <div className="flex items-center gap-3">
-              <button onClick={refreshData} disabled={isLoading} className={`p-2 hover:bg-white/10 rounded-full transition text-gray-300 hover:text-white ${isLoading ? 'animate-spin' : ''}`}>
-                <RefreshCw className="w-5 h-5" />
-              </button>
-              <button onClick={() => setShowProfileModal(true)} className="p-2 hover:bg-white/10 rounded-full transition text-gray-300 hover:text-white">
-                <Settings className="w-5 h-5" />
-              </button>
-              <button onClick={handleLogout} className="text-red-300 hover:text-red-100 transition text-sm font-semibold">
-                <LogOut className="w-5 h-5" />
-              </button>
-           </div>
+           <button onClick={refreshData} className={`${isLoading ? 'animate-spin' : ''} p-1 text-gray-300`}>
+              <RefreshCw className="w-5 h-5" />
+           </button>
+           <button className="relative p-1 text-gray-300">
+              <Bell className="w-5 h-5" />
+              <span className="absolute top-0 right-0 w-2 h-2 bg-red-500 rounded-full border border-pitch"></span>
+           </button>
         </div>
-      </nav>
-      
-      <div className="md:hidden bg-pitch border-t border-white/10 flex justify-around p-2 sticky top-[60px] z-30 shadow-md">
-         {(user?.role === UserRole.FIELD_OWNER || user?.role === UserRole.ADMIN) && (
-            <button onClick={() => setCurrentTab('MY_FIELD')} className={`flex flex-col items-center gap-1 text-xs px-4 py-2 rounded ${currentTab === 'MY_FIELD' ? 'text-grass-400' : 'text-gray-400'}`}>
-              <Shield className="w-5 h-5" /> Gerir Campo
-            </button>
-         )}
-         <button onClick={() => setCurrentTab('SEARCH')} className={`flex flex-col items-center gap-1 text-xs px-4 py-2 rounded ${currentTab === 'SEARCH' ? 'text-grass-400' : 'text-gray-400'}`}>
-            <SearchIcon className="w-5 h-5" /> Jogos
-          </button>
-      </div>
+      </header>
 
-      <main className="flex-grow pb-20 md:pb-0">
-        {currentTab === 'MY_FIELD' && (
+      {/* Main Content Area */}
+      <main className="flex-grow overflow-y-auto pb-24">
+        {activeTab === 'EXPLORE' && user && (
+            <TeamDashboard 
+                viewMode="EXPLORE"
+                currentUser={user}
+                fields={fields}
+                slots={slots}
+                onBookSlot={bookSlot}
+                onCancelBooking={handleCancelBooking}
+                userLocation={userLocation}
+            />
+        )}
+        
+        {activeTab === 'MY_GAMES' && user && (
+             <TeamDashboard 
+                viewMode="MY_BOOKINGS"
+                currentUser={user}
+                fields={fields}
+                slots={slots}
+                onBookSlot={bookSlot}
+                onCancelBooking={handleCancelBooking}
+                userLocation={userLocation}
+            />
+        )}
+
+        {activeTab === 'ADMIN' && (
           myField ? (
             <FieldDashboard 
               field={myField} 
               slots={mySlots} 
               onAddSlot={addSlot}
               onEditSlot={editSlot}
+              onDeleteSlot={deleteSlot}
               onConfirmBooking={confirmBooking}
               onRejectBooking={rejectBooking}
               onUpdateField={handleUpdateField}
             />
           ) : (
              <div className="p-10 text-center text-gray-500">
-               {user?.role === UserRole.FIELD_OWNER ? "Carregando seu campo..." : "Você não possui um campo."}
+               {user?.role === UserRole.FIELD_OWNER ? "Carregando..." : "Sem campo vinculado."}
              </div>
           )
         )}
-        {currentTab === 'SEARCH' && user && (
-          <TeamDashboard 
-            currentUser={user}
-            fields={fields}
-            slots={slots}
-            onBookSlot={bookSlot}
-            onCancelBooking={handleCancelBooking}
-            userLocation={userLocation}
-          />
+
+        {activeTab === 'PROFILE' && user && (
+            <div className="p-6">
+                 <div className="bg-white rounded-3xl p-6 shadow-sm border mb-6 flex flex-col items-center">
+                    <div className="w-20 h-20 bg-grass-100 rounded-full flex items-center justify-center text-grass-700 text-3xl font-bold mb-3">
+                        {user.name.charAt(0)}
+                    </div>
+                    <h2 className="text-xl font-bold text-pitch">{user.name}</h2>
+                    <p className="text-gray-500 text-sm mb-4">{user.email}</p>
+                    <Button variant="outline" size="sm" onClick={() => setShowProfileModal(true)}>Editar Perfil</Button>
+                 </div>
+
+                 <div className="space-y-2">
+                    <button onClick={handleLogout} className="w-full bg-white border p-4 rounded-2xl flex items-center justify-between text-red-500 font-semibold shadow-sm">
+                        Sair da Conta <LogOut className="w-5 h-5" />
+                    </button>
+                 </div>
+            </div>
         )}
       </main>
+
+      {/* Bottom Navigation Bar */}
+      <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-100 px-6 py-3 flex justify-between items-center z-50 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] pb-safe">
+          <button 
+            onClick={() => setActiveTab('EXPLORE')} 
+            className={`flex flex-col items-center gap-1 transition-colors ${activeTab === 'EXPLORE' ? 'text-grass-600' : 'text-gray-400'}`}
+          >
+            <Search className={`w-6 h-6 ${activeTab === 'EXPLORE' ? 'fill-grass-600/10' : ''}`} />
+            <span className="text-[10px] font-bold uppercase tracking-wider">Explorar</span>
+          </button>
+          
+          <button 
+            onClick={() => setActiveTab('MY_GAMES')} 
+            className={`flex flex-col items-center gap-1 transition-colors ${activeTab === 'MY_GAMES' ? 'text-grass-600' : 'text-gray-400'}`}
+          >
+            <Calendar className={`w-6 h-6 ${activeTab === 'MY_GAMES' ? 'fill-grass-600/10' : ''}`} />
+            <span className="text-[10px] font-bold uppercase tracking-wider">Jogos</span>
+          </button>
+
+          {(user?.role === UserRole.FIELD_OWNER || user?.role === UserRole.ADMIN) && (
+              <button 
+                onClick={() => setActiveTab('ADMIN')} 
+                className={`flex flex-col items-center gap-1 transition-colors ${activeTab === 'ADMIN' ? 'text-grass-600' : 'text-gray-400'}`}
+              >
+                <Shield className={`w-6 h-6 ${activeTab === 'ADMIN' ? 'fill-grass-600/10' : ''}`} />
+                <span className="text-[10px] font-bold uppercase tracking-wider">Gestão</span>
+              </button>
+          )}
+
+          <button 
+            onClick={() => setActiveTab('PROFILE')} 
+            className={`flex flex-col items-center gap-1 transition-colors ${activeTab === 'PROFILE' ? 'text-grass-600' : 'text-gray-400'}`}
+          >
+            <UserIcon className={`w-6 h-6 ${activeTab === 'PROFILE' ? 'fill-grass-600/10' : ''}`} />
+            <span className="text-[10px] font-bold uppercase tracking-wider">Perfil</span>
+          </button>
+      </nav>
       
       {showProfileModal && user && (
         <EditProfileModal user={user} onUpdate={handleUpdateUser} onClose={() => setShowProfileModal(false)} />
