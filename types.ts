@@ -53,6 +53,7 @@ export interface Field {
   contactPhone: string;
   latitude: number;
   longitude: number;
+  localTeams?: string[]; // Lista de times da casa pré-cadastrados
 }
 
 export interface MatchSlot {
@@ -74,7 +75,7 @@ export interface MatchSlot {
   opponentTeamName?: string;
   opponentTeamPhone?: string;
   status: 'available' | 'pending_verification' | 'confirmed';
-  statusUpdatedAt?: string; // Novo: para rastrear expiração
+  statusUpdatedAt?: string;
   price: number;
 }
 
@@ -85,4 +86,13 @@ export interface VerificationResult {
   amountFound: number | null;
   dateFound: string | null;
   reason: string;
+}
+
+export interface Notification {
+  id: string;
+  title: string;
+  message: string;
+  type: 'booking' | 'payment' | 'system';
+  read: boolean;
+  createdAt: string;
 }

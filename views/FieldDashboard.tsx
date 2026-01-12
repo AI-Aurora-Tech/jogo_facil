@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { Plus, Users, Calendar, DollarSign, Clock, Settings, Trash2, Edit3, MessageCircle, MoreVertical, Shield } from 'lucide-react';
+import { Plus, Users, Calendar, DollarSign, Clock, Settings, Trash2, Edit3, MessageCircle, MoreVertical, Shield, MapPin, Key, Phone, X, Save, Trophy } from 'lucide-react';
 import { Button } from '../components/Button';
 import { Field, MatchSlot, COMMON_CATEGORIES, MatchType } from '../types';
 
@@ -16,20 +16,55 @@ interface FieldDashboardProps {
 }
 
 export const FieldDashboard: React.FC<FieldDashboardProps> = ({ 
-  field, slots, onAddSlot, onDeleteSlot, onConfirmBooking, onRejectBooking 
+  field, slots, onAddSlot, onDeleteSlot, onConfirmBooking, onRejectBooking, onUpdateField
 }) => {
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
   
   // Slot creation state
   const [newDate, setNewDate] = useState('');
   const [newTime, setNewTime] = useState('');
   const [matchType, setMatchType] = useState<MatchType>('AMISTOSO');
   const [price, setPrice] = useState(field.hourlyRate.toString());
+  const [selectedLocalTeam, setSelectedLocalTeam] = useState('');
+
+  // Field Settings state
+  const [editName, setEditName] = useState(field.name);
+  const [editLoc, setEditLoc] = useState(field.location);
+  const [editRate, setEditRate] = useState(field.hourlyRate.toString());
+  const [editPixKey, setEditPixKey] = useState(field.pixConfig.key);
+  const [editPixName, setEditPixName] = useState(field.pixConfig.name);
+  const [editPhone, setEditPhone] = useState(field.contactPhone);
+  const [editLocalTeams, setEditLocalTeams] = useState<string[]>(field.localTeams || []);
+  const [newLocalTeam, setNewLocalTeam] = useState('');
 
   const todayStr = new Date().toISOString().split('T')[0];
   const sortedSlots = slots
     .filter(s => s.date >= todayStr)
     .sort((a, b) => new Date(`${a.date}T${a.time}`).getTime() - new Date(`${b.date}T${b.time}`).getTime());
+
+  const handleSaveSettings = async () => {
+    const success = await onUpdateField(field.id, {
+        name: editName,
+        location: editLoc,
+        hourlyRate: Number(editRate),
+        contactPhone: editPhone,
+        pixConfig: { key: editPixKey, name: editPixName },
+        localTeams: editLocalTeams
+    });
+    if (success) setShowSettingsModal(false);
+  };
+
+  const addLocalTeam = () => {
+    if (newLocalTeam.trim() && !editLocalTeams.includes(newLocalTeam.trim())) {
+        setEditLocalTeams([...editLocalTeams, newLocalTeam.trim()]);
+        setNewLocalTeam('');
+    }
+  };
+
+  const removeLocalTeam = (name: string) => {
+    setEditLocalTeams(editLocalTeams.filter(t => t !== name));
+  };
 
   return (
     <div className="bg-gray-50 min-h-full">
@@ -38,13 +73,12 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
             <h1 className="text-2xl font-black text-pitch">Gestão da Arena</h1>
             <p className="text-gray-500 text-xs">Administre seus horários e reservas.</p>
         </div>
-        <button className="p-2 bg-gray-100 rounded-xl text-gray-500">
+        <button onClick={() => setShowSettingsModal(true)} className="p-2 bg-gray-100 rounded-xl text-gray-500 hover:text-grass-600 transition-colors">
             <Settings className="w-5 h-5" />
         </button>
       </div>
 
       <div className="p-5 space-y-6">
-        {/* Arena Summary */}
         <div className="bg-pitch text-white rounded-[2rem] p-6 shadow-xl flex justify-between items-center">
             <div>
                 <p className="text-grass-400 text-[10px] font-black uppercase tracking-widest mb-1">Agenda de Hoje</p>
@@ -101,9 +135,14 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                                 {slot.status === 'pending_verification' && (
                                     <div className="flex gap-1">
                                         <button onClick={() => onConfirmBooking(slot.id)} className="p-2 bg-grass-500 text-pitch rounded-xl shadow-md"><Shield className="w-4 h-4" /></button>
-                                        <button onClick={() => onRejectBooking(slot.id)} className="p-2 bg-red-100 text-red-500 rounded-xl"><XCircle className="w-4 h-4" /></button>
+                                        <button onClick={() => onRejectBooking(slot.id)} className="p-2 bg-red-100 text-red-500 rounded-xl"><Trash2 className="w-4 h-4" /></button>
                                     </div>
                                 )}
+                            </div>
+                        )}
+                        {slot.hasLocalTeam && slot.status === 'available' && (
+                            <div className="text-xs text-indigo-600 font-bold bg-indigo-50 px-3 py-2 rounded-xl flex items-center gap-2">
+                                <Trophy className="w-3 h-3"/> Time da Casa: {slot.localTeamName}
                             </div>
                         )}
                     </div>
@@ -112,7 +151,87 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
         </div>
       </div>
 
-      {/* Add Slot Modal */}
+      {/* Modal de Configurações da Arena */}
+      {showSettingsModal && (
+        <div className="fixed inset-0 bg-pitch/90 backdrop-blur-md z-[110] flex items-end">
+            <div className="bg-white w-full h-[90vh] rounded-t-[2.5rem] p-6 animate-in slide-in-from-bottom duration-300 overflow-y-auto pb-safe">
+                <div className="flex justify-between items-center mb-6">
+                    <h2 className="text-2xl font-black text-pitch">Ajustes da Arena</h2>
+                    <button onClick={() => setShowSettingsModal(false)} className="p-2 bg-gray-100 rounded-full"><X className="w-6 h-6"/></button>
+                </div>
+
+                <div className="space-y-6">
+                    <section>
+                        <h3 className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3">Informações Básicas</h3>
+                        <div className="space-y-3">
+                            <div className="bg-gray-50 p-3 rounded-2xl border">
+                                <label className="text-[10px] font-bold text-gray-400">Nome da Arena</label>
+                                <input type="text" value={editName} onChange={e => setEditName(e.target.value)} className="w-full bg-transparent font-bold outline-none" />
+                            </div>
+                            <div className="bg-gray-50 p-3 rounded-2xl border">
+                                <label className="text-[10px] font-bold text-gray-400">Endereço</label>
+                                <div className="flex gap-2">
+                                    <MapPin className="w-4 h-4 text-gray-400 shrink-0 mt-1" />
+                                    <input type="text" value={editLoc} onChange={e => setEditLoc(e.target.value)} className="w-full bg-transparent font-bold outline-none" />
+                                </div>
+                            </div>
+                            <div className="grid grid-cols-2 gap-3">
+                                <div className="bg-gray-50 p-3 rounded-2xl border">
+                                    <label className="text-[10px] font-bold text-gray-400">Valor/Hora (R$)</label>
+                                    <input type="number" value={editRate} onChange={e => setEditRate(e.target.value)} className="w-full bg-transparent font-bold outline-none" />
+                                </div>
+                                <div className="bg-gray-50 p-3 rounded-2xl border">
+                                    <label className="text-[10px] font-bold text-gray-400">WhatsApp</label>
+                                    <input type="text" value={editPhone} onChange={e => setEditPhone(e.target.value)} className="w-full bg-transparent font-bold outline-none" />
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+
+                    <section>
+                        <h3 className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3">Dados de Pagamento (PIX)</h3>
+                        <div className="space-y-3 bg-grass-50/50 p-4 rounded-[2rem] border border-grass-100">
+                             <div className="bg-white p-3 rounded-2xl border">
+                                <label className="text-[10px] font-bold text-gray-400">Chave PIX</label>
+                                <div className="flex gap-2">
+                                    <Key className="w-4 h-4 text-grass-500 shrink-0 mt-1" />
+                                    <input type="text" value={editPixKey} onChange={e => setEditPixKey(e.target.value)} className="w-full bg-transparent font-bold outline-none" />
+                                </div>
+                            </div>
+                            <div className="bg-white p-3 rounded-2xl border">
+                                <label className="text-[10px] font-bold text-gray-400">Titular da Conta</label>
+                                <input type="text" value={editPixName} onChange={e => setEditPixName(e.target.value)} className="w-full bg-transparent font-bold outline-none" />
+                            </div>
+                        </div>
+                    </section>
+
+                    <section>
+                        <h3 className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3">Nossos Times (Times da Casa)</h3>
+                        <div className="space-y-3">
+                            <div className="flex gap-2">
+                                <input type="text" placeholder="Nome do time..." value={newLocalTeam} onChange={e => setNewLocalTeam(e.target.value)} className="flex-grow p-3 bg-gray-50 rounded-2xl border font-bold outline-none" />
+                                <button onClick={addLocalTeam} className="bg-grass-600 text-white px-4 rounded-2xl font-bold">Add</button>
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                                {editLocalTeams.map(name => (
+                                    <div key={name} className="bg-white border rounded-full px-3 py-1.5 flex items-center gap-2 text-sm font-bold shadow-sm">
+                                        {name}
+                                        <button onClick={() => removeLocalTeam(name)}><X className="w-4 h-4 text-red-400"/></button>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    </section>
+
+                    <Button className="w-full py-4 rounded-[2rem] text-lg shadow-xl" onClick={handleSaveSettings}>
+                        <Save className="w-5 h-5" /> Salvar Alterações
+                    </Button>
+                </div>
+            </div>
+        </div>
+      )}
+
+      {/* Modal Abrir Horário */}
       {showAddModal && (
           <div className="fixed inset-0 bg-pitch/90 backdrop-blur-md z-[100] flex items-end">
             <div className="bg-white w-full rounded-t-[2.5rem] p-8 animate-in slide-in-from-bottom duration-300 pb-safe">
@@ -130,6 +249,15 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                             <input type="time" value={newTime} onChange={e => setNewTime(e.target.value)} className="w-full p-4 bg-gray-50 rounded-2xl font-bold outline-none" />
                         </div>
                     </div>
+                    
+                    <div className="space-y-1">
+                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Time da Casa (Se houver)</label>
+                        <select value={selectedLocalTeam} onChange={e => setSelectedLocalTeam(e.target.value)} className="w-full p-4 bg-gray-50 rounded-2xl font-bold outline-none appearance-none">
+                            <option value="">Sem Time da Casa (Aluguel/Vago)</option>
+                            {(field.localTeams || []).map(t => <option key={t} value={t}>{t}</option>)}
+                        </select>
+                    </div>
+
                     <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-1">
                             <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Preço (R$)</label>
@@ -157,7 +285,8 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                             matchType,
                             durationMinutes: 60,
                             isBooked: false,
-                            hasLocalTeam: false,
+                            hasLocalTeam: !!selectedLocalTeam,
+                            localTeamName: selectedLocalTeam || undefined,
                             allowedCategories: ['Livre'],
                             status: 'available'
                         }, false);
@@ -170,7 +299,3 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
     </div>
   );
 };
-
-const XCircle = ({className}: {className?: string}) => (
-    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><circle cx="12" cy="12" r="10"/><path d="m15 9-6 6"/><path d="m9 9 6 6"/></svg>
-);
