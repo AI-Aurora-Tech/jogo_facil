@@ -66,6 +66,33 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
     setEditLocalTeams(editLocalTeams.filter(t => t !== name));
   };
 
+  const handlePublishSlot = () => {
+    if (!newDate || !newTime) {
+      alert("Selecione data e hora");
+      return;
+    }
+
+    onAddSlot({
+        fieldId: field.id,
+        date: newDate,
+        time: newTime,
+        price: Number(price),
+        matchType,
+        durationMinutes: 60,
+        isBooked: false,
+        hasLocalTeam: !!selectedLocalTeam,
+        localTeamName: selectedLocalTeam || undefined,
+        allowedCategories: ['Livre'],
+        status: 'available'
+    }, false);
+    
+    // Reset modal
+    setNewDate('');
+    setNewTime('');
+    setSelectedLocalTeam('');
+    setShowAddModal(false);
+  };
+
   return (
     <div className="bg-gray-50 min-h-full">
       <div className="p-5 bg-white border-b shadow-sm sticky top-0 z-10 flex justify-between items-center">
@@ -73,7 +100,16 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
             <h1 className="text-2xl font-black text-pitch">Gestão da Arena</h1>
             <p className="text-gray-500 text-xs">Administre seus horários e reservas.</p>
         </div>
-        <button onClick={() => setShowSettingsModal(true)} className="p-2 bg-gray-100 rounded-xl text-gray-500 hover:text-grass-600 transition-colors">
+        <button onClick={() => {
+          setEditName(field.name);
+          setEditLoc(field.location);
+          setEditRate(field.hourlyRate.toString());
+          setEditPhone(field.contactPhone);
+          setEditPixKey(field.pixConfig.key);
+          setEditPixName(field.pixConfig.name);
+          setEditLocalTeams(field.localTeams || []);
+          setShowSettingsModal(true);
+        }} className="p-2 bg-gray-100 rounded-xl text-gray-500 hover:text-grass-600 transition-colors">
             <Settings className="w-5 h-5" />
         </button>
       </div>
@@ -84,7 +120,10 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                 <p className="text-grass-400 text-[10px] font-black uppercase tracking-widest mb-1">Agenda de Hoje</p>
                 <h2 className="text-3xl font-black">{sortedSlots.filter(s => s.date === todayStr).length} <span className="text-sm font-normal text-gray-400">Jogos</span></h2>
             </div>
-            <button onClick={() => setShowAddModal(true)} className="w-14 h-14 bg-grass-500 rounded-2xl flex items-center justify-center text-pitch shadow-lg shadow-grass-500/20 active:scale-90 transition-transform">
+            <button onClick={() => {
+              setPrice(field.hourlyRate.toString());
+              setShowAddModal(true);
+            }} className="w-14 h-14 bg-grass-500 rounded-2xl flex items-center justify-center text-pitch shadow-lg shadow-grass-500/20 active:scale-90 transition-transform">
                 <Plus className="w-8 h-8" />
             </button>
         </div>
@@ -276,22 +315,9 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
 
                 <div className="flex gap-3">
                     <button onClick={() => setShowAddModal(false)} className="flex-1 py-4 font-bold text-gray-400">Cancelar</button>
-                    <Button className="flex-[2] py-4 rounded-2xl text-lg shadow-xl shadow-grass-500/20" onClick={() => {
-                        onAddSlot({
-                            fieldId: field.id,
-                            date: newDate,
-                            time: newTime,
-                            price: Number(price),
-                            matchType,
-                            durationMinutes: 60,
-                            isBooked: false,
-                            hasLocalTeam: !!selectedLocalTeam,
-                            localTeamName: selectedLocalTeam || undefined,
-                            allowedCategories: ['Livre'],
-                            status: 'available'
-                        }, false);
-                        setShowAddModal(false);
-                    }}>Publicar</Button>
+                    <Button className="flex-[2] py-4 rounded-2xl text-lg shadow-xl shadow-grass-500/20" onClick={handlePublishSlot}>
+                      Publicar
+                    </Button>
                 </div>
             </div>
           </div>

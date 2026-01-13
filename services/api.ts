@@ -58,7 +58,8 @@ export const api = {
         imageUrl: 'https://images.unsplash.com/photo-1529900748604-07564a03e7a6?auto=format&fit=crop&q=80&w=1000',
         contactPhone: fieldData.contactPhone,
         latitude: userData.latitude || -23.6337,
-        longitude: userData.longitude || -46.7905
+        longitude: userData.longitude || -46.7905,
+        localTeams: []
       }]);
     }
 
@@ -91,12 +92,9 @@ export const api = {
     if (error) throw error;
     
     return data.map((f: any, idx: number) => {
-        // Correção de bug: Coordenadas idênticas faziam distâncias serem iguais
-        // Se as coordenadas estiverem no padrão do mock, injetamos variação significativa baseada no ID/Index
         let lat = f.latitude;
         let lng = f.longitude;
         
-        // Se for o CDC Martinica (exemplo do print), vamos setar a coordenada real aproximada dele
         if (f.name.toLowerCase().includes('martinica')) {
             lat = -23.6554;
             lng = -46.7725;
@@ -104,7 +102,6 @@ export const api = {
             lat = -23.6421;
             lng = -46.7850;
         } else {
-            // Variação genérica para outros campos
             lat += (idx * 0.012);
             lng += (idx * 0.008);
         }
@@ -113,7 +110,8 @@ export const api = {
             ...f,
             latitude: lat,
             longitude: lng,
-            pixConfig: { key: f.pixKey, name: f.pixName }
+            pixConfig: { key: f.pixKey, name: f.pixName },
+            localTeams: f.localTeams || []
         };
     });
   },
@@ -125,7 +123,8 @@ export const api = {
         hourlyRate: updates.hourlyRate,
         cancellationFeePercent: updates.cancellationFeePercent,
         contactPhone: updates.contactPhone,
-        imageUrl: updates.imageUrl
+        imageUrl: updates.imageUrl,
+        localTeams: updates.localTeams
     };
 
     if (updates.pixConfig) {
@@ -141,14 +140,18 @@ export const api = {
         .single();
 
     if (error) throw new Error('Erro ao atualizar campo');
-    return { ...data, pixConfig: { key: data.pixKey, name: data.pixName } } as Field;
+    return { 
+        ...data, 
+        pixConfig: { key: data.pixKey, name: data.pixName },
+        localTeams: data.localTeams || []
+    } as Field;
   },
 
   getSlots: async (): Promise<MatchSlot[]> => {
     const { data, error } = await supabase.from('MatchSlot').select('*');
     if (error) throw error;
     
-    return data.map((s: any) => ({
+    return (data || []).map((s: any) => ({
        ...s,
        durationMinutes: s.durationMinutes || 60,
        matchType: s.matchType || 'AMISTOSO',
@@ -157,15 +160,14 @@ export const api = {
   },
 
   createSlots: async (slots: Partial<MatchSlot>[]): Promise<MatchSlot[]> => {
-    const sanitizedSlots = slots.map(slot => {
-        const { customImageUrl, durationMinutes, matchType, ...rest } = slot;
-        return {
-            ...rest,
-            statusUpdatedAt: new Date().toISOString()
-        };
-    });
+    const slotsToInsert = slots.map(slot => ({
+        ...slot,
+        statusUpdatedAt: new Date().toISOString()
+    }));
 
-    await supabase.from('MatchSlot').insert(sanitizedSlots);
+    const { error } = await supabase.from('MatchSlot').insert(slotsToInsert);
+    if (error) throw new Error('Erro ao salvar agenda: ' + error.message);
+
     const { data: allSlots } = await supabase.from('MatchSlot').select('*');
     return (allSlots || []).map((s: any) => ({
        ...s,
@@ -176,10 +178,8 @@ export const api = {
   },
 
   updateSlot: async (slotId: string, data: Partial<MatchSlot>): Promise<MatchSlot> => {
-    const { customImageUrl, durationMinutes, matchType, ...rest } = data;
-    
     const updatePayload: any = {
-        ...rest,
+        ...data,
         statusUpdatedAt: new Date().toISOString()
     };
 
