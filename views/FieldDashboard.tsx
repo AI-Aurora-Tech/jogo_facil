@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { Plus, Users, Calendar, DollarSign, Clock, Settings, Trash2, Edit3, MessageCircle, MoreVertical, Shield, MapPin, Key, Phone, X, Save, Trophy } from 'lucide-react';
+import { Plus, Users, Calendar, DollarSign, Clock, Settings, Trash2, Edit3, MessageCircle, MoreVertical, Shield, MapPin, Key, Phone, X, Save, Trophy, Check } from 'lucide-react';
 import { Button } from '../components/Button';
 import { Field, MatchSlot, COMMON_CATEGORIES, MatchType } from '../types';
 
@@ -20,6 +20,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
 }) => {
   const [showAddModal, setShowAddModal] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   
   // Slot creation state
   const [newDate, setNewDate] = useState('');
@@ -37,6 +38,10 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
   const [editPhone, setEditPhone] = useState(field.contactPhone);
   const [editLocalTeams, setEditLocalTeams] = useState<string[]>(field.localTeams || []);
   const [newLocalTeam, setNewLocalTeam] = useState('');
+  
+  // Home Team Editing state
+  const [editingTeamIndex, setEditingTeamIndex] = useState<number | null>(null);
+  const [editingTeamValue, setEditingTeamValue] = useState('');
 
   const todayStr = new Date().toISOString().split('T')[0];
   const sortedSlots = slots
@@ -44,15 +49,27 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
     .sort((a, b) => new Date(`${a.date}T${a.time}`).getTime() - new Date(`${b.date}T${b.time}`).getTime());
 
   const handleSaveSettings = async () => {
-    const success = await onUpdateField(field.id, {
-        name: editName,
-        location: editLoc,
-        hourlyRate: Number(editRate),
-        contactPhone: editPhone,
-        pixConfig: { key: editPixKey, name: editPixName },
-        localTeams: editLocalTeams
-    });
-    if (success) setShowSettingsModal(false);
+    setIsSaving(true);
+    try {
+      const success = await onUpdateField(field.id, {
+          name: editName,
+          location: editLoc,
+          hourlyRate: Number(editRate),
+          contactPhone: editPhone,
+          pixConfig: { key: editPixKey, name: editPixName },
+          localTeams: editLocalTeams
+      });
+      
+      if (success) {
+        setShowSettingsModal(false);
+      } else {
+        alert("Não foi possível salvar as alterações. Verifique sua conexão e tente novamente.");
+      }
+    } catch (err) {
+      alert("Erro ao salvar configurações.");
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const addLocalTeam = () => {
@@ -64,6 +81,21 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
 
   const removeLocalTeam = (name: string) => {
     setEditLocalTeams(editLocalTeams.filter(t => t !== name));
+  };
+
+  const startEditingTeam = (index: number) => {
+    setEditingTeamIndex(index);
+    setEditingTeamValue(editLocalTeams[index]);
+  };
+
+  const saveEditedTeam = () => {
+    if (editingTeamIndex !== null && editingTeamValue.trim()) {
+      const updated = [...editLocalTeams];
+      updated[editingTeamIndex] = editingTeamValue.trim();
+      setEditLocalTeams(updated);
+      setEditingTeamIndex(null);
+      setEditingTeamValue('');
+    }
   };
 
   const handlePublishSlot = () => {
@@ -247,22 +279,59 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                     <section>
                         <h3 className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3">Nossos Times (Times da Casa)</h3>
                         <div className="space-y-3">
-                            <div className="flex gap-2">
-                                <input type="text" placeholder="Nome do time..." value={newLocalTeam} onChange={e => setNewLocalTeam(e.target.value)} className="flex-grow p-3 bg-gray-50 rounded-2xl border font-bold outline-none" />
-                                <button onClick={addLocalTeam} className="bg-grass-600 text-white px-4 rounded-2xl font-bold">Add</button>
+                            <div className="flex gap-2 mb-4">
+                                <input 
+                                  type="text" 
+                                  placeholder="Nome do time..." 
+                                  value={newLocalTeam} 
+                                  onChange={e => setNewLocalTeam(e.target.value)} 
+                                  className="flex-grow p-3 bg-gray-50 rounded-2xl border font-bold outline-none" 
+                                />
+                                <button onClick={addLocalTeam} className="bg-grass-600 text-white px-4 rounded-2xl font-bold active:scale-95 transition-transform">Add</button>
                             </div>
-                            <div className="flex flex-wrap gap-2">
-                                {editLocalTeams.map(name => (
-                                    <div key={name} className="bg-white border rounded-full px-3 py-1.5 flex items-center gap-2 text-sm font-bold shadow-sm">
-                                        {name}
-                                        <button onClick={() => removeLocalTeam(name)}><X className="w-4 h-4 text-red-400"/></button>
+                            <div className="space-y-2">
+                                {editLocalTeams.map((name, index) => (
+                                    <div key={index} className="bg-white border rounded-2xl p-3 flex items-center justify-between shadow-sm">
+                                        {editingTeamIndex === index ? (
+                                          <div className="flex-grow flex gap-2">
+                                            <input 
+                                              autoFocus
+                                              type="text" 
+                                              value={editingTeamValue} 
+                                              onChange={e => setEditingTeamValue(e.target.value)} 
+                                              className="flex-grow bg-gray-50 p-2 rounded-xl font-bold outline-none border border-grass-200"
+                                            />
+                                            <button onClick={saveEditedTeam} className="p-2 bg-grass-100 text-grass-600 rounded-xl">
+                                              <Check className="w-5 h-5"/>
+                                            </button>
+                                          </div>
+                                        ) : (
+                                          <>
+                                            <div className="flex items-center gap-2">
+                                              <Trophy className="w-4 h-4 text-grass-500 shrink-0" />
+                                              <span className="font-bold text-pitch">{name}</span>
+                                            </div>
+                                            <div className="flex gap-1">
+                                              <button onClick={() => startEditingTeam(index)} className="p-2 text-gray-400 hover:text-blue-500">
+                                                <Edit3 className="w-4 h-4" />
+                                              </button>
+                                              <button onClick={() => removeLocalTeam(name)} className="p-2 text-gray-400 hover:text-red-500">
+                                                <Trash2 className="w-4 h-4" />
+                                              </button>
+                                            </div>
+                                          </>
+                                        )}
                                     </div>
                                 ))}
                             </div>
                         </div>
                     </section>
 
-                    <Button className="w-full py-4 rounded-[2rem] text-lg shadow-xl" onClick={handleSaveSettings}>
+                    <Button 
+                      isLoading={isSaving}
+                      className="w-full py-4 rounded-[2rem] text-lg shadow-xl" 
+                      onClick={handleSaveSettings}
+                    >
                         <Save className="w-5 h-5" /> Salvar Alterações
                     </Button>
                 </div>
