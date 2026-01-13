@@ -13,7 +13,7 @@ export enum SubscriptionPlan {
   PRO_TEAM = 'PRO_TEAM'
 }
 
-export type MatchType = 'AMISTOSO' | 'FESTIVAL' | 'ALUGUEL';
+export type MatchType = 'AMISTOSO' | 'FESTIVAL' | 'ALUGUEL' | 'FIXO';
 
 export interface SubTeam {
   id: string;
@@ -31,7 +31,10 @@ export interface User {
   role: UserRole;
   subscription: SubscriptionPlan;
   subscriptionExpiry: string | null;
-  subTeams: SubTeam[]; 
+  teamName?: string; // Nome único do time do usuário
+  teamCategories: string[]; // Lista de categorias que o time joga
+  teamLogoUrl?: string;
+  subTeams: SubTeam[]; // Mantido por compatibilidade com banco, mas trataremos como projeção de teamCategories
   latitude?: number;
   longitude?: number;
 }
@@ -53,7 +56,7 @@ export interface Field {
   contactPhone: string;
   latitude: number;
   longitude: number;
-  localTeams?: string[]; // Lista de times da casa pré-cadastrados
+  localTeams?: string[]; 
 }
 
 export interface MatchSlot {
@@ -67,7 +70,7 @@ export interface MatchSlot {
   isBooked: boolean;
   hasLocalTeam: boolean;
   localTeamName?: string; 
-  allowedCategories: string[];
+  allowedCategories: string[]; // Agora usaremos como a categoria EXATA do slot
   bookedByTeamName?: string; 
   bookedByUserId?: string;
   bookedByPhone?: string;
@@ -79,7 +82,19 @@ export interface MatchSlot {
   price: number;
 }
 
-export const COMMON_CATEGORIES = ["Sub-09", "Sub-11", "Sub-13", "Sub-15", "Sub-17", "Sub-20", "Principal", "Veteranos", "Feminino"];
+export const COMMON_CATEGORIES = [
+  "Livre",
+  "Sub-09", 
+  "Sub-11", 
+  "Sub-13", 
+  "Sub-15", 
+  "Sub-17", 
+  "Sub-20", 
+  "Principal", 
+  "Veteranos (35+)", 
+  "Cinquentão (50+)", 
+  "Feminino"
+];
 
 export interface VerificationResult {
   isValid: boolean;
