@@ -98,8 +98,14 @@ const App: React.FC = () => {
         {activeTab === 'EXPLORE' && user && (
             <TeamDashboard 
                 viewMode="EXPLORE" currentUser={user} fields={fields} slots={slots}
-                onBookSlot={async (id, team) => {
-                    await api.updateSlot(id, { isBooked: true, status: 'pending_verification', bookedByTeamName: team.name, bookedByUserId: user.id });
+                onBookSlot={async (id, bookingData) => {
+                    await api.updateSlot(id, { 
+                        isBooked: true, 
+                        status: 'pending_verification', 
+                        bookedByTeamName: bookingData.teamName, 
+                        bookedByCategory: bookingData.category,
+                        bookedByUserId: user.id 
+                    });
                     refreshData();
                 }}
                 onCancelBooking={resetSlot}
@@ -136,42 +142,52 @@ const App: React.FC = () => {
                         {user.name.charAt(0)}
                     </div>
                     <h2 className="text-2xl font-black text-pitch">{user.name}</h2>
-                    <p className="text-gray-400 mb-6">{user.email}</p>
-                    <div className="bg-grass-50 px-6 py-2 rounded-full border border-grass-100 text-grass-600 font-bold text-xs uppercase mb-8">
-                        Assinatura: {user.subscription.split('_')[1] || 'Free'}
+                    <p className="text-gray-400 mb-6 font-medium">{user.email}</p>
+                    
+                    <div className="grid grid-cols-2 gap-3 w-full mb-8">
+                        <div className="bg-gray-50 p-4 rounded-3xl border border-gray-100 text-center">
+                            <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest mb-1">Status Plano</p>
+                            <p className="text-xs font-black text-grass-600 uppercase">{user.subscription.split('_')[1] || 'Ativo'}</p>
+                        </div>
+                        <div className="bg-gray-50 p-4 rounded-3xl border border-gray-100 text-center">
+                            <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest mb-1">Meu Time</p>
+                            <p className="text-xs font-black text-pitch truncate px-2">{user.teamName || 'Pendente'}</p>
+                        </div>
                     </div>
-                    <button onClick={() => setShowProfileModal(true)} className="w-full py-4 bg-pitch text-white rounded-2xl font-bold shadow-lg">Editar Meu Time / Perfil</button>
+
+                    <button onClick={() => setShowProfileModal(true)} className="w-full py-5 bg-pitch text-white rounded-[2rem] font-black shadow-xl active:scale-95 transition-transform uppercase text-xs tracking-widest">Editar Perfil e Time</button>
+                    
+                    <button onClick={() => window.location.reload()} className="mt-8 text-gray-400 font-bold text-xs hover:text-red-500 uppercase tracking-widest">Sair da Conta</button>
                 </div>
             </div>
         )}
       </main>
 
-      {/* Navegação Inferior Melhorada */}
-      <nav className="fixed bottom-0 left-0 right-0 bg-white border-t p-2 flex justify-around items-center z-50 shadow-[0_-10px_30px_rgba(0,0,0,0.05)] pb-safe">
+      <nav className="fixed bottom-0 left-0 right-0 bg-white border-t p-2.5 flex justify-around items-center z-50 shadow-[0_-15px_40px_rgba(0,0,0,0.08)] pb-safe">
           <button 
             onClick={() => setActiveTab('EXPLORE')} 
-            className={`flex-1 py-3 flex flex-col items-center gap-1 transition-all rounded-2xl ${activeTab === 'EXPLORE' ? 'bg-grass-500 text-pitch scale-110 shadow-lg shadow-grass-500/20' : 'text-gray-400'}`}
+            className={`flex-1 py-3 flex flex-col items-center gap-1 transition-all rounded-[1.5rem] ${activeTab === 'EXPLORE' ? 'bg-grass-500 text-pitch scale-105 shadow-lg shadow-grass-500/20' : 'text-gray-400'}`}
           >
-              <Search className={`w-6 h-6 ${activeTab === 'EXPLORE' ? 'text-pitch' : 'text-gray-400'}`} />
-              <span className="text-[10px] font-black uppercase tracking-tighter">Explorar</span>
+              <Search className={`w-5 h-5 ${activeTab === 'EXPLORE' ? 'text-pitch' : 'text-gray-300'}`} />
+              <span className="text-[9px] font-black uppercase tracking-tight">Buscar</span>
           </button>
           
           {user?.role === UserRole.FIELD_OWNER && (
               <button 
                 onClick={() => setActiveTab('ADMIN')} 
-                className={`flex-1 py-3 flex flex-col items-center gap-1 transition-all rounded-2xl ${activeTab === 'ADMIN' ? 'bg-grass-500 text-pitch scale-110 shadow-lg shadow-grass-500/20' : 'text-gray-400'}`}
+                className={`flex-1 py-3 flex flex-col items-center gap-1 transition-all rounded-[1.5rem] ${activeTab === 'ADMIN' ? 'bg-grass-500 text-pitch scale-105 shadow-lg shadow-grass-500/20' : 'text-gray-400'}`}
               >
-                  <Trophy className={`w-6 h-6 ${activeTab === 'ADMIN' ? 'text-pitch' : 'text-gray-400'}`} />
-                  <span className="text-[10px] font-black uppercase tracking-tighter">Minha Arena</span>
+                  <Trophy className={`w-5 h-5 ${activeTab === 'ADMIN' ? 'text-pitch' : 'text-gray-300'}`} />
+                  <span className="text-[9px] font-black uppercase tracking-tight">Arena</span>
               </button>
           )}
 
           <button 
             onClick={() => setActiveTab('PROFILE')} 
-            className={`flex-1 py-3 flex flex-col items-center gap-1 transition-all rounded-2xl ${activeTab === 'PROFILE' ? 'bg-grass-500 text-pitch scale-110 shadow-lg shadow-grass-500/20' : 'text-gray-400'}`}
+            className={`flex-1 py-3 flex flex-col items-center gap-1 transition-all rounded-[1.5rem] ${activeTab === 'PROFILE' ? 'bg-grass-500 text-pitch scale-105 shadow-lg shadow-grass-500/20' : 'text-gray-400'}`}
           >
-              <UserIcon className={`w-6 h-6 ${activeTab === 'PROFILE' ? 'text-pitch' : 'text-gray-400'}`} />
-              <span className="text-[10px] font-black uppercase tracking-tighter">Perfil</span>
+              <UserIcon className={`w-5 h-5 ${activeTab === 'PROFILE' ? 'text-pitch' : 'text-gray-300'}`} />
+              <span className="text-[9px] font-black uppercase tracking-tight">Perfil</span>
           </button>
       </nav>
 

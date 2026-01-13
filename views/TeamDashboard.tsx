@@ -1,15 +1,15 @@
 
 import React, { useState } from 'react';
-import { Search, MapPin, Clock, MessageCircle, Filter, Trophy, Users, CalendarCheck, Phone, Navigation, ExternalLink, XCircle, Share2, DollarSign } from 'lucide-react';
+import { Search, MapPin, Clock, MessageCircle, Filter, Trophy, Calendar, Navigation, CalendarDays, ChevronRight, AlertCircle, Tag, XCircle, CalendarCheck } from 'lucide-react';
 import { Button } from '../components/Button';
-import { Field, MatchSlot, User, SubTeam, COMMON_CATEGORIES } from '../types';
+import { Field, MatchSlot, User, COMMON_CATEGORIES } from '../types';
 import { calculateDistance } from '../utils';
 
 interface TeamDashboardProps {
   currentUser: User;
   fields: Field[];
   slots: MatchSlot[];
-  onBookSlot: (slotId: string, team: SubTeam) => void;
+  onBookSlot: (slotId: string, bookingData: { teamName: string, category: string }) => void;
   onCancelBooking: (slotId: string) => void;
   userLocation?: { lat: number, lng: number };
   viewMode: 'EXPLORE' | 'MY_BOOKINGS';
@@ -19,37 +19,64 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
   const [searchTerm, setSearchTerm] = useState('');
   const [radiusFilter, setRadiusFilter] = useState<number>(30);
   const [categoryFilter, setCategoryFilter] = useState<string>('');
+  const [dateFilter, setDateFilter] = useState<string>('');
   const [showFilters, setShowFilters] = useState(false);
   const [selectedSlot, setSelectedSlot] = useState<MatchSlot | null>(null);
-  const [selectedTeamId, setSelectedTeamId] = useState<string>('');
+  const [selectedBookingCategory, setSelectedBookingCategory] = useState<string>('');
 
   const todayStr = new Date().toISOString().split('T')[0];
 
   const filteredSlots = slots.filter(slot => {
+    const field = fields.find(f => f.id === slot.fieldId);
+    if (!field) return false;
+
     if (viewMode === 'EXPLORE') {
       if (slot.date < todayStr) return false;
       if (slot.status !== 'available') return false;
-      if (slot.bookedByUserId === 'DELETED') return false;
 
-      const field = fields.find(f => f.id === slot.fieldId);
-      if (!field) return false;
+      // Filtro de Texto (Arena)
       if (searchTerm && !field.name.toLowerCase().includes(searchTerm.toLowerCase())) return false;
       
+      // Filtro de Distância
       if (userLocation) {
         const dist = calculateDistance(userLocation.lat, userLocation.lng, field.latitude, field.longitude);
         if (dist > radiusFilter) return false;
       }
-      if (categoryFilter && !slot.allowedCategories.includes(categoryFilter) && !slot.allowedCategories.includes('Livre')) return false;
+
+      // Filtro de Categoria
+      const slotCat = slot.allowedCategories[0];
+      if (categoryFilter && slotCat !== categoryFilter && slotCat !== 'Livre') return false;
+
+      // Filtro de Data
+      if (dateFilter && slot.date !== dateFilter) return false;
+
       return true;
     } else {
+      // Meus Agendamentos
       return slot.bookedByUserId === currentUser.id && slot.date >= todayStr;
     }
   }).sort((a, b) => new Date(`${a.date}T${a.time}`).getTime() - new Date(`${b.date}T${b.time}`).getTime());
 
   const handleWhatsApp = (field: Field, slot: MatchSlot) => {
     const cleanPhone = field.contactPhone.replace(/\D/g, '');
-    const text = `Olá, estou no Jogo Fácil. Vi o horário em ${field.name} para o dia ${slot.date.split('-').reverse().join('/')} às ${slot.time}.`;
+    const text = `Olá, vi o horário em ${field.name} (${slot.allowedCategories[0]}) para o dia ${slot.date.split('-').reverse().join('/')} às ${slot.time} no Jogo Fácil.`;
     window.open(`https://wa.me/${cleanPhone}?text=${encodeURIComponent(text)}`, '_blank');
+  };
+
+  const handleConfirmBooking = () => {
+    if (!selectedSlot || !currentUser.teamName) return;
+    
+    // Se o time só tem uma categoria, usa ela. Se tem várias, usa a selecionada.
+    const finalCategory = selectedBookingCategory || currentUser.teamCategories[0] || "Principal";
+    
+    onBookSlot(selectedSlot.id, { 
+      teamName: currentUser.teamName, 
+      category: finalCategory 
+    });
+
+    const field = fields.find(f => f.id === selectedSlot.fieldId);
+    if (field) handleWhatsApp(field, selectedSlot);
+    setSelectedSlot(null);
   };
 
   return (
@@ -60,37 +87,49 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
                 <Search className="absolute left-4 top-3.5 text-gray-400 w-5 h-5 group-focus-within:text-grass-500 transition-colors" />
                 <input 
                     type="text" 
-                    placeholder="Buscar arena ou quadra..." 
-                    className="w-full pl-12 pr-4 py-3.5 bg-gray-100 border-none rounded-2xl focus:ring-2 focus:ring-grass-500 outline-none font-medium"
+                    placeholder="Arena, bairro ou cidade..." 
+                    className="w-full pl-12 pr-4 py-3.5 bg-gray-100 border-none rounded-2xl focus:ring-2 focus:ring-grass-500 outline-none font-bold"
                     value={searchTerm}
                     onChange={e => setSearchTerm(e.target.value)}
                 />
             </div>
-            <div className="flex items-center justify-between">
+            
+            <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar">
                 <button 
                   onClick={() => setShowFilters(!showFilters)}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold border transition-colors ${showFilters ? 'bg-grass-50 text-grass-700 border-grass-200' : 'bg-white text-gray-600 border-gray-200'}`}
+                  className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-black border transition-all shrink-0 ${showFilters ? 'bg-pitch text-white border-pitch' : 'bg-white text-gray-600 border-gray-200'}`}
                 >
-                    <Filter className="w-4 h-4" /> Filtros
+                    <Filter className="w-3.5 h-3.5" /> FILTROS {(categoryFilter || dateFilter) && "•"}
                 </button>
-                <div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest flex items-center gap-1">
-                   <Navigation className="w-3 h-3 text-grass-500" />
-                   {userLocation ? 'Perto de você' : 'Ative o GPS'}
-                </div>
+                {categoryFilter && (
+                    <button onClick={() => setCategoryFilter('')} className="bg-grass-100 text-grass-700 px-3 py-2 rounded-xl text-xs font-black border border-grass-200 shrink-0 flex items-center gap-1">
+                        {categoryFilter} <CalendarDays className="w-3 h-3" />
+                    </button>
+                )}
+                {dateFilter && (
+                    <button onClick={() => setDateFilter('')} className="bg-blue-100 text-blue-700 px-3 py-2 rounded-xl text-xs font-black border border-blue-200 shrink-0 flex items-center gap-1">
+                        {dateFilter.split('-').reverse().join('/')} <Calendar className="w-3 h-3" />
+                    </button>
+                )}
             </div>
 
             {showFilters && (
-              <div className="pt-2 animate-in fade-in duration-200">
+              <div className="pt-2 animate-in slide-in-from-top duration-200 space-y-4 border-t mt-2">
                   <div className="grid grid-cols-2 gap-3">
-                      <div className="col-span-2">
-                        <label className="text-[10px] font-black text-gray-400 uppercase mb-1 block">Raio: {radiusFilter}km</label>
-                        <input type="range" min="5" max="100" step="5" value={radiusFilter} onChange={e => setRadiusFilter(Number(e.target.value))} className="w-full accent-grass-500" />
+                      <div className="col-span-1">
+                        <label className="text-[9px] font-black text-gray-400 uppercase mb-1 block">Data do Jogo</label>
+                        <input type="date" value={dateFilter} min={todayStr} onChange={e => setDateFilter(e.target.value)} className="w-full p-3 bg-gray-50 border rounded-xl text-xs font-bold outline-none" />
                       </div>
-                      <div className="col-span-2">
-                        <select className="w-full p-3 bg-gray-100 border-none rounded-xl text-sm font-semibold" value={categoryFilter} onChange={e => setCategoryFilter(e.target.value)}>
-                            <option value="">Todas Categorias</option>
+                      <div className="col-span-1">
+                        <label className="text-[9px] font-black text-gray-400 uppercase mb-1 block">Categoria</label>
+                        <select className="w-full p-3 bg-gray-50 border rounded-xl text-xs font-bold outline-none appearance-none" value={categoryFilter} onChange={e => setCategoryFilter(e.target.value)}>
+                            <option value="">Todas</option>
                             {COMMON_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
                         </select>
+                      </div>
+                      <div className="col-span-2">
+                        <label className="text-[9px] font-black text-gray-400 uppercase mb-2 block tracking-widest">Distância: {radiusFilter}km</label>
+                        <input type="range" min="5" max="100" step="5" value={radiusFilter} onChange={e => setRadiusFilter(Number(e.target.value))} className="w-full accent-pitch" />
                       </div>
                   </div>
               </div>
@@ -98,20 +137,14 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
         </div>
       )}
 
-      {viewMode === 'MY_BOOKINGS' && (
-        <div className="p-5 border-b bg-white">
-            <h1 className="text-2xl font-black text-pitch">Meus Agendamentos</h1>
-            <p className="text-gray-500 text-sm">Acompanhe suas partidas confirmadas e pendentes.</p>
-        </div>
-      )}
-
-      <div className="p-5 space-y-4">
+      <div className="p-5 space-y-5">
         {filteredSlots.length === 0 ? (
-          <div className="text-center py-20">
-             <div className="bg-gray-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
-                <Search className="text-gray-400 w-8 h-8" />
+          <div className="text-center py-24 bg-white rounded-[2rem] border border-dashed border-gray-200">
+             <div className="bg-gray-50 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Search className="text-gray-300 w-10 h-10" />
              </div>
-             <p className="text-gray-500 font-medium">Nenhum jogo encontrado para hoje em diante.</p>
+             <p className="text-gray-400 font-black text-sm px-10 uppercase tracking-tight">Nenhum horário disponível com esses filtros</p>
+             <button onClick={() => { setCategoryFilter(''); setDateFilter(''); setSearchTerm(''); }} className="mt-4 text-grass-600 font-bold text-xs underline">Limpar busca</button>
           </div>
         ) : (
           filteredSlots.map(slot => {
@@ -119,59 +152,76 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
             if (!field) return null;
             const distance = userLocation ? calculateDistance(userLocation.lat, userLocation.lng, field.latitude, field.longitude) : null;
             const isOwner = field.ownerId === currentUser.id;
+            const slotCategory = slot.allowedCategories[0];
 
             return (
-              <div key={slot.id} className="bg-white rounded-3xl p-4 shadow-sm border border-gray-100 flex flex-col gap-4 active:scale-[0.98] transition-transform">
+              <div key={slot.id} className="bg-white rounded-[2.5rem] p-5 shadow-sm border border-gray-100 flex flex-col gap-4 relative overflow-hidden group">
                 <div className="flex gap-4">
-                    <div className="relative">
-                        <img src={field.imageUrl} className="w-20 h-20 rounded-2xl object-cover" />
-                        <span className="absolute -top-2 -right-2 bg-grass-500 text-white text-[10px] font-black px-2 py-1 rounded-lg shadow-lg border-2 border-white">
+                    <div className="relative shrink-0">
+                        <img src={field.imageUrl} className="w-24 h-24 rounded-3xl object-cover" />
+                        <div className="absolute -bottom-2 -right-2 bg-pitch text-white text-[9px] font-black px-2 py-1 rounded-lg shadow-xl border-2 border-white uppercase">
                             {slot.matchType}
-                        </span>
-                    </div>
-                    <div className="flex-1 min-w-0">
-                        <h3 className="font-bold text-pitch text-lg truncate">{field.name}</h3>
-                        <div className="flex items-center gap-1 text-gray-400 text-xs mb-1">
-                            <MapPin className="w-3 h-3" />
-                            <span className="truncate">{field.location}</span>
-                            {distance !== null && <span className="text-grass-600 font-bold ml-1">({distance}km)</span>}
                         </div>
-                        <div className="flex items-center gap-2">
-                             <div className="bg-gray-100 px-2 py-1 rounded-lg flex items-center gap-1">
-                                <Clock className="w-3 h-3 text-gray-600" />
-                                <span className="text-xs font-bold text-gray-600">{slot.time}</span>
+                    </div>
+                    <div className="flex-1 min-w-0 py-1">
+                        <div className="flex items-center gap-1.5 mb-1">
+                             <div className="bg-grass-500 text-pitch text-[8px] font-black px-2 py-0.5 rounded-full uppercase tracking-tighter">
+                                {slotCategory}
                              </div>
-                             <div className="bg-gray-100 px-2 py-1 rounded-lg">
-                                <span className="text-xs font-bold text-gray-600">{slot.date.split('-').reverse().join('/')}</span>
+                             {distance !== null && <span className="text-[9px] font-black text-grass-600">{distance}km</span>}
+                        </div>
+                        <h3 className="font-black text-pitch text-lg truncate leading-none mb-2">{field.name}</h3>
+                        <div className="flex items-center gap-1 text-gray-400 text-[10px] font-bold mb-3 truncate">
+                            <MapPin className="w-3 h-3 text-gray-300" />
+                            {field.location}
+                        </div>
+                        
+                        <div className="flex items-center gap-2">
+                             <div className="bg-gray-50 px-2.5 py-1.5 rounded-xl flex items-center gap-1.5 border border-gray-100">
+                                <Clock className="w-3.5 h-3.5 text-pitch" />
+                                <span className="text-xs font-black text-pitch">{slot.time}</span>
+                             </div>
+                             <div className="bg-gray-50 px-2.5 py-1.5 rounded-xl flex items-center gap-1.5 border border-gray-100">
+                                <CalendarDays className="w-3.5 h-3.5 text-pitch" />
+                                <span className="text-xs font-black text-pitch">{slot.date.split('-').reverse().slice(0,2).join('/')}</span>
                              </div>
                         </div>
                     </div>
                 </div>
 
-                <div className="flex items-center justify-between border-t border-gray-50 pt-3">
-                    <div className="flex items-center gap-1 text-grass-700 font-black text-xl">
-                        <span className="text-xs font-normal text-gray-400 self-center mr-1">R$</span>
-                        {slot.price}
+                <div className="flex items-center justify-between bg-gray-50 -mx-5 -mb-5 p-5 mt-2 border-t border-gray-100">
+                    <div className="flex items-baseline gap-0.5">
+                        <span className="text-[10px] font-black text-gray-400 uppercase mr-1">R$</span>
+                        <span className="text-2xl font-black text-pitch">{slot.price}</span>
                     </div>
-                    <div className="flex gap-2">
-                         {viewMode === 'MY_BOOKINGS' ? (
-                             <div className="flex flex-col items-end gap-1">
-                                <span className={`text-[10px] font-black uppercase px-2 py-1 rounded-lg border ${slot.status === 'confirmed' ? 'bg-green-50 text-green-600 border-green-100' : 'bg-orange-50 text-orange-600 border-orange-100'}`}>
-                                    {slot.status === 'confirmed' ? 'Confirmado' : 'Aguardando'}
-                                </span>
-                                <button onClick={() => onCancelBooking(slot.id)} className="text-[10px] text-red-500 font-bold underline">Cancelar</button>
-                             </div>
-                         ) : (
-                             <Button 
-                                size="sm" 
-                                className="rounded-xl px-6" 
-                                disabled={isOwner}
-                                onClick={() => setSelectedSlot(slot)}
-                            >
-                                {isOwner ? 'Meu Campo' : 'Agendar'}
-                             </Button>
-                         )}
-                    </div>
+                    
+                    {viewMode === 'MY_BOOKINGS' ? (
+                        <div className="flex items-center gap-3">
+                            <span className={`text-[9px] font-black uppercase px-3 py-1.5 rounded-full border shadow-sm ${slot.status === 'confirmed' ? 'bg-green-500 text-white border-green-600' : 'bg-orange-400 text-white border-orange-500'}`}>
+                                {slot.status === 'confirmed' ? 'Confirmado' : 'Aguardando'}
+                            </span>
+                            <button onClick={() => onCancelBooking(slot.id)} className="p-2 text-red-500 hover:bg-red-50 rounded-xl transition-colors">
+                                <XCircle className="w-5 h-5" />
+                            </button>
+                        </div>
+                    ) : (
+                        <Button 
+                            className="rounded-[1.5rem] px-8 py-3.5 text-xs font-black shadow-lg shadow-grass-500/20 active:scale-95 transition-transform" 
+                            disabled={isOwner}
+                            onClick={() => {
+                                if (!currentUser.teamName) {
+                                    alert("Por favor, cadastre o nome do seu time no Perfil antes de agendar!");
+                                } else {
+                                    setSelectedSlot(slot);
+                                    // Pré-selecionar primeira categoria compatível
+                                    const userMatch = currentUser.teamCategories.find(c => c === slotCategory);
+                                    setSelectedBookingCategory(userMatch || currentUser.teamCategories[0] || '');
+                                }
+                            }}
+                        >
+                            {isOwner ? 'Minha Arena' : 'AGENDAR AGORA'}
+                        </Button>
+                    )}
                 </div>
               </div>
             );
@@ -179,39 +229,63 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
         )}
       </div>
 
-      {/* Booking Modal Redesigned for Mobile */}
+      {/* NOVO MODAL DE AGENDAMENTO (FIXED TEAM NAME) */}
       {selectedSlot && (
-        <div className="fixed inset-0 bg-pitch/90 backdrop-blur-md z-[100] flex items-end">
-            <div className="bg-white w-full rounded-t-[2.5rem] p-8 animate-in slide-in-from-bottom duration-300 pb-safe">
-                <div className="w-12 h-1 bg-gray-200 rounded-full mx-auto mb-6"></div>
-                <h2 className="text-2xl font-black text-pitch mb-2">Confirmar Reserva</h2>
-                <p className="text-gray-500 text-sm mb-6">Arena {fields.find(f => f.id === selectedSlot.fieldId)?.name} às {selectedSlot.time}</p>
+        <div className="fixed inset-0 bg-pitch/95 backdrop-blur-xl z-[200] flex items-end">
+            <div className="bg-white w-full rounded-t-[3rem] p-10 animate-in slide-in-from-bottom duration-500 shadow-2xl">
+                <div className="w-16 h-1.5 bg-gray-100 rounded-full mx-auto mb-8"></div>
                 
-                <div className="space-y-4 mb-8">
-                    <div>
-                        <label className="text-[10px] font-black text-gray-400 uppercase mb-2 block tracking-widest">Time Pagante</label>
-                        <select className="w-full p-4 bg-gray-50 border-none rounded-2xl text-lg font-bold outline-none" value={selectedTeamId} onChange={e => setSelectedTeamId(e.target.value)}>
-                            <option value="">Escolha seu time</option>
-                            {currentUser.subTeams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-                        </select>
+                <div className="flex items-center gap-4 mb-8">
+                    <div className="w-16 h-16 bg-grass-500 rounded-3xl flex items-center justify-center text-pitch shadow-lg">
+                        <CalendarCheck className="w-8 h-8" />
                     </div>
-                    <div className="bg-blue-50 p-4 rounded-2xl border border-blue-100 flex gap-3">
-                        <MessageCircle className="w-5 h-5 text-blue-500 shrink-0" />
-                        <p className="text-xs text-blue-700 leading-relaxed">Você será levado ao WhatsApp do campo para enviar o PIX após confirmar.</p>
+                    <div>
+                        <h2 className="text-2xl font-black text-pitch">Confirmar Jogo</h2>
+                        <p className="text-gray-400 text-xs font-bold uppercase tracking-widest">
+                            {fields.find(f => f.id === selectedSlot.fieldId)?.name} • {selectedSlot.time}
+                        </p>
                     </div>
                 </div>
 
-                <div className="flex gap-3">
-                    <button onClick={() => setSelectedSlot(null)} className="flex-1 py-4 font-bold text-gray-400">Voltar</button>
-                    <Button className="flex-[2] py-4 rounded-2xl text-lg" disabled={!selectedTeamId} onClick={() => {
-                        const team = currentUser.subTeams.find(t => t.id === selectedTeamId);
-                        if (team) {
-                            onBookSlot(selectedSlot.id, team);
-                            const field = fields.find(f => f.id === selectedSlot.fieldId);
-                            if (field) handleWhatsApp(field, selectedSlot);
-                        }
-                        setSelectedSlot(null);
-                    }}>Confirmar</Button>
+                <div className="space-y-6 mb-10">
+                    <div className="bg-gray-50 p-6 rounded-[2rem] border-2 border-gray-100">
+                        <label className="text-[10px] font-black text-gray-400 uppercase mb-3 block tracking-tighter">Seu Time (Visitante)</label>
+                        <div className="flex items-center gap-4">
+                            <div className="w-12 h-12 bg-pitch rounded-2xl flex items-center justify-center text-white font-black text-xl">
+                                {currentUser.teamName?.charAt(0)}
+                            </div>
+                            <span className="text-xl font-black text-pitch">{currentUser.teamName}</span>
+                        </div>
+                    </div>
+
+                    {currentUser.teamCategories.length > 1 && (
+                        <div className="space-y-3">
+                            <label className="text-[10px] font-black text-gray-400 uppercase block tracking-tighter">Representando qual categoria?</label>
+                            <div className="flex flex-wrap gap-2">
+                                {currentUser.teamCategories.map(cat => (
+                                    <button 
+                                        key={cat}
+                                        onClick={() => setSelectedBookingCategory(cat)}
+                                        className={`px-4 py-2 rounded-xl text-xs font-black border transition-all ${selectedBookingCategory === cat ? 'bg-grass-500 border-grass-500 text-pitch' : 'bg-white text-gray-400 border-gray-200'}`}
+                                    >
+                                        {cat}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    <div className="bg-blue-50 p-5 rounded-2xl flex gap-4 items-start border border-blue-100">
+                        <MessageCircle className="w-6 h-6 text-blue-600 shrink-0" />
+                        <p className="text-xs text-blue-800 font-bold leading-relaxed">
+                            Ao confirmar, abriremos o WhatsApp do campo para você enviar o comprovante de pagamento.
+                        </p>
+                    </div>
+                </div>
+
+                <div className="flex gap-4">
+                    <button onClick={() => setSelectedSlot(null)} className="flex-1 py-5 font-black text-gray-400 uppercase text-xs tracking-widest">Desistir</button>
+                    <Button className="flex-[2] py-5 rounded-[2rem] text-sm font-black shadow-xl" onClick={handleConfirmBooking}>CONFIRMAR E ENVIAR PIX</Button>
                 </div>
             </div>
         </div>
