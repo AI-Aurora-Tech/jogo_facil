@@ -115,7 +115,6 @@ export const api = {
   },
   
   updateField: async (fieldId: string, updates: Partial<Field>): Promise<Field> => {
-    // Salva localmente o que não cabe no banco
     if (updates.localTeams) {
         saveLocalFieldData(fieldId, { localTeams: updates.localTeams });
     }
@@ -141,10 +140,7 @@ export const api = {
         .select()
         .single();
 
-    if (error) {
-        console.error("Update Field Error:", error);
-        throw new Error('Erro ao atualizar campo');
-    }
+    if (error) throw new Error('Erro ao atualizar campo');
 
     const extra = getLocalFieldData(fieldId);
     return { 
@@ -167,10 +163,16 @@ export const api = {
   },
 
   createSlots: async (slots: Partial<MatchSlot>[]): Promise<MatchSlot[]> => {
-    // Remove colunas que não existem no banco para evitar erro de schema
-    const slotsToInsert = slots.map(({ durationMinutes, matchType, allowedCategories, ...rest }) => ({
-        ...rest,
-        statusUpdatedAt: new Date().toISOString()
+    // REMOÇÃO ESTRITA de todas as colunas que não existem no banco de dados
+    const slotsToInsert = slots.map(({ 
+      durationMinutes, 
+      matchType, 
+      allowedCategories, 
+      statusUpdatedAt, 
+      customImageUrl,
+      ...rest 
+    }) => ({
+        ...rest
     }));
 
     const { error } = await supabase.from('MatchSlot').insert(slotsToInsert);
@@ -186,10 +188,18 @@ export const api = {
   },
 
   updateSlot: async (slotId: string, data: Partial<MatchSlot>): Promise<MatchSlot> => {
-    const { durationMinutes, matchType, allowedCategories, ...rest } = data;
+    // REMOÇÃO ESTRITA de todas as colunas que não existem no banco de dados
+    const { 
+      durationMinutes, 
+      matchType, 
+      allowedCategories, 
+      statusUpdatedAt, 
+      customImageUrl,
+      ...rest 
+    } = data;
+    
     const updatePayload: any = {
-        ...rest,
-        statusUpdatedAt: new Date().toISOString()
+        ...rest
     };
 
     const { data: updated, error } = await supabase
