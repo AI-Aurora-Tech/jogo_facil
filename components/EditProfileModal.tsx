@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { User, COMMON_CATEGORIES } from '../types';
 import { Button } from './Button';
-import { X, User as UserIcon, Shield, Upload, Check } from 'lucide-react';
+import { X, User as UserIcon, Shield, Upload, Check, Plus } from 'lucide-react';
 import { convertFileToBase64 } from '../utils';
 
 interface EditProfileModalProps {
@@ -17,9 +17,18 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({ user, onUpda
   const [teamName, setTeamName] = useState(user.teamName || '');
   const [teamCategories, setTeamCategories] = useState<string[]>(user.teamCategories || []);
   const [teamLogo, setTeamLogo] = useState(user.teamLogoUrl || '');
+  const [newCat, setNewCat] = useState('');
 
-  const toggleCategory = (cat: string) => {
-    setTeamCategories(prev => prev.includes(cat) ? prev.filter(c => c !== cat) : [...prev, cat]);
+  const addCategory = () => {
+    const trimmed = newCat.trim();
+    if (trimmed && !teamCategories.includes(trimmed)) {
+      setTeamCategories([...teamCategories, trimmed]);
+      setNewCat('');
+    }
+  };
+
+  const removeCategory = (cat: string) => {
+    setTeamCategories(teamCategories.filter(c => c !== cat));
   };
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -84,17 +93,30 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({ user, onUpda
             </div>
 
             <div className="space-y-3">
-                <label className="text-[10px] font-bold text-gray-400">Categorias que jogamos:</label>
-                <div className="flex flex-wrap gap-2">
-                    {COMMON_CATEGORIES.map(cat => (
-                        <button 
-                            key={cat} 
-                            type="button"
-                            onClick={() => toggleCategory(cat)}
-                            className={`px-4 py-2 rounded-xl text-xs font-bold border transition-all ${teamCategories.includes(cat) ? 'bg-grass-500 border-grass-500 text-pitch' : 'bg-white text-gray-400 border-gray-200'}`}
-                        >
+                <label className="text-[10px] font-bold text-gray-400">Adicionar Categorias (Digite ou selecione):</label>
+                <div className="flex gap-2">
+                    <input 
+                        list="category-suggestions"
+                        type="text" 
+                        value={newCat}
+                        onChange={e => setNewCat(e.target.value)}
+                        onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), addCategory())}
+                        placeholder="Ex: Sub-40..."
+                        className="flex-grow p-4 bg-gray-50 border rounded-2xl font-bold outline-none focus:ring-2 focus:ring-grass-500"
+                    />
+                    <datalist id="category-suggestions">
+                        {COMMON_CATEGORIES.map(c => <option key={c} value={c} />)}
+                    </datalist>
+                    <button type="button" onClick={addCategory} className="bg-pitch text-white px-6 rounded-2xl"><Plus className="w-6 h-6"/></button>
+                </div>
+
+                <div className="flex flex-wrap gap-2 pt-2">
+                    {teamCategories.length === 0 && <p className="text-xs text-gray-400 italic">Nenhuma categoria adicionada.</p>}
+                    {teamCategories.map(cat => (
+                        <div key={cat} className="bg-grass-100 text-grass-800 px-4 py-2 rounded-xl text-xs font-black border border-grass-200 flex items-center gap-2">
                             {cat}
-                        </button>
+                            <button type="button" onClick={() => removeCategory(cat)} className="text-grass-400 hover:text-red-500"><X className="w-3 h-3"/></button>
+                        </div>
                     ))}
                 </div>
             </div>

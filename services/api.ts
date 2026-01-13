@@ -11,9 +11,13 @@ const saveLocalUserData = (userId: string, data: any) => {
     localStorage.setItem(`jf_user_extra_${userId}`, JSON.stringify(data));
 };
 
-const getLocalFieldData = (fieldId: string) => {
-    const data = localStorage.getItem(`jf_field_extra_${fieldId}`);
-    return data ? JSON.parse(data) : { localTeams: [] };
+const getLocalSlotData = (slotId: string) => {
+    const data = localStorage.getItem(`jf_slot_extra_${slotId}`);
+    return data ? JSON.parse(data) : { allowedCategories: ["Principal"], matchType: "AMISTOSO" };
+};
+
+const saveLocalSlotData = (slotId: string, data: any) => {
+    localStorage.setItem(`jf_slot_extra_${slotId}`, JSON.stringify(data));
 };
 
 export const api = {
@@ -103,29 +107,66 @@ export const api = {
   getSlots: async (): Promise<MatchSlot[]> => {
     const { data, error } = await supabase.from('MatchSlot').select('*');
     if (error) throw error;
-    return (data || []).map((s: any) => ({
-       ...s,
-       durationMinutes: 60,
-       matchType: s.matchType || 'AMISTOSO',
-       allowedCategories: s.allowedCategories || ["Principal"]
-    })) as MatchSlot[];
+    return (data || []).map((s: any) => {
+       const extra = getLocalSlotData(s.id);
+       return {
+          ...s,
+          durationMinutes: 60,
+          matchType: extra.matchType,
+          allowedCategories: extra.allowedCategories
+       };
+    }) as MatchSlot[];
   },
 
   createSlots: async (slots: Partial<MatchSlot>[]): Promise<MatchSlot[]> => {
+    // Removemos metadados incompatíveis com o banco
     const slotsToInsert = slots.map(({ durationMinutes, matchType, allowedCategories, statusUpdatedAt, ...rest }) => ({
-        ...rest,
-        allowedCategories // Salvamos a categoria aqui
+        ...rest
     }));
-    const { error } = await supabase.from('MatchSlot').insert(slotsToInsert);
+
+    const { data, error } = await supabase.from('MatchSlot').insert(slotsToInsert).select();
     if (error) throw error;
-    // Fix: replaced 'this.getSlots()' with 'api.getSlots()' because arrow functions don't bind 'this' to the current object.
+
+    // Salvamos metadados localmente para cada novo slot
+    if (data) {
+        data.forEach((newSlot, index) => {
+            const original = slots[index];
+            saveLocalSlotData(newSlot.id, { 
+                allowedCategories: original.allowedCategories || ["Principal"],
+                matchType: original.matchType || "AMISTOSO"
+            });
+        });
+    }
+
     return api.getSlots();
   },
 
   updateSlot: async (slotId: string, data: Partial<MatchSlot>): Promise<MatchSlot> => {
     const { durationMinutes, matchType, allowedCategories, statusUpdatedAt, ...rest } = data;
+    
+    // Se houve alteração de metadados, salvamos localmente
+    if (allowedCategories || matchType) {
+        const current = getLocalSlotData(slotId);
+        saveLocalSlotData(slotId, {
+            allowedCategories: allowedCategories || current.allowedCategories,
+            matchType: matchType || current.matchType
+        });
+    }
+
     const { data: updated, error } = await supabase.from('MatchSlot').update(rest).eq('id', slotId).select().single();
     if (error) throw error;
-    return { ...updated, allowedCategories } as MatchSlot;
+
+    const finalExtra = getLocalSlotData(slotId);
+    return { 
+        ...updated, 
+        matchType: finalExtra.matchType,
+        allowedCategories: finalExtra.allowedCategories 
+    } as MatchSlot;
+  },
+
+  deleteSlot: async (slotId: string): Promise<void> => {
+    const { error } = await supabase.from('MatchSlot').delete().eq('id', slotId);
+    if (error) throw error;
+    localStorage.removeItem(`jf_slot_extra_${slotId}`);
   }
 };

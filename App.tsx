@@ -8,6 +8,7 @@ import { FieldDashboard } from './views/FieldDashboard';
 import { TeamDashboard } from './views/TeamDashboard';
 import { EditProfileModal } from './components/EditProfileModal';
 import { api } from './services/api';
+import { Search, Trophy, User as UserIcon, RefreshCw } from 'lucide-react';
 
 const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
@@ -20,7 +21,6 @@ const App: React.FC = () => {
 
   const handleAuthSuccess = (loggedUser: User) => {
     setUser(loggedUser);
-    // Todos precisam pagar agora
     if (loggedUser.subscription === SubscriptionPlan.NONE) {
         setView('SUBSCRIPTION');
     } else {
@@ -52,6 +52,18 @@ const App: React.FC = () => {
     refreshData();
   };
 
+  const resetSlot = async (id: string) => {
+    await api.updateSlot(id, {
+        isBooked: false,
+        status: 'available',
+        bookedByTeamName: undefined,
+        bookedByUserId: undefined,
+        bookedByPhone: undefined,
+        bookedByCategory: undefined
+    });
+    refreshData();
+  };
+
   const handleUpdateField = async (id: string, updates: any) => {
       try {
           const res = await api.updateField(id, updates);
@@ -76,7 +88,9 @@ const App: React.FC = () => {
       <header className="bg-pitch pt-safe text-white px-6 py-4 flex justify-between items-center sticky top-0 z-50 shadow-lg">
           <span className="text-xl font-black italic text-grass-500 tracking-tighter">JOGO FÁCIL</span>
           <div className="flex gap-4">
-              <button onClick={refreshData} className={`${isLoading ? 'animate-spin' : ''}`}>🔄</button>
+              <button onClick={refreshData} className={`${isLoading ? 'animate-spin' : ''}`}>
+                  <RefreshCw className="w-5 h-5 text-grass-500" />
+              </button>
           </div>
       </header>
 
@@ -88,16 +102,29 @@ const App: React.FC = () => {
                     await api.updateSlot(id, { isBooked: true, status: 'pending_verification', bookedByTeamName: team.name, bookedByUserId: user.id });
                     refreshData();
                 }}
-                onCancelBooking={async (id) => { await api.updateSlot(id, { isBooked: false, status: 'available' }); refreshData(); }}
+                onCancelBooking={resetSlot}
             />
         )}
         
         {activeTab === 'ADMIN' && myField && user && (
             <FieldDashboard 
                 field={myField} slots={mySlots} currentUser={user}
-                onAddSlot={addSlot} onDeleteSlot={async id => { await api.updateSlot(id, { status: 'available' }); refreshData(); }}
+                onAddSlot={addSlot} 
+                onDeleteSlot={async id => { 
+                    const slot = slots.find(s => s.id === id);
+                    if (slot?.isBooked) {
+                        if (confirm("Deseja CANCELAR A RESERVA deste horário?")) {
+                            await resetSlot(id);
+                        }
+                    } else {
+                        if (confirm("Deseja EXCLUIR este horário da agenda?")) {
+                            await api.deleteSlot(id);
+                            refreshData();
+                        }
+                    }
+                }}
                 onConfirmBooking={async id => { await api.updateSlot(id, { status: 'confirmed' }); refreshData(); }}
-                onRejectBooking={async id => { await api.updateSlot(id, { status: 'available' }); refreshData(); }}
+                onRejectBooking={resetSlot}
                 onUpdateField={handleUpdateField}
             />
         )}
@@ -119,10 +146,33 @@ const App: React.FC = () => {
         )}
       </main>
 
-      <nav className="fixed bottom-0 left-0 right-0 bg-white border-t p-4 flex justify-around items-center z-50 shadow-2xl pb-safe">
-          <button onClick={() => setActiveTab('EXPLORE')} className={`flex flex-col items-center ${activeTab === 'EXPLORE' ? 'text-grass-600' : 'text-gray-300'}`}>🔍 <span className="text-[10px] font-bold">EXPLORAR</span></button>
-          {user?.role === UserRole.FIELD_OWNER && <button onClick={() => setActiveTab('ADMIN')} className={`flex flex-col items-center ${activeTab === 'ADMIN' ? 'text-grass-600' : 'text-gray-300'}`}>Stadium <span className="text-[10px] font-bold">MINHA ARENA</span></button>}
-          <button onClick={() => setActiveTab('PROFILE')} className={`flex flex-col items-center ${activeTab === 'PROFILE' ? 'text-grass-600' : 'text-gray-300'}`}>👤 <span className="text-[10px] font-bold">PERFIL</span></button>
+      {/* Navegação Inferior Melhorada */}
+      <nav className="fixed bottom-0 left-0 right-0 bg-white border-t p-2 flex justify-around items-center z-50 shadow-[0_-10px_30px_rgba(0,0,0,0.05)] pb-safe">
+          <button 
+            onClick={() => setActiveTab('EXPLORE')} 
+            className={`flex-1 py-3 flex flex-col items-center gap-1 transition-all rounded-2xl ${activeTab === 'EXPLORE' ? 'bg-grass-500 text-pitch scale-110 shadow-lg shadow-grass-500/20' : 'text-gray-400'}`}
+          >
+              <Search className={`w-6 h-6 ${activeTab === 'EXPLORE' ? 'text-pitch' : 'text-gray-400'}`} />
+              <span className="text-[10px] font-black uppercase tracking-tighter">Explorar</span>
+          </button>
+          
+          {user?.role === UserRole.FIELD_OWNER && (
+              <button 
+                onClick={() => setActiveTab('ADMIN')} 
+                className={`flex-1 py-3 flex flex-col items-center gap-1 transition-all rounded-2xl ${activeTab === 'ADMIN' ? 'bg-grass-500 text-pitch scale-110 shadow-lg shadow-grass-500/20' : 'text-gray-400'}`}
+              >
+                  <Trophy className={`w-6 h-6 ${activeTab === 'ADMIN' ? 'text-pitch' : 'text-gray-400'}`} />
+                  <span className="text-[10px] font-black uppercase tracking-tighter">Minha Arena</span>
+              </button>
+          )}
+
+          <button 
+            onClick={() => setActiveTab('PROFILE')} 
+            className={`flex-1 py-3 flex flex-col items-center gap-1 transition-all rounded-2xl ${activeTab === 'PROFILE' ? 'bg-grass-500 text-pitch scale-110 shadow-lg shadow-grass-500/20' : 'text-gray-400'}`}
+          >
+              <UserIcon className={`w-6 h-6 ${activeTab === 'PROFILE' ? 'text-pitch' : 'text-gray-400'}`} />
+              <span className="text-[10px] font-black uppercase tracking-tighter">Perfil</span>
+          </button>
       </nav>
 
       {showProfileModal && user && <EditProfileModal user={user} onUpdate={async u => { const res = await api.updateUser(u); setUser(res); }} onClose={() => setShowProfileModal(false)} />}
