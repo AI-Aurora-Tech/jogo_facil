@@ -2,6 +2,16 @@
 import { supabase } from '../supabaseClient';
 import { User, Field, MatchSlot } from '../types';
 
+// Helper para persistência local de dados que não existem no schema do banco
+const getLocalFieldData = (fieldId: string) => {
+    const data = localStorage.getItem(`jf_field_extra_${fieldId}`);
+    return data ? JSON.parse(data) : { localTeams: [] };
+};
+
+const saveLocalFieldData = (fieldId: string, data: any) => {
+    localStorage.setItem(`jf_field_extra_${fieldId}`, JSON.stringify(data));
+};
+
 export const api = {
   login: async (email: string, password: string): Promise<User> => {
     const { data: user, error } = await supabase
@@ -47,7 +57,7 @@ export const api = {
     }
 
     if (userData.role === 'FIELD_OWNER' && fieldData) {
-      await supabase.from('Field').insert([{
+      const { data: newField } = await supabase.from('Field').insert([{
         ownerId: newUser.id,
         name: fieldData.name,
         location: fieldData.location,
@@ -58,9 +68,12 @@ export const api = {
         imageUrl: 'https://images.unsplash.com/photo-1529900748604-07564a03e7a6?auto=format&fit=crop&q=80&w=1000',
         contactPhone: fieldData.contactPhone,
         latitude: userData.latitude || -23.6337,
-        longitude: userData.longitude || -46.7905,
-        localTeams: []
-      }]);
+        longitude: userData.longitude || -46.7905
+      }]).select().single();
+      
+      if (newField) {
+          saveLocalFieldData(newField.id, { localTeams: [] });
+      }
     }
 
     const { data: completeUser } = await supabase
@@ -92,39 +105,28 @@ export const api = {
     if (error) throw error;
     
     return data.map((f: any, idx: number) => {
-        let lat = f.latitude;
-        let lng = f.longitude;
-        
-        if (f.name.toLowerCase().includes('martinica')) {
-            lat = -23.6554;
-            lng = -46.7725;
-        } else if (f.name.toLowerCase().includes('maria virginia')) {
-            lat = -23.6421;
-            lng = -46.7850;
-        } else {
-            lat += (idx * 0.012);
-            lng += (idx * 0.008);
-        }
-
+        const extra = getLocalFieldData(f.id);
         return {
             ...f,
-            latitude: lat,
-            longitude: lng,
             pixConfig: { key: f.pixKey, name: f.pixName },
-            localTeams: f.localTeams || []
+            localTeams: extra.localTeams || []
         };
     });
   },
   
   updateField: async (fieldId: string, updates: Partial<Field>): Promise<Field> => {
+    // Salva localmente o que não cabe no banco
+    if (updates.localTeams) {
+        saveLocalFieldData(fieldId, { localTeams: updates.localTeams });
+    }
+
     const dbUpdates: any = {
         name: updates.name,
         location: updates.location,
         hourlyRate: updates.hourlyRate,
         cancellationFeePercent: updates.cancellationFeePercent,
         contactPhone: updates.contactPhone,
-        imageUrl: updates.imageUrl,
-        localTeams: updates.localTeams
+        imageUrl: updates.imageUrl
     };
 
     if (updates.pixConfig) {
@@ -139,11 +141,16 @@ export const api = {
         .select()
         .single();
 
-    if (error) throw new Error('Erro ao atualizar campo');
+    if (error) {
+        console.error("Update Field Error:", error);
+        throw new Error('Erro ao atualizar campo');
+    }
+
+    const extra = getLocalFieldData(fieldId);
     return { 
         ...data, 
         pixConfig: { key: data.pixKey, name: data.pixName },
-        localTeams: data.localTeams || []
+        localTeams: extra.localTeams || []
     } as Field;
   },
 
@@ -153,15 +160,16 @@ export const api = {
     
     return (data || []).map((s: any) => ({
        ...s,
-       durationMinutes: s.durationMinutes || 60,
-       matchType: s.matchType || 'AMISTOSO',
-       allowedCategories: s.allowedCategories || ["Livre"]
+       durationMinutes: 60,
+       matchType: 'AMISTOSO',
+       allowedCategories: ["Livre"]
     })) as MatchSlot[];
   },
 
   createSlots: async (slots: Partial<MatchSlot>[]): Promise<MatchSlot[]> => {
-    const slotsToInsert = slots.map(slot => ({
-        ...slot,
+    // Remove colunas que não existem no banco para evitar erro de schema
+    const slotsToInsert = slots.map(({ durationMinutes, matchType, allowedCategories, ...rest }) => ({
+        ...rest,
         statusUpdatedAt: new Date().toISOString()
     }));
 
@@ -171,15 +179,16 @@ export const api = {
     const { data: allSlots } = await supabase.from('MatchSlot').select('*');
     return (allSlots || []).map((s: any) => ({
        ...s,
-       durationMinutes: s.durationMinutes || 60,
-       matchType: s.matchType || 'AMISTOSO',
-       allowedCategories: s.allowedCategories || ["Livre"]
+       durationMinutes: 60,
+       matchType: 'AMISTOSO',
+       allowedCategories: ["Livre"]
     })) as MatchSlot[];
   },
 
   updateSlot: async (slotId: string, data: Partial<MatchSlot>): Promise<MatchSlot> => {
+    const { durationMinutes, matchType, allowedCategories, ...rest } = data;
     const updatePayload: any = {
-        ...data,
+        ...rest,
         statusUpdatedAt: new Date().toISOString()
     };
 
@@ -193,9 +202,9 @@ export const api = {
     if (error) throw new Error('Erro ao atualizar horário');
     return {
         ...updated,
-        durationMinutes: updated.durationMinutes || 60,
-        matchType: updated.matchType || 'AMISTOSO',
-        allowedCategories: updated.allowedCategories || ["Livre"]
+        durationMinutes: 60,
+        matchType: 'AMISTOSO',
+        allowedCategories: ["Livre"]
     } as MatchSlot;
   }
 };

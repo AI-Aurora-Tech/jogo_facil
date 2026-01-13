@@ -63,10 +63,10 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
       if (success) {
         setShowSettingsModal(false);
       } else {
-        alert("Não foi possível salvar as alterações. Verifique sua conexão e tente novamente.");
+        alert("Erro ao salvar: Verifique se os dados estão corretos.");
       }
     } catch (err) {
-      alert("Erro ao salvar configurações.");
+      alert("Erro técnico ao salvar configurações.");
     } finally {
       setIsSaving(false);
     }
@@ -362,8 +362,12 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                         <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Time da Casa (Se houver)</label>
                         <select value={selectedLocalTeam} onChange={e => setSelectedLocalTeam(e.target.value)} className="w-full p-4 bg-gray-50 rounded-2xl font-bold outline-none appearance-none">
                             <option value="">Sem Time da Casa (Aluguel/Vago)</option>
+                            {/* Mostra times cadastrados na arena E times cadastrados no perfil do dono */}
                             {(field.localTeams || []).map(t => <option key={t} value={t}>{t}</option>)}
                         </select>
+                        {field.localTeams?.length === 0 && (
+                            <p className="text-[10px] text-orange-500 font-bold mt-1">Atenção: Cadastre seus times em "Ajustes da Arena" para selecioná-los aqui.</p>
+                        )}
                     </div>
 
                     <div className="grid grid-cols-2 gap-4">
