@@ -9,7 +9,6 @@ import { TeamDashboard } from './views/TeamDashboard';
 import { AdminDashboard } from './views/AdminDashboard';
 import { EditProfileModal } from './components/EditProfileModal';
 import { api } from './services/api';
-// Fix: Added Shield and Edit2 to the imports from lucide-react
 import { Search, Trophy, User as UserIcon, RefreshCw, Settings, Building2, MapPin, CalendarDays, TrendingUp, Users2, BarChart3, Bell, X, CheckCircle2, Clock, AlertCircle, Shield, Edit2 } from 'lucide-react';
 
 const App: React.FC = () => {
@@ -88,6 +87,36 @@ const App: React.FC = () => {
     } catch (e) { console.error(e); } finally { setIsLoading(false); }
   };
 
+  const handleUpdateProfile = async (updatedUser: User, updatedField?: Partial<Field>) => {
+    setIsLoading(true);
+    try {
+      // 1. Atualizar dados do Usuário
+      const resUser = await api.updateUser(updatedUser);
+      setUser(resUser);
+      localStorage.setItem('jf_session_user', JSON.stringify(resUser));
+
+      // 2. Se for dono de campo e enviou dados da arena, atualizar a arena
+      if (updatedField && user?.role === UserRole.FIELD_OWNER) {
+        const myField = fields.find(f => f.ownerId === user.id);
+        if (myField) {
+          await api.updateField(myField.id, updatedField);
+        }
+      }
+
+      setNotifications([
+        { id: Math.random().toString(), title: 'Perfil Atualizado', description: 'Suas informações foram salvas com sucesso.', timestamp: 'Agora', type: 'success', read: false },
+        ...notifications
+      ]);
+      
+      await refreshData();
+    } catch (err) {
+      console.error(err);
+      alert("Erro ao salvar alterações.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const resetSlot = async (id: string) => {
     await api.updateSlot(id, {
         isBooked: false,
@@ -127,7 +156,8 @@ const App: React.FC = () => {
     <div className="min-h-screen bg-gray-50 flex flex-col pb-safe">
       <header className="bg-white px-6 pt-safe pb-4 flex justify-between items-center sticky top-0 z-50 shadow-sm glass">
           <div className="flex flex-col">
-              <span className="text-xl font-black text-pitch tracking-tighter italic uppercase">JOGO FÁCIL</span>
+              <span className="text-xl font-black text-pitch tracking-tighter italic uppercase leading-none">JOGO FÁCIL</span>
+              <p className="text-[8px] font-black text-grass-600 uppercase tracking-widest">Football Pro</p>
           </div>
           <div className="flex items-center gap-4">
               <button onClick={() => setShowNotifications(true)} className="relative p-2 text-gray-400 hover:text-pitch transition-colors">
@@ -251,7 +281,11 @@ const App: React.FC = () => {
                 <div className="bg-white rounded-[3rem] p-10 shadow-xl border flex flex-col items-center">
                     <div className="relative">
                         <div className="w-24 h-24 bg-pitch rounded-[2.5rem] flex items-center justify-center text-3xl font-black text-grass-500 shadow-xl border-4 border-white mb-4 overflow-hidden">
-                            {user.teamLogoUrl ? <img src={user.teamLogoUrl} className="w-full h-full object-cover" /> : user.name.charAt(0)}
+                            {user.role === UserRole.FIELD_OWNER && myField?.imageUrl ? (
+                                <img src={myField.imageUrl} className="w-full h-full object-cover" />
+                            ) : user.teamLogoUrl ? (
+                                <img src={user.teamLogoUrl} className="w-full h-full object-cover" />
+                            ) : user.name.charAt(0)}
                         </div>
                         {user.subscription !== SubscriptionPlan.NONE && (
                             <div className="absolute -top-1 -right-1 bg-grass-500 text-pitch p-1.5 rounded-xl border-2 border-white shadow-lg">
@@ -259,7 +293,9 @@ const App: React.FC = () => {
                             </div>
                         )}
                     </div>
-                    <h2 className="text-2xl font-black text-pitch tracking-tight leading-none mb-1">{user.teamName || user.name}</h2>
+                    <h2 className="text-2xl font-black text-pitch tracking-tight leading-none mb-1">
+                        {user.role === UserRole.FIELD_OWNER ? (myField?.name || user.name) : (user.teamName || user.name)}
+                    </h2>
                     <p className="text-[10px] font-black text-gray-400 uppercase tracking-[0.3em]">{user.role === UserRole.FIELD_OWNER ? 'Gestor de Arena' : 'Capitão de Equipe'}</p>
                     
                     <div className="grid grid-cols-2 gap-4 w-full mt-10">
@@ -278,7 +314,7 @@ const App: React.FC = () => {
 
                     <div className="w-full mt-8 space-y-3">
                         <button onClick={() => setShowProfileModal(true)} className="w-full py-5 bg-pitch text-white rounded-[2.5rem] font-black shadow-xl active:scale-95 transition-all flex items-center justify-center gap-3 uppercase text-xs tracking-[0.2em]">
-                            <Edit2 className="w-4 h-4" /> Editar Perfil & Times
+                            <Edit2 className="w-4 h-4" /> Editar Perfil & Arena/Time
                         </button>
                         
                         {user.role === UserRole.TEAM_CAPTAIN && user.subTeams && user.subTeams.length > 0 && (
@@ -291,6 +327,16 @@ const App: React.FC = () => {
                                             <span className="text-[8px] font-bold text-grass-600 border border-grass-100 bg-grass-50 px-2 py-0.5 rounded-lg">{sub.category}</span>
                                         </div>
                                     ))}
+                                </div>
+                            </div>
+                        )}
+
+                        {user.role === UserRole.FIELD_OWNER && myField && (
+                            <div className="bg-gray-50 p-5 rounded-[2.5rem] border">
+                                <h4 className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-3">Localização da Arena</h4>
+                                <div className="flex items-center gap-2 px-2">
+                                    <MapPin className="w-3.5 h-3.5 text-grass-600" />
+                                    <span className="text-[10px] font-bold text-pitch truncate">{myField.location}</span>
                                 </div>
                             </div>
                         )}
@@ -320,7 +366,15 @@ const App: React.FC = () => {
           ))}
       </nav>
 
-      {showProfileModal && user && <EditProfileModal categories={categories} user={user} onUpdate={async u => { const res = await api.updateUser(u); setUser(res); localStorage.setItem('jf_session_user', JSON.stringify(res)); }} onClose={() => setShowProfileModal(false)} />}
+      {showProfileModal && user && (
+        <EditProfileModal 
+          categories={categories} 
+          user={user} 
+          field={myField}
+          onUpdate={handleUpdateProfile} 
+          onClose={() => setShowProfileModal(false)} 
+        />
+      )}
     </div>
   );
 };
