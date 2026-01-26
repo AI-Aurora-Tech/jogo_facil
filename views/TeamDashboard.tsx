@@ -19,7 +19,8 @@ interface TeamDashboardProps {
 export const TeamDashboard: React.FC<TeamDashboardProps> = ({ categories, currentUser, fields, slots, onBookSlot, onCancelBooking, userLocation, viewMode }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [radiusFilter, setRadiusFilter] = useState<number>(30);
-  const [categoryFilter, setCategoryFilter] = useState<string>('');
+  // Inicializa o filtro com a primeira categoria do time do usuário para conveniência
+  const [categoryFilter, setCategoryFilter] = useState<string>(currentUser.teamCategories?.[0] || '');
   const [dateFilter, setDateFilter] = useState<string>('');
   const [showFilters, setShowFilters] = useState(false);
   const [selectedSlot, setSelectedSlot] = useState<MatchSlot | null>(null);
@@ -35,12 +36,24 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ categories, curren
       if (slot.date < todayStr) return false;
       if (slot.status !== 'available') return false;
       if (searchTerm && !field.name.toLowerCase().includes(searchTerm.toLowerCase())) return false;
+      
       if (userLocation) {
         const dist = calculateDistance(userLocation.lat, userLocation.lng, field.latitude, field.longitude);
         if (dist > radiusFilter) return false;
       }
+
       const slotCat = slot.allowedCategories[0];
-      if (categoryFilter && slotCat !== categoryFilter && slotCat !== 'Livre') return false;
+
+      // Lógica de Categoria:
+      // 1. Se o usuário escolheu um filtro específico, usa ele.
+      // 2. Se não escolheu, mostra apenas o que for compatível com as categorias do time dele ou "Livre".
+      if (categoryFilter) {
+        if (slotCat !== categoryFilter && slotCat !== 'Livre') return false;
+      } else {
+        const isCompatible = currentUser.teamCategories.includes(slotCat) || slotCat === 'Livre';
+        if (!isCompatible) return false;
+      }
+
       if (dateFilter && slot.date !== dateFilter) return false;
       return true;
     } else {
@@ -87,12 +100,12 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ categories, curren
                 </button>
                 {categoryFilter && (
                     <button onClick={() => setCategoryFilter('')} className="bg-grass-100 text-grass-700 px-3 py-2 rounded-xl text-xs font-black border border-grass-200 shrink-0 flex items-center gap-1">
-                        {categoryFilter} <CalendarDays className="w-3 h-3" />
+                        {categoryFilter} <XCircle className="w-3 h-3 opacity-50" />
                     </button>
                 )}
                 {dateFilter && (
                     <button onClick={() => setDateFilter('')} className="bg-blue-100 text-blue-700 px-3 py-2 rounded-xl text-xs font-black border border-blue-200 shrink-0 flex items-center gap-1">
-                        {dateFilter.split('-').reverse().join('/')} <Calendar className="w-3 h-3" />
+                        {dateFilter.split('-').reverse().join('/')} <XCircle className="w-3 h-3 opacity-50" />
                     </button>
                 )}
             </div>
@@ -107,7 +120,7 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ categories, curren
                       <div className="col-span-1">
                         <label className="text-[9px] font-black text-gray-400 uppercase mb-1 block">Categoria</label>
                         <select className="w-full p-3 bg-gray-50 border rounded-xl text-xs font-bold outline-none appearance-none" value={categoryFilter} onChange={e => setCategoryFilter(e.target.value)}>
-                            <option value="">Todas</option>
+                            <option value="">Todas (Compatíveis)</option>
                             {categories.map(c => <option key={c} value={c}>{c}</option>)}
                         </select>
                       </div>
@@ -125,10 +138,12 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ categories, curren
         {filteredSlots.length === 0 ? (
           <div className="text-center py-24 bg-white rounded-[2rem] border border-dashed border-gray-200">
              <div className="bg-gray-50 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4">
-                <Search className="text-gray-300 w-10 h-10" />
+                <Trophy className="text-gray-200 w-10 h-10" />
              </div>
-             <p className="text-gray-400 font-black text-sm px-10 uppercase tracking-tight">Nenhum horário disponível com esses filtros</p>
-             <button onClick={() => { setCategoryFilter(''); setDateFilter(''); setSearchTerm(''); }} className="mt-4 text-grass-600 font-bold text-xs underline">Limpar busca</button>
+             <p className="text-gray-400 font-black text-sm px-10 uppercase tracking-tight">
+                Nenhum horário encontrado para a categoria {categoryFilter || currentUser.teamCategories.join(', ')}
+             </p>
+             <button onClick={() => { setCategoryFilter(''); setDateFilter(''); setSearchTerm(''); }} className="mt-4 text-grass-600 font-bold text-xs underline">Ver todas as categorias</button>
           </div>
         ) : (
           filteredSlots.map(slot => {
@@ -149,7 +164,7 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ categories, curren
                     </div>
                     <div className="flex-1 min-w-0 py-1">
                         <div className="flex items-center gap-1.5 mb-1">
-                             <div className="bg-grass-500 text-pitch text-[8px] font-black px-2 py-0.5 rounded-full uppercase tracking-tighter">
+                             <div className={`text-pitch text-[8px] font-black px-2 py-0.5 rounded-full uppercase tracking-tighter ${slotCategory === 'Livre' ? 'bg-gray-200' : 'bg-grass-500'}`}>
                                 {slotCategory}
                              </div>
                              {distance !== null && <span className="text-[9px] font-black text-grass-600">{distance}km</span>}
