@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { Plus, Calendar, Settings, Trash2, Shield, MapPin, Key, X, Save, Trophy, Check, CalendarDays, Clock, Repeat } from 'lucide-react';
+import { Plus, Calendar, Settings, Trash2, Shield, MapPin, Key, X, Save, Trophy, Check, CalendarDays, Clock, Repeat, Users, CircleSlash } from 'lucide-react';
 import { Button } from '../components/Button';
 import { Field, MatchSlot, COMMON_CATEGORIES, MatchType, User } from '../types';
 
@@ -37,7 +37,8 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
   const [matchType, setMatchType] = useState<MatchType>('AMISTOSO');
   const [selectedCategory, setSelectedCategory] = useState(COMMON_CATEGORIES[7]); // Principal
   const [price, setPrice] = useState(field.hourlyRate.toString());
-  const [useOwnerTeam, setUseOwnerTeam] = useState(false);
+  const [hostType, setHostType] = useState<'NONE' | 'OWNER'>('NONE');
+  const [selectedHostCategory, setSelectedHostCategory] = useState<string>('');
   const [repeatWeeks, setRepeatWeeks] = useState(1);
 
   // Settings states
@@ -82,9 +83,9 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
         matchType,
         durationMinutes: 60,
         isBooked: false,
-        hasLocalTeam: useOwnerTeam,
-        localTeamName: useOwnerTeam ? currentUser.teamName : undefined,
-        allowedCategories: [selectedCategory],
+        hasLocalTeam: hostType === 'OWNER',
+        localTeamName: hostType === 'OWNER' ? currentUser.teamName : undefined,
+        allowedCategories: [hostType === 'OWNER' ? selectedHostCategory : selectedCategory],
         status: 'available'
       });
     }
@@ -94,6 +95,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
     // Reset fields
     setSelectedDay(null);
     setRepeatWeeks(1);
+    setHostType('NONE');
   };
 
   return (
@@ -145,8 +147,8 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
 
                     {slot.status === 'available' ? (
                         <div className="text-[9px] text-gray-400 font-black uppercase flex items-center gap-2">
-                             <div className="w-1.5 h-1.5 bg-grass-500 rounded-full animate-pulse"></div>
-                             Disponível {slot.hasLocalTeam && `• Mandante: ${slot.localTeamName}`}
+                             <div className={`w-1.5 h-1.5 rounded-full animate-pulse ${slot.hasLocalTeam ? 'bg-orange-500' : 'bg-grass-500'}`}></div>
+                             {slot.hasLocalTeam ? `Aguardando Adversário (${slot.localTeamName})` : 'Campo Livre'}
                         </div>
                     ) : (
                         <div className="bg-gray-50 rounded-2xl p-4 flex justify-between items-center border border-gray-100">
@@ -203,7 +205,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
 
       {showAddModal && (
           <div className="fixed inset-0 bg-pitch/95 backdrop-blur-md z-[150] flex items-end">
-            <div className="bg-white w-full rounded-t-[3.5rem] p-10 animate-in slide-in-from-bottom duration-500 shadow-2xl">
+            <div className="bg-white w-full rounded-t-[3.5rem] p-10 animate-in slide-in-from-bottom duration-500 shadow-2xl overflow-y-auto max-h-[90vh]">
                 <div className="w-12 h-1.5 bg-gray-100 rounded-full mx-auto mb-8"></div>
                 <h2 className="text-3xl font-black text-pitch mb-8 flex items-center gap-3">
                   <CalendarDays className="w-8 h-8 text-grass-500" /> Novo Horário
@@ -240,6 +242,53 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                         </div>
                     </div>
 
+                    {/* SELEÇÃO DE MANDANTE */}
+                    <div className="space-y-3">
+                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block">Quem é o Mandante?</label>
+                        <div className="grid grid-cols-1 gap-2">
+                            <button 
+                                onClick={() => { setHostType('NONE'); setSelectedHostCategory(''); }}
+                                className={`flex items-center gap-4 p-4 rounded-2xl border transition-all ${hostType === 'NONE' ? 'bg-pitch border-pitch text-white' : 'bg-gray-50 border-gray-100 text-gray-400'}`}
+                            >
+                                <CircleSlash className={`w-6 h-6 ${hostType === 'NONE' ? 'text-grass-500' : 'text-gray-300'}`} />
+                                <div className="text-left">
+                                    <p className="font-black text-sm">Campo Aberto</p>
+                                    <p className="text-[9px] font-bold uppercase opacity-60 text-grass-500">Qualquer time pode agendar</p>
+                                </div>
+                            </button>
+
+                            {currentUser.teamName && (
+                                <div className="space-y-2">
+                                    <p className="text-[9px] font-black text-gray-400 uppercase pl-1">Meu Time: {currentUser.teamName}</p>
+                                    <div className="flex flex-wrap gap-2">
+                                        {currentUser.teamCategories.map(cat => (
+                                            <button 
+                                                key={cat}
+                                                onClick={() => { setHostType('OWNER'); setSelectedHostCategory(cat); }}
+                                                className={`flex-1 min-w-[120px] p-3 rounded-xl border transition-all text-center ${hostType === 'OWNER' && selectedHostCategory === cat ? 'bg-grass-500 border-grass-500 text-pitch scale-105 shadow-lg' : 'bg-gray-50 border-gray-100 text-gray-400'}`}
+                                            >
+                                                <p className="font-black text-[11px]">{cat}</p>
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
+                    {hostType === 'NONE' && (
+                        <div className="space-y-2">
+                            <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block">Categoria de Preferência</label>
+                            <select 
+                                value={selectedCategory} 
+                                onChange={e => setSelectedCategory(e.target.value)} 
+                                className="w-full p-4 bg-gray-50 rounded-2xl font-black border border-gray-100 appearance-none text-pitch text-sm"
+                            >
+                                {COMMON_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                            </select>
+                        </div>
+                    )}
+
                     <div className="space-y-2">
                         <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block">Recorrência (Mensalistas?)</label>
                         <select 
@@ -252,19 +301,6 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                             <option value={8}>Repetir por 8 Semanas</option>
                             <option value={12}>Repetir por 12 Semanas</option>
                         </select>
-                    </div>
-
-                    <div className="flex items-center justify-between p-5 bg-grass-50 rounded-3xl border border-grass-100">
-                        <div className="flex items-center gap-3">
-                            <div className={`p-2 rounded-xl ${useOwnerTeam ? 'bg-grass-500 text-pitch' : 'bg-white text-gray-300'}`}>
-                              <Trophy className="w-5 h-5" />
-                            </div>
-                            <div>
-                                <p className="text-xs font-black text-pitch">Time da Casa Aguardando?</p>
-                                <p className="text-[9px] text-gray-500 font-bold">Meu time ({currentUser.teamName || 'N/A'}) já estará no campo.</p>
-                            </div>
-                        </div>
-                        <input type="checkbox" checked={useOwnerTeam} onChange={e => setUseOwnerTeam(e.target.checked)} className="w-6 h-6 accent-pitch" disabled={!currentUser.teamName} />
                     </div>
 
                     <div className="flex gap-4 pt-4">
