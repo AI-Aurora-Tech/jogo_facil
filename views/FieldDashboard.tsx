@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { Plus, Calendar, Settings, Trash2, Shield, MapPin, Key, X, Save, Trophy, Check, CalendarDays, Clock, Repeat, Users, CircleSlash } from 'lucide-react';
+import { Plus, Calendar, Settings, Trash2, Shield, MapPin, Key, X, Save, Trophy, Check, CalendarDays, Clock, Repeat, Users, CircleSlash, Swords, PartyPopper } from 'lucide-react';
 import { Button } from '../components/Button';
 import { Field, MatchSlot, COMMON_CATEGORIES, MatchType, User } from '../types';
 
@@ -96,6 +96,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
     setSelectedDay(null);
     setRepeatWeeks(1);
     setHostType('NONE');
+    setMatchType('AMISTOSO');
   };
 
   return (
@@ -112,7 +113,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
         <div className="bg-pitch text-white rounded-[2rem] p-6 shadow-xl flex justify-between items-center">
             <div>
                 <p className="text-grass-400 text-[10px] font-black uppercase tracking-widest mb-1">Agenda de Jogos</p>
-                <h2 className="text-3xl font-black">{sortedSlots.length} Slots</h2>
+                <h2 className="text-3xl font-black">{sortedSlots.length} {sortedSlots.length === 1 ? 'Horário' : 'Horários'}</h2>
             </div>
             <button onClick={() => setShowAddModal(true)} className="w-14 h-14 bg-grass-500 rounded-2xl flex items-center justify-center text-pitch shadow-lg active:scale-90 transition-transform">
                 <Plus className="w-8 h-8" />
@@ -237,8 +238,29 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                             </div>
                         </div>
                         <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100">
-                            <label className="text-[10px] font-black text-gray-400 uppercase mb-1 block">Valor Deste Slot (R$)</label>
+                            <label className="text-[10px] font-black text-gray-400 uppercase mb-1 block">Valor Deste Horário (R$)</label>
                             <input type="number" value={price} onChange={e => setPrice(e.target.value)} className="bg-transparent font-black outline-none text-pitch w-full" />
+                        </div>
+                    </div>
+
+                    {/* SELEÇÃO DE TIPO DE JOGO */}
+                    <div className="space-y-3">
+                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block">Tipo de Jogo</label>
+                        <div className="grid grid-cols-2 gap-3">
+                            <button 
+                                onClick={() => setMatchType('AMISTOSO')}
+                                className={`flex flex-col items-center gap-2 p-4 rounded-2xl border transition-all ${matchType === 'AMISTOSO' ? 'bg-pitch border-pitch text-white' : 'bg-gray-50 border-gray-100 text-gray-400'}`}
+                            >
+                                <Swords className={`w-6 h-6 ${matchType === 'AMISTOSO' ? 'text-grass-500' : 'text-gray-300'}`} />
+                                <span className="font-black text-[11px] uppercase">Amistoso</span>
+                            </button>
+                            <button 
+                                onClick={() => setMatchType('FESTIVAL')}
+                                className={`flex flex-col items-center gap-2 p-4 rounded-2xl border transition-all ${matchType === 'FESTIVAL' ? 'bg-pitch border-pitch text-white' : 'bg-gray-50 border-gray-100 text-gray-400'}`}
+                            >
+                                <PartyPopper className={`w-6 h-6 ${matchType === 'FESTIVAL' ? 'text-grass-500' : 'text-gray-300'}`} />
+                                <span className="font-black text-[11px] uppercase">Festival</span>
+                            </button>
                         </div>
                     </div>
 
