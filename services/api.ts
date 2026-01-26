@@ -4,7 +4,7 @@ import { User, Field, MatchSlot } from '../types';
 
 const getLocalUserData = (userId: string) => {
     const data = localStorage.getItem(`jf_user_extra_${userId}`);
-    return data ? JSON.parse(data) : { teamName: '', teamCategories: [], teamLogoUrl: '' };
+    return data ? JSON.parse(data) : { teamName: '', teamCategories: [], teamLogoUrl: '', teamRating: 0, teamRatingCount: 0 };
 };
 
 const saveLocalUserData = (userId: string, data: any) => {
@@ -13,7 +13,7 @@ const saveLocalUserData = (userId: string, data: any) => {
 
 const getLocalSlotData = (slotId: string) => {
     const data = localStorage.getItem(`jf_slot_extra_${slotId}`);
-    return data ? JSON.parse(data) : { allowedCategories: ["Principal"], matchType: "AMISTOSO" };
+    return data ? JSON.parse(data) : { allowedCategories: ["Principal"], matchType: "AMISTOSO", ratingGiven: 0 };
 };
 
 const saveLocalSlotData = (slotId: string, data: any) => {
@@ -40,7 +40,7 @@ export const api = {
     const { data: newUser, error: userError } = await supabase.from('User').insert([userFields]).select().single();
     if (userError) throw userError;
 
-    saveLocalUserData(newUser.id, { teamName, teamCategories, teamLogoUrl });
+    saveLocalUserData(newUser.id, { teamName, teamCategories, teamLogoUrl, teamRating: 0, teamRatingCount: 0 });
 
     if (userData.role === 'FIELD_OWNER' && fieldData) {
       await supabase.from('Field').insert([{
@@ -57,12 +57,12 @@ export const api = {
       }]);
     }
 
-    return { ...newUser, teamName, teamCategories, teamLogoUrl } as User;
+    return { ...newUser, teamName, teamCategories, teamLogoUrl, teamRating: 0, teamRatingCount: 0 } as User;
   },
 
   updateUser: async (user: User): Promise<User> => {
-    const { teamName, teamCategories, teamLogoUrl, ...dbFields } = user;
-    saveLocalUserData(user.id, { teamName, teamCategories, teamLogoUrl });
+    const { teamName, teamCategories, teamLogoUrl, teamRating, teamRatingCount, ...dbFields } = user;
+    saveLocalUserData(user.id, { teamName, teamCategories, teamLogoUrl, teamRating, teamRatingCount });
 
     const { error } = await supabase
       .from('User')
@@ -113,27 +113,27 @@ export const api = {
           ...s,
           durationMinutes: 60,
           matchType: extra.matchType,
-          allowedCategories: extra.allowedCategories
+          allowedCategories: extra.allowedCategories,
+          ratingGiven: extra.ratingGiven
        };
     }) as MatchSlot[];
   },
 
   createSlots: async (slots: Partial<MatchSlot>[]): Promise<MatchSlot[]> => {
-    // Removemos metadados incompatíveis com o banco
-    const slotsToInsert = slots.map(({ durationMinutes, matchType, allowedCategories, statusUpdatedAt, ...rest }) => ({
+    const slotsToInsert = slots.map(({ durationMinutes, matchType, allowedCategories, statusUpdatedAt, ratingGiven, ...rest }) => ({
         ...rest
     }));
 
     const { data, error } = await supabase.from('MatchSlot').insert(slotsToInsert).select();
     if (error) throw error;
 
-    // Salvamos metadados localmente para cada novo slot
     if (data) {
         data.forEach((newSlot, index) => {
             const original = slots[index];
             saveLocalSlotData(newSlot.id, { 
                 allowedCategories: original.allowedCategories || ["Principal"],
-                matchType: original.matchType || "AMISTOSO"
+                matchType: original.matchType || "AMISTOSO",
+                ratingGiven: 0
             });
         });
     }
@@ -142,14 +142,14 @@ export const api = {
   },
 
   updateSlot: async (slotId: string, data: Partial<MatchSlot>): Promise<MatchSlot> => {
-    const { durationMinutes, matchType, allowedCategories, statusUpdatedAt, ...rest } = data;
+    const { durationMinutes, matchType, allowedCategories, statusUpdatedAt, ratingGiven, ...rest } = data;
     
-    // Se houve alteração de metadados, salvamos localmente
-    if (allowedCategories || matchType) {
+    if (allowedCategories || matchType || ratingGiven !== undefined) {
         const current = getLocalSlotData(slotId);
         saveLocalSlotData(slotId, {
             allowedCategories: allowedCategories || current.allowedCategories,
-            matchType: matchType || current.matchType
+            matchType: matchType || current.matchType,
+            ratingGiven: ratingGiven !== undefined ? ratingGiven : current.ratingGiven
         });
     }
 
@@ -160,7 +160,8 @@ export const api = {
     return { 
         ...updated, 
         matchType: finalExtra.matchType,
-        allowedCategories: finalExtra.allowedCategories 
+        allowedCategories: finalExtra.allowedCategories,
+        ratingGiven: finalExtra.ratingGiven
     } as MatchSlot;
   },
 
@@ -168,5 +169,24 @@ export const api = {
     const { error } = await supabase.from('MatchSlot').delete().eq('id', slotId);
     if (error) throw error;
     localStorage.removeItem(`jf_slot_extra_${slotId}`);
+  },
+
+  rateTeam: async (userId: string, slotId: string, rating: number): Promise<void> => {
+    // Atualiza o slot para marcar que foi avaliado
+    const slotExtra = getLocalSlotData(slotId);
+    saveLocalSlotData(slotId, { ...slotExtra, ratingGiven: rating });
+
+    // Atualiza a média do time do usuário
+    const userExtra = getLocalUserData(userId);
+    const currentRating = userExtra.teamRating || 0;
+    const currentCount = userExtra.teamRatingCount || 0;
+    const newCount = currentCount + 1;
+    const newRating = (currentRating * currentCount + rating) / newCount;
+
+    saveLocalUserData(userId, {
+        ...userExtra,
+        teamRating: newRating,
+        teamRatingCount: newCount
+    });
   }
 };

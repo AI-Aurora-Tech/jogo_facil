@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { Plus, Calendar, Settings, Trash2, Shield, MapPin, Key, X, Save, Trophy, Check, CalendarDays, Clock, Repeat, Users, CircleSlash, Swords, PartyPopper } from 'lucide-react';
+import { Plus, Calendar, Settings, Trash2, Shield, MapPin, Key, X, Save, Trophy, Check, CalendarDays, Clock, Repeat, Users, CircleSlash, Swords, PartyPopper, Star } from 'lucide-react';
 import { Button } from '../components/Button';
 import { Field, MatchSlot, COMMON_CATEGORIES, MatchType, User } from '../types';
 
@@ -13,6 +13,7 @@ interface FieldDashboardProps {
   onConfirmBooking: (slotId: string) => void;
   onRejectBooking: (slotId: string) => void;
   onUpdateField: (fieldId: string, updates: Partial<Field>) => Promise<boolean>;
+  onRateTeam: (userId: string, slotId: string, rating: number) => void;
 }
 
 const DAYS_OF_WEEK = [
@@ -26,7 +27,7 @@ const DAYS_OF_WEEK = [
 ];
 
 export const FieldDashboard: React.FC<FieldDashboardProps> = ({ 
-  field, slots, currentUser, onAddSlot, onDeleteSlot, onConfirmBooking, onRejectBooking, onUpdateField
+  field, slots, currentUser, onAddSlot, onDeleteSlot, onConfirmBooking, onRejectBooking, onUpdateField, onRateTeam
 }) => {
   const [showAddModal, setShowAddModal] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
@@ -99,6 +100,20 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
     setMatchType('AMISTOSO');
   };
 
+  const StarRating = ({ rating, onRate, readonly = false }: { rating: number, onRate?: (r: number) => void, readonly?: boolean }) => {
+    return (
+      <div className="flex gap-1">
+        {[1, 2, 3, 4, 5].map(star => (
+          <Star 
+            key={star} 
+            onClick={() => !readonly && onRate?.(star)}
+            className={`w-5 h-5 ${star <= rating ? 'fill-yellow-400 text-yellow-400' : 'text-gray-300'} ${!readonly ? 'cursor-pointer hover:scale-110 active:scale-90' : ''} transition-all`} 
+          />
+        ))}
+      </div>
+    );
+  }
+
   return (
     <div className="bg-gray-50 min-h-full pb-20">
       <div className="p-5 bg-white border-b sticky top-0 z-10 flex justify-between items-center">
@@ -152,17 +167,38 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                              {slot.hasLocalTeam ? `Aguardando Adversário (${slot.localTeamName})` : 'Campo Livre'}
                         </div>
                     ) : (
-                        <div className="bg-gray-50 rounded-2xl p-4 flex justify-between items-center border border-gray-100">
-                            <div className="flex items-center gap-3">
-                                <div className="w-8 h-8 bg-pitch text-white rounded-full flex items-center justify-center font-black text-[10px]">
-                                    {slot.bookedByTeamName?.charAt(0)}
+                        <div className="bg-gray-50 rounded-2xl p-4 flex flex-col gap-4 border border-gray-100">
+                            <div className="flex justify-between items-center">
+                                <div className="flex items-center gap-3">
+                                    <div className="w-8 h-8 bg-pitch text-white rounded-full flex items-center justify-center font-black text-[10px]">
+                                        {slot.bookedByTeamName?.charAt(0)}
+                                    </div>
+                                    <p className="text-xs font-black text-pitch">{slot.bookedByTeamName}</p>
                                 </div>
-                                <p className="text-xs font-black text-pitch">{slot.bookedByTeamName}</p>
+                                {slot.status === 'pending_verification' && (
+                                    <div className="flex gap-1">
+                                        <button onClick={() => onConfirmBooking(slot.id)} className="p-2.5 bg-grass-500 text-pitch rounded-xl shadow-md active:scale-90 transition-transform"><Check className="w-4 h-4" /></button>
+                                        <button onClick={() => onRejectBooking(slot.id)} className="p-2.5 bg-red-100 text-red-600 rounded-xl active:scale-90 transition-transform"><X className="w-4 h-4" /></button>
+                                    </div>
+                                )}
+                                {slot.status === 'confirmed' && (
+                                    <span className="text-[9px] font-black uppercase bg-grass-100 text-grass-700 px-2 py-1 rounded-md">Confirmado</span>
+                                )}
                             </div>
-                            {slot.status === 'pending_verification' && (
-                                <div className="flex gap-1">
-                                    <button onClick={() => onConfirmBooking(slot.id)} className="p-2.5 bg-grass-500 text-pitch rounded-xl shadow-md active:scale-90 transition-transform"><Check className="w-4 h-4" /></button>
-                                    <button onClick={() => onRejectBooking(slot.id)} className="p-2.5 bg-red-100 text-red-600 rounded-xl active:scale-90 transition-transform"><X className="w-4 h-4" /></button>
+                            
+                            {slot.status === 'confirmed' && slot.bookedByUserId && (
+                                <div className="pt-2 border-t border-gray-200/50 flex flex-col gap-2">
+                                    <p className="text-[9px] font-black text-gray-400 uppercase tracking-tighter">Avaliar comportamento do time:</p>
+                                    <StarRating 
+                                        rating={slot.ratingGiven || 0} 
+                                        readonly={!!slot.ratingGiven}
+                                        onRate={(r) => onRateTeam(slot.bookedByUserId!, slot.id, r)} 
+                                    />
+                                    {slot.ratingGiven ? (
+                                        <p className="text-[8px] font-bold text-grass-600 uppercase">Avaliação enviada!</p>
+                                    ) : (
+                                        <p className="text-[8px] font-bold text-gray-300 uppercase italic">Toque nas estrelas para avaliar</p>
+                                    )}
                                 </div>
                             )}
                         </div>

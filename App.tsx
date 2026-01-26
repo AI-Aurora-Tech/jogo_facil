@@ -59,7 +59,8 @@ const App: React.FC = () => {
         bookedByTeamName: undefined,
         bookedByUserId: undefined,
         bookedByPhone: undefined,
-        bookedByCategory: undefined
+        bookedByCategory: undefined,
+        ratingGiven: 0
     });
     refreshData();
   };
@@ -74,6 +75,15 @@ const App: React.FC = () => {
 
   const addSlots = async (newSlots: any[]) => {
       try { await api.createSlots(newSlots); refreshData(); } catch (e: any) { alert(e.message); }
+  };
+
+  const handleRateTeam = async (userId: string, slotId: string, rating: number) => {
+      try {
+          await api.rateTeam(userId, slotId, rating);
+          refreshData();
+      } catch (e) {
+          alert('Erro ao enviar avaliação.');
+      }
   };
 
   if (view === 'LANDING') return <Landing onStart={() => setView('AUTH')} />;
@@ -132,6 +142,7 @@ const App: React.FC = () => {
                 onConfirmBooking={async id => { await api.updateSlot(id, { status: 'confirmed' }); refreshData(); }}
                 onRejectBooking={resetSlot}
                 onUpdateField={handleUpdateField}
+                onRateTeam={handleRateTeam}
             />
         )}
 
@@ -149,9 +160,12 @@ const App: React.FC = () => {
                             <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest mb-1">Status Plano</p>
                             <p className="text-xs font-black text-grass-600 uppercase">{user.subscription.split('_')[1] || 'Ativo'}</p>
                         </div>
-                        <div className="bg-gray-50 p-4 rounded-3xl border border-gray-100 text-center">
-                            <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest mb-1">Meu Time</p>
-                            <p className="text-xs font-black text-pitch truncate px-2">{user.teamName || 'Pendente'}</p>
+                        <div className="bg-gray-50 p-4 rounded-3xl border border-gray-100 text-center flex flex-col items-center">
+                            <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest mb-1">Reputação Time</p>
+                            <div className="flex items-center gap-1">
+                                <span className="text-xs font-black text-pitch">{(user.teamRating || 0).toFixed(1)}</span>
+                                <Trophy className="w-3 h-3 text-yellow-500" />
+                            </div>
                         </div>
                     </div>
 

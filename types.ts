@@ -31,12 +31,14 @@ export interface User {
   role: UserRole;
   subscription: SubscriptionPlan;
   subscriptionExpiry: string | null;
-  teamName?: string; // Nome único do time do usuário
-  teamCategories: string[]; // Lista de categorias que o time joga
+  teamName?: string; 
+  teamCategories: string[]; 
   teamLogoUrl?: string;
-  subTeams: SubTeam[]; // Mantido por compatibilidade com banco, mas trataremos como projeção de teamCategories
+  subTeams: SubTeam[]; 
   latitude?: number;
   longitude?: number;
+  teamRating?: number;
+  teamRatingCount?: number;
 }
 
 export interface PixConfig {
@@ -70,7 +72,7 @@ export interface MatchSlot {
   isBooked: boolean;
   hasLocalTeam: boolean;
   localTeamName?: string; 
-  allowedCategories: string[]; // Agora usaremos como a categoria EXATA do slot
+  allowedCategories: string[]; 
   bookedByTeamName?: string; 
   bookedByUserId?: string;
   bookedByPhone?: string;
@@ -80,6 +82,7 @@ export interface MatchSlot {
   status: 'available' | 'pending_verification' | 'confirmed';
   statusUpdatedAt?: string;
   price: number;
+  ratingGiven?: number;
 }
 
 export const COMMON_CATEGORIES = [
