@@ -21,7 +21,23 @@ const App: React.FC = () => {
   const [categories, setCategories] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
+  // Tentar recuperar sessão salva ao montar o componente
   useEffect(() => {
+    const savedUser = localStorage.getItem('jf_session_user');
+    if (savedUser) {
+      try {
+        const parsed = JSON.parse(savedUser);
+        setUser(parsed);
+        setView('APP');
+        if (parsed.role === UserRole.ADMIN || parsed.role === UserRole.FIELD_OWNER) {
+          setActiveTab('ADMIN');
+        }
+        refreshData();
+      } catch (e) {
+        console.error("Sessão corrompida");
+        localStorage.removeItem('jf_session_user');
+      }
+    }
     loadInitialData();
   }, []);
 
@@ -32,15 +48,25 @@ const App: React.FC = () => {
 
   const handleAuthSuccess = (loggedUser: User) => {
     setUser(loggedUser);
+    localStorage.setItem('jf_session_user', JSON.stringify(loggedUser));
+    
     if (loggedUser.subscription === SubscriptionPlan.NONE && loggedUser.role !== UserRole.ADMIN) {
         setView('SUBSCRIPTION');
     } else {
         setView('APP');
-        if (loggedUser.role === UserRole.ADMIN) setActiveTab('ADMIN');
-        else if (loggedUser.role === UserRole.FIELD_OWNER) setActiveTab('ADMIN');
-        else setActiveTab('EXPLORE');
+        if (loggedUser.role === UserRole.ADMIN || loggedUser.role === UserRole.FIELD_OWNER) {
+          setActiveTab('ADMIN');
+        } else {
+          setActiveTab('EXPLORE');
+        }
         refreshData();
     }
+  };
+
+  const handleLogout = () => {
+    setUser(null);
+    localStorage.removeItem('jf_session_user');
+    setView('LANDING');
   };
 
   const refreshData = async () => {
@@ -62,6 +88,7 @@ const App: React.FC = () => {
     };
     const res = await api.updateUser(updated);
     setUser(res);
+    localStorage.setItem('jf_session_user', JSON.stringify(res));
     setView('APP');
     refreshData();
   };
@@ -152,6 +179,7 @@ const App: React.FC = () => {
                   categories={categories}
                   field={myField} slots={mySlots} currentUser={user}
                   onAddSlot={addSlots} 
+                  onRefreshData={refreshData}
                   onDeleteSlot={async id => { 
                       const slot = slots.find(s => s.id === id);
                       if (slot?.isBooked) {
@@ -260,7 +288,7 @@ const App: React.FC = () => {
                       Editar Meus Dados
                     </button>
                     
-                    <button onClick={() => window.location.reload()} className="mt-8 text-gray-400 font-bold text-xs hover:text-red-500 uppercase tracking-widest">Sair da Conta</button>
+                    <button onClick={handleLogout} className="mt-8 text-gray-400 font-bold text-xs hover:text-red-500 uppercase tracking-widest">Sair da Conta</button>
                 </div>
             </div>
         )}
@@ -294,7 +322,7 @@ const App: React.FC = () => {
           </button>
       </nav>
 
-      {showProfileModal && user && <EditProfileModal categories={categories} user={user} onUpdate={async u => { const res = await api.updateUser(u); setUser(res); }} onClose={() => setShowProfileModal(false)} />}
+      {showProfileModal && user && <EditProfileModal categories={categories} user={user} onUpdate={async u => { const res = await api.updateUser(u); setUser(res); localStorage.setItem('jf_session_user', JSON.stringify(res)); }} onClose={() => setShowProfileModal(false)} />}
     </div>
   );
 };

@@ -12,6 +12,7 @@ interface FieldDashboardProps {
   slots: MatchSlot[];
   currentUser: User;
   onAddSlot: (slots: Omit<MatchSlot, 'id'>[]) => void;
+  onRefreshData: () => void;
   onDeleteSlot: (slotId: string) => void;
   onConfirmBooking: (slotId: string) => void;
   onRejectBooking: (slotId: string) => void;
@@ -30,7 +31,7 @@ const DAYS_OF_WEEK = [
 ];
 
 export const FieldDashboard: React.FC<FieldDashboardProps> = ({ 
-  categories = [], field, slots = [], currentUser, onAddSlot, onDeleteSlot, onConfirmBooking, onRejectBooking, onUpdateField, onRateTeam
+  categories = [], field, slots = [], currentUser, onAddSlot, onRefreshData, onDeleteSlot, onConfirmBooking, onRejectBooking, onUpdateField, onRateTeam
 }) => {
   const [showAddModal, setShowAddModal] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
@@ -56,12 +57,6 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
   const [selectedCategory, setSelectedCategory] = useState(categories[0] || "Principal");
   const [price, setPrice] = useState(field?.hourlyRate?.toString() || "0");
   
-  // Host selection states
-  const [hostType, setHostType] = useState<'NONE' | 'OWNER' | 'REGISTERED'>('NONE');
-  const [selectedHostTeamName, setSelectedHostTeamName] = useState<string>('');
-  const [selectedHostCategory, setSelectedHostCategory] = useState<string>('');
-  const [repeatWeeks, setRepeatWeeks] = useState(1);
-
   // Settings states
   const [editName, setEditName] = useState(field?.name || '');
   const [editLoc, setEditLoc] = useState(field?.location || '');
@@ -80,6 +75,16 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
     } catch (e) {
         setRegisteredTeams([]);
     }
+  };
+
+  const resetTeamForm = () => {
+      setNewTeamName('');
+      setNewTeamDay(1);
+      setNewTeamTime('20:00');
+      setNewTeamSelectedCategories([]);
+      setNewTeamLogo('');
+      setTeamError('');
+      setEditingTeam(null);
   };
 
   const getNextOccurrence = (dayOfWeek: number, weeksAhead: number = 0) => {
@@ -149,7 +154,6 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                     customImageUrl: newTeamLogo || undefined
                 });
             }
-            setEditingTeam(null);
         } else {
             const newTeam = await api.addRegisteredTeam(field.id, newTeamName.trim(), newTeamDay, newTeamTime, newTeamSelectedCategories, newTeamLogo);
             const lifetimeSlots: Omit<MatchSlot, 'id'>[] = [];
@@ -173,12 +177,9 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
             onAddSlot(lifetimeSlots);
         }
         
-        setNewTeamName('');
-        setNewTeamSelectedCategories([]);
-        setNewTeamLogo('');
-        setTeamError('');
+        resetTeamForm();
         await loadTeams();
-        if (editingTeam) window.location.reload();
+        onRefreshData();
     } catch (err) {
         setTeamError('Erro ao salvar equipe mensalista.');
     } finally {
@@ -194,7 +195,6 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
     setNewTeamSelectedCategories(team.categories || []);
     setNewTeamLogo(team.logoUrl || '');
     setTeamError('');
-    setShowTeamsModal(true);
   };
 
   const handleDeleteRegisteredTeam = async (team: RegisteredTeam) => {
@@ -210,7 +210,8 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
           }
           
           await loadTeams();
-          window.location.reload();
+          onRefreshData();
+          resetTeamForm();
       } catch (err) {
           alert('Erro ao excluir equipe e agenda.');
       } finally {
@@ -228,7 +229,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
       bookedByCategory: 'Reserva Arena'
     });
     setShowManualBookingModal(null);
-    window.location.reload(); 
+    onRefreshData();
   };
 
   const todayStr = new Date().toISOString().split('T')[0];
@@ -249,7 +250,8 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
   const handlePublishSlots = () => {
     if (selectedDay === null || !newTime) return alert("Selecione o dia e a hora");
     const newSlots: Omit<MatchSlot, 'id'>[] = [];
-    for (let i = 0; i < repeatWeeks; i++) {
+    const weeksToPublish = 4; // Padrão 4 semanas para agendamentos avulsos
+    for (let i = 0; i < weeksToPublish; i++) {
       newSlots.push({
         fieldId: field.id,
         date: getNextOccurrence(selectedDay, i),
@@ -258,9 +260,8 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
         matchType,
         durationMinutes: 60,
         isBooked: false,
-        hasLocalTeam: hostType !== 'NONE',
-        localTeamName: hostType === 'OWNER' ? currentUser.teamName : (hostType === 'REGISTERED' ? selectedHostTeamName : undefined),
-        allowedCategories: [hostType !== 'NONE' ? selectedHostCategory : selectedCategory],
+        hasLocalTeam: false,
+        allowedCategories: [selectedCategory],
         status: 'available'
       });
     }
@@ -276,7 +277,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
             <p className="text-gray-500 text-xs font-bold uppercase tracking-tighter">{field?.name || 'Carregando...'}</p>
         </div>
         <div className="flex gap-2">
-            <button onClick={() => setShowTeamsModal(true)} className="p-2.5 bg-gray-50 rounded-xl text-gray-500 active:scale-95 transition-transform flex items-center gap-2">
+            <button onClick={() => { resetTeamForm(); setShowTeamsModal(true); }} className="p-2.5 bg-gray-50 rounded-xl text-gray-500 active:scale-95 transition-transform flex items-center gap-2">
                 <UsersRound className="w-5 h-5" />
                 <span className="text-[10px] font-black uppercase hidden sm:block">Mensalistas</span>
             </button>
@@ -286,7 +287,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
 
       <div className="p-5 space-y-6">
         <div className="grid grid-cols-2 gap-4">
-            <div onClick={() => setShowTeamsModal(true)} className="bg-white p-5 rounded-[2rem] shadow-sm border border-gray-100 flex flex-col items-center justify-center cursor-pointer active:scale-95 transition-transform group">
+            <div onClick={() => { resetTeamForm(); setShowTeamsModal(true); }} className="bg-white p-5 rounded-[2rem] shadow-sm border border-gray-100 flex flex-col items-center justify-center cursor-pointer active:scale-95 transition-transform group">
                 <div className="bg-grass-100 p-3 rounded-2xl text-grass-600 mb-2 group-hover:scale-110 transition-transform">
                     <UsersRound className="w-6 h-6" />
                 </div>
@@ -358,7 +359,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                         </h2>
                         <p className="text-xs font-bold text-gray-400 uppercase mt-1">Times fixos com renovação automática</p>
                     </div>
-                    <button onClick={() => { setShowTeamsModal(false); setEditingTeam(null); }} className="p-2 bg-gray-100 rounded-full"><X className="w-6 h-6"/></button>
+                    <button onClick={() => { setShowTeamsModal(false); resetTeamForm(); }} className="p-2 bg-gray-100 rounded-full"><X className="w-6 h-6"/></button>
                 </div>
                 
                 <div className="bg-gray-50 p-6 rounded-[2rem] border border-gray-100 mb-8 space-y-4 shrink-0">
@@ -406,6 +407,9 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                     <Button onClick={handleAddRegisteredTeam} className="w-full py-4 rounded-2xl font-black shadow-lg">
                         {editingTeam ? 'Sincronizar Alterações' : 'Salvar e Gerar Agenda Anual'}
                     </Button>
+                    {editingTeam && (
+                        <button onClick={resetTeamForm} className="w-full text-xs font-black text-gray-400 uppercase">Cancelar Edição</button>
+                    )}
                 </div>
 
                 <div className="overflow-y-auto space-y-3 flex-grow pr-2 custom-scrollbar">
@@ -417,7 +421,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                         </div>
                     )}
                     {(registeredTeams || []).map(team => (
-                        <div key={team.id} className="p-5 bg-white rounded-2xl border border-gray-100 flex justify-between items-center group hover:border-grass-200 transition-all">
+                        <div key={team.id} className={`p-5 bg-white rounded-2xl border flex justify-between items-center group transition-all ${editingTeam?.id === team.id ? 'border-grass-500 bg-grass-50' : 'border-gray-100 hover:border-grass-200'}`}>
                             <div className="flex items-center gap-4">
                                 <div className="w-12 h-12 bg-pitch rounded-2xl overflow-hidden flex items-center justify-center text-grass-500 font-black text-xs">
                                     {team.logoUrl ? <img src={team.logoUrl} className="w-full h-full object-cover" /> : team?.name?.charAt(0)}
