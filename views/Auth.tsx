@@ -26,10 +26,6 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, onCancel }) => {
   // Field Owner Specific
   const [arenaName, setArenaName] = useState('');
   const [address, setAddress] = useState('');
-  const [hourlyRate, setHourlyRate] = useState('');
-  const [cancellationFee, setCancellationFee] = useState('');
-  const [pixKey, setPixKey] = useState('');
-  const [pixHolder, setPixHolder] = useState('');
 
   // Team Specific
   const [teamName, setTeamName] = useState('');
@@ -55,7 +51,7 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, onCancel }) => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    setIsLoading(true);
+    setIsLoading(false);
 
     try {
       if (isRegistering) {
@@ -79,15 +75,15 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, onCancel }) => {
           phoneNumber: phone,
           subscription: initialSubscription,
           subscriptionExpiry: null,
-          latitude: -23.6337, // Atualizado para região dos testes (Taboão/SP)
+          latitude: -23.6337,
           longitude: -46.7905,
           subTeams: role === UserRole.TEAM_CAPTAIN ? [{ name: teamName, category: teamCategory, logoUrl: teamLogo }] : [],
           fieldData: role === UserRole.FIELD_OWNER ? {
             name: arenaName,
             location: address,
-            hourlyRate: Number(hourlyRate),
-            cancellationFeePercent: Number(cancellationFee),
-            pixConfig: { key: pixKey, name: pixHolder },
+            hourlyRate: 0, // Default zero, owner sets later
+            cancellationFeePercent: 0, // Default zero
+            pixConfig: { key: '', name: '' }, // Empty config, owner sets later
             contactPhone: phone
           } : undefined
         };
@@ -251,49 +247,24 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, onCancel }) => {
                 </div>
               )}
 
-              {/* Field Owner Specific */}
+              {/* Field Owner Specific - Simplified */}
               {role === UserRole.FIELD_OWNER && (
                 <div className="bg-gray-700 p-4 rounded-xl border border-gray-600 space-y-4">
                   <h3 className="font-bold text-white flex items-center gap-2">🏟️ Informações da Arena</h3>
-                  <div className="grid md:grid-cols-2 gap-4">
-                     <div className="col-span-2">
+                  <div className="grid gap-4">
+                     <div>
                        <label className="block text-sm font-medium text-gray-300 mb-1">Nome do Local / Arena</label>
                        <input type="text" required className={simpleInputClass} placeholder="Ex: Arena Jogo Fácil" value={arenaName} onChange={e => setArenaName(e.target.value)} />
                      </div>
-                     <div className="col-span-2">
+                     <div>
                        <label className="block text-sm font-medium text-gray-300 mb-1">Endereço Completo</label>
                        <div className="relative">
                          <MapPin className="absolute left-3 top-3 text-gray-400 w-5 h-5" />
                          <input type="text" required className={inputClass} placeholder="Rua, Número, Bairro, Cidade" value={address} onChange={e => setAddress(e.target.value)} />
                        </div>
                      </div>
-                     <div>
-                       <label className="block text-sm font-medium text-gray-300 mb-1">Valor por Hora (R$)</label>
-                       <div className="relative">
-                         <DollarSign className="absolute left-3 top-3 text-gray-400 w-4 h-4" />
-                         <input type="number" required className={inputClass} placeholder="150" value={hourlyRate} onChange={e => setHourlyRate(e.target.value)} />
-                       </div>
-                     </div>
-                     <div>
-                       <label className="block text-sm font-medium text-gray-300 mb-1">Multa Cancelamento (%)</label>
-                       <input type="number" required className={simpleInputClass} placeholder="30" value={cancellationFee} onChange={e => setCancellationFee(e.target.value)} />
-                     </div>
+                     <p className="text-xs text-gray-400 italic">Você poderá configurar valores e dados de recebimento (PIX) no painel de controle após o acesso.</p>
                   </div>
-
-                  <div className="pt-4 border-t border-gray-600">
-                    <h4 className="font-semibold text-gray-300 mb-3 flex items-center gap-2"><Key className="w-4 h-4"/> Configuração PIX (Recebimento)</h4>
-                    <div className="grid md:grid-cols-2 gap-4">
-                      <div>
-                         <label className="block text-sm font-medium text-gray-300 mb-1">Chave PIX</label>
-                         <input type="text" required className={simpleInputClass} placeholder="CPF, Email ou Aleatória" value={pixKey} onChange={e => setPixKey(e.target.value)} />
-                      </div>
-                      <div>
-                         <label className="block text-sm font-medium text-gray-300 mb-1">Nome do Titular</label>
-                         <input type="text" required className={simpleInputClass} placeholder="Nome igual no banco" value={pixHolder} onChange={e => setPixHolder(e.target.value)} />
-                      </div>
-                    </div>
-                  </div>
-
                 </div>
               )}
             </div>
