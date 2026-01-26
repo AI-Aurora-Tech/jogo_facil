@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { Plus, Calendar, Settings, Trash2, Shield, MapPin, Key, X, Save, Trophy, Check, CalendarDays, Clock, Repeat, Users, CircleSlash, Swords, PartyPopper, Star, UsersRound, BookOpenCheck, ChevronRight, AlertCircle } from 'lucide-react';
+import { Plus, Calendar, Settings, Trash2, Shield, MapPin, Key, X, Save, Trophy, Check, CalendarDays, Clock, Repeat, Users, CircleSlash, Swords, PartyPopper, Star, UsersRound, BookOpenCheck, ChevronRight, AlertCircle, Tag } from 'lucide-react';
 import { Button } from '../components/Button';
 import { Field, MatchSlot, MatchType, User, RegisteredTeam } from '../types';
 import { api } from '../services/api';
@@ -40,6 +40,8 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
   const [newTeamName, setNewTeamName] = useState('');
   const [newTeamDay, setNewTeamDay] = useState<number>(1);
   const [newTeamTime, setNewTeamTime] = useState('20:00');
+  const [newTeamSelectedCategories, setNewTeamSelectedCategories] = useState<string[]>([]);
+  const [teamError, setTeamError] = useState('');
 
   // States for new slot
   const [selectedDay, setSelectedDay] = useState<number | null>(null);
@@ -72,39 +74,60 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
 
   const getNextOccurrence = (dayOfWeek: number, weeksAhead: number = 0) => {
     const d = new Date();
-    // Ajusta para o próximo dia da semana
     d.setDate(d.getDate() + (dayOfWeek + 7 - d.getDay()) % 7 + (weeksAhead * 7));
     return d.toISOString().split('T')[0];
   };
 
-  const handleAddRegisteredTeam = async () => {
-    if (newTeamName.trim()) {
-      // 1. Cadastra o time como mensalista nos registros
-      const newTeam = await api.addRegisteredTeam(field.id, newTeamName.trim(), newTeamDay, newTeamTime);
-      
-      // 2. Gera automaticamente os horários "vitalícios" (52 semanas = 1 ano)
-      const lifetimeSlots: Omit<MatchSlot, 'id'>[] = [];
-      for (let i = 0; i < 52; i++) {
-          lifetimeSlots.push({
-              fieldId: field.id,
-              date: getNextOccurrence(newTeamDay, i),
-              time: newTeamTime,
-              price: field.hourlyRate,
-              matchType: 'FIXO',
-              durationMinutes: 60,
-              isBooked: true,
-              hasLocalTeam: true,
-              localTeamName: newTeamName.trim(),
-              allowedCategories: ['Livre'],
-              bookedByTeamName: newTeamName.trim(),
-              status: 'confirmed'
-          });
+  const handleToggleCategory = (cat: string) => {
+    setTeamError('');
+    if (newTeamSelectedCategories.includes(cat)) {
+      setNewTeamSelectedCategories(newTeamSelectedCategories.filter(c => c !== cat));
+    } else {
+      if (newTeamSelectedCategories.length >= 2) {
+        setTeamError('Selecione exatamente 2 categorias.');
+        return;
       }
-      
-      onAddSlot(lifetimeSlots);
-      setNewTeamName('');
-      loadTeams();
+      setNewTeamSelectedCategories([...newTeamSelectedCategories, cat]);
     }
+  };
+
+  const handleAddRegisteredTeam = async () => {
+    if (!newTeamName.trim()) {
+      setTeamError('Informe o nome da equipe.');
+      return;
+    }
+    if (newTeamSelectedCategories.length !== 2) {
+      setTeamError('Você deve informar EXATAMENTE 2 categorias elegíveis.');
+      return;
+    }
+
+    // 1. Cadastra o time como mensalista nos registros com as 2 categorias
+    const newTeam = await api.addRegisteredTeam(field.id, newTeamName.trim(), newTeamDay, newTeamTime, newTeamSelectedCategories);
+    
+    // 2. Gera automaticamente os horários "vitalícios" (52 semanas) com as categorias informadas
+    const lifetimeSlots: Omit<MatchSlot, 'id'>[] = [];
+    for (let i = 0; i < 52; i++) {
+        lifetimeSlots.push({
+            fieldId: field.id,
+            date: getNextOccurrence(newTeamDay, i),
+            time: newTeamTime,
+            price: field.hourlyRate,
+            matchType: 'FIXO',
+            durationMinutes: 60,
+            isBooked: true,
+            hasLocalTeam: true,
+            localTeamName: newTeamName.trim(),
+            allowedCategories: newTeamSelectedCategories, // Aqui usamos as 2 categorias
+            bookedByTeamName: newTeamName.trim(),
+            status: 'confirmed'
+        });
+    }
+    
+    onAddSlot(lifetimeSlots);
+    setNewTeamName('');
+    setNewTeamSelectedCategories([]);
+    setTeamError('');
+    loadTeams();
   };
 
   const handleDeleteRegisteredTeam = async (id: string) => {
@@ -280,18 +303,23 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
       {/* MODAL GESTÃO DE MENSALISTAS */}
       {showTeamsModal && (
           <div className="fixed inset-0 bg-pitch/90 backdrop-blur-md z-[150] flex items-center justify-center p-4">
-              <div className="bg-white w-full max-w-2xl rounded-[3rem] p-10 animate-in zoom-in-95 duration-200 flex flex-col max-h-[85vh]">
+              <div className="bg-white w-full max-w-2xl rounded-[3rem] p-10 animate-in zoom-in-95 duration-200 flex flex-col max-h-[90vh]">
                 <div className="flex justify-between items-center mb-6">
                     <div>
                         <h2 className="text-2xl font-black text-pitch flex items-center gap-3">
                             <UsersRound className="w-7 h-7 text-grass-500" /> Mensalistas Vitalícios
                         </h2>
-                        <p className="text-xs font-bold text-gray-400 uppercase mt-1">Times com horários fixos toda semana</p>
+                        <p className="text-xs font-bold text-gray-400 uppercase mt-1">Gerencie times fixos e suas categorias</p>
                     </div>
                     <button onClick={() => setShowTeamsModal(false)} className="p-2 bg-gray-100 rounded-full"><X className="w-6 h-6"/></button>
                 </div>
                 
                 <div className="bg-gray-50 p-6 rounded-[2rem] border-2 border-dashed border-gray-200 mb-8 space-y-4">
+                    {teamError && (
+                      <div className="flex items-center gap-2 p-3 bg-red-50 text-red-600 rounded-xl text-[10px] font-black uppercase border border-red-100 animate-in shake duration-300">
+                          <AlertCircle className="w-4 h-4" /> {teamError}
+                      </div>
+                    )}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div className="col-span-2">
                             <label className="text-[10px] font-black text-gray-400 uppercase mb-2 block">Nome da Equipe</label>
@@ -322,9 +350,31 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                                 className="w-full p-4 bg-white border rounded-2xl font-bold outline-none"
                             />
                         </div>
+
+                        {/* SELEÇÃO DE 2 CATEGORIAS */}
+                        <div className="col-span-2">
+                            <label className="text-[10px] font-black text-gray-400 uppercase mb-3 block tracking-widest">Informar 2 Categorias Elegíveis para a Agenda:</label>
+                            <div className="flex flex-wrap gap-2 p-4 bg-white rounded-2xl border">
+                                {categories.map(cat => {
+                                  const isSelected = newTeamSelectedCategories.includes(cat);
+                                  return (
+                                    <button
+                                      key={cat}
+                                      onClick={() => handleToggleCategory(cat)}
+                                      className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase transition-all flex items-center gap-1.5 border ${isSelected ? 'bg-grass-500 border-grass-600 text-pitch shadow-md scale-105' : 'bg-gray-50 border-gray-100 text-gray-400 hover:bg-gray-100'}`}
+                                    >
+                                      {cat} {isSelected && <Check className="w-3 h-3" />}
+                                    </button>
+                                  );
+                                })}
+                            </div>
+                            <p className="text-[8px] font-black text-gray-300 uppercase mt-2 px-1">
+                                Selecionadas: {newTeamSelectedCategories.length}/2
+                            </p>
+                        </div>
                     </div>
                     <Button onClick={handleAddRegisteredTeam} className="w-full py-4 rounded-2xl font-black text-sm uppercase shadow-lg">
-                        <Plus className="w-5 h-5" /> Cadastrar e Gerar Agenda Vitalícia
+                        <Plus className="w-5 h-5" /> Salvar Mensalista
                     </Button>
                 </div>
 
@@ -339,7 +389,14 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                                 </div>
                                 <div>
                                     <p className="font-black text-pitch text-sm">{team.name}</p>
-                                    <p className="text-[10px] font-bold text-gray-400 uppercase">Toda {DAYS_OF_WEEK.find(d => d.value === team.fixedDay)?.label} às {team.fixedTime}</p>
+                                    <div className="flex gap-2 mt-0.5">
+                                      <p className="text-[9px] font-bold text-gray-400 uppercase">Fixo às {team.fixedTime}</p>
+                                      <div className="flex gap-1">
+                                         {team.categories?.map(c => (
+                                           <span key={c} className="text-[7px] font-black bg-grass-50 text-grass-600 px-1 py-0.5 rounded border border-grass-100 uppercase">{c}</span>
+                                         ))}
+                                      </div>
+                                    </div>
                                 </div>
                             </div>
                             <button onClick={() => handleDeleteRegisteredTeam(team.id)} className="p-2 text-gray-200 hover:text-red-500 transition-colors"><Trash2 className="w-4 h-4"/></button>

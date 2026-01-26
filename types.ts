@@ -52,6 +52,7 @@ export interface RegisteredTeam {
   fieldId: string;
   fixedDay: number; // 0-6 (Sun-Sat)
   fixedTime: string;
+  categories: string[]; // As 2 categorias elegíveis
   createdAt: string;
 }
 
