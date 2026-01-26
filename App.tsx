@@ -29,7 +29,7 @@ const App: React.FC = () => {
         if (savedUser) {
           try {
             const parsed = JSON.parse(savedUser);
-            // IMPORTANTE: Buscamos os dados frescos do banco para garantir que mudanças em outro browser apareçam aqui
+            // IMPORTANTE: Buscamos dados novos do Supabase para garantir sincronia entre browsers
             const freshUser = await api.updateUser(parsed); 
             setUser(freshUser);
             setView('APP');
@@ -138,9 +138,22 @@ const App: React.FC = () => {
                 onBookSlot={async (id, data) => {
                     const slot = slots.find(s => s.id === id);
                     if (!slot) return;
-                    const updates: any = { bookedByUserId: user.id, bookedByCategory: data.category, status: 'pending_verification' };
-                    if (slot.hasLocalTeam) updates.opponentTeamName = data.teamName;
-                    else { updates.isBooked = true; updates.bookedByTeamName = data.teamName; }
+                    
+                    const updates: any = { 
+                      bookedByUserId: user.id, 
+                      bookedByCategory: data.category, 
+                      status: 'pending_verification' 
+                    };
+                    
+                    if (slot.hasLocalTeam) {
+                      // Se tem time da casa, o usuário entra como oponente (desafiante)
+                      updates.opponentTeamName = data.teamName;
+                    } else {
+                      // Aluguel normal
+                      updates.isBooked = true; 
+                      updates.bookedByTeamName = data.teamName; 
+                    }
+                    
                     await api.updateSlot(id, updates);
                     setActiveTab('MY_GAMES');
                     refreshData();
