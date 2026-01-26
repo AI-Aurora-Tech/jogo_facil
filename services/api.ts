@@ -2,104 +2,101 @@
 import { supabase } from '../supabaseClient';
 import { User, Field, MatchSlot, RegisteredTeam } from '../types';
 
-const getLocalUserData = (userId: string) => {
-    const data = localStorage.getItem(`jf_user_extra_${userId}`);
-    return data ? JSON.parse(data) : { teamName: '', teamCategories: [], teamLogoUrl: '', teamRating: 0, teamRatingCount: 0 };
-};
-
-const saveLocalUserData = (userId: string, data: any) => {
-    localStorage.setItem(`jf_user_extra_${userId}`, JSON.stringify(data));
-};
-
-const getLocalSlotData = (slotId: string) => {
-    const data = localStorage.getItem(`jf_slot_extra_${slotId}`);
-    return data ? JSON.parse(data) : { allowedCategories: ["Principal"], matchType: "AMISTOSO", ratingGiven: 0, customImageUrl: undefined };
-};
-
-const saveLocalSlotData = (slotId: string, data: any) => {
-    localStorage.setItem(`jf_slot_extra_${slotId}`, JSON.stringify(data));
-};
-
-// Gerenciamento de categorias globais
-const DEFAULT_CATEGORIES = [
-  "Livre", "Sub-09", "Sub-11", "Sub-13", "Sub-15", "Sub-17", "Sub-20", 
-  "Principal", "Veteranos (35+)", "Cinquentão (50+)", "Feminino"
-];
+// O Jogo Fácil agora é 100% Cloud. 
+// Removemos todos os helpers de localStorage que causavam a perda de dados entre browsers.
 
 export const api = {
+  // --- CATEGORIAS GLOBAIS ---
   getCategories: async (): Promise<string[]> => {
-    const data = localStorage.getItem('jf_global_categories');
-    return data ? JSON.parse(data) : DEFAULT_CATEGORIES;
+    const { data, error } = await supabase
+      .from('Category')
+      .select('name')
+      .order('name', { ascending: true });
+    
+    if (error || !data || data.length === 0) {
+      // Fallback caso a tabela esteja vazia, mas o ideal é popular o banco
+      return ["Livre", "Principal", "Veteranos", "Feminino", "Sub-20"];
+    }
+    return data.map(c => c.name);
   },
 
   updateCategories: async (categories: string[]): Promise<string[]> => {
-    localStorage.setItem('jf_global_categories', JSON.stringify(categories));
+    // Primeiro limpamos e depois inserimos as novas (Operação de Admin)
+    await supabase.from('Category').delete().neq('name', ''); 
+    const { data, error } = await supabase
+      .from('Category')
+      .insert(categories.map(name => ({ name })))
+      .select();
+    
+    if (error) throw error;
     return categories;
   },
 
-  // Equipes registradas pela arena (Mensalistas)
+  // --- MENSALISTAS (EQUIPES REGISTRADAS) ---
   getRegisteredTeams: async (fieldId: string): Promise<RegisteredTeam[]> => {
-    try {
-        const data = localStorage.getItem(`jf_registered_teams_${fieldId}`);
-        if (!data) return [];
-        const parsed = JSON.parse(data);
-        return Array.isArray(parsed) ? parsed : [];
-    } catch (e) {
-        console.error("Erro ao carregar mensalistas:", e);
-        return [];
-    }
+    const { data, error } = await supabase
+      .from('RegisteredTeam')
+      .select('*')
+      .eq('fieldId', fieldId);
+    
+    if (error) return [];
+    return data as RegisteredTeam[];
   },
 
   addRegisteredTeam: async (fieldId: string, teamName: string, fixedDay: number, fixedTime: string, categories: string[], logoUrl?: string): Promise<RegisteredTeam> => {
-    const teams = await api.getRegisteredTeams(fieldId);
-    const newTeam: RegisteredTeam = {
-      id: Math.random().toString(36).substr(2, 9),
-      name: teamName,
-      fieldId,
-      fixedDay,
-      fixedTime,
-      categories: categories || [],
-      logoUrl,
-      createdAt: new Date().toISOString()
-    };
-    localStorage.setItem(`jf_registered_teams_${fieldId}`, JSON.stringify([...teams, newTeam]));
-    return newTeam;
-  },
+    const { data, error } = await supabase
+      .from('RegisteredTeam')
+      .insert([{
+        fieldId,
+        name: teamName,
+        fixedDay,
+        fixedTime,
+        categories,
+        logoUrl,
+        createdAt: new Date().toISOString()
+      }])
+      .select()
+      .single();
 
-  updateRegisteredTeam: async (fieldId: string, teamId: string, updates: Partial<RegisteredTeam>): Promise<void> => {
-    const teams = await api.getRegisteredTeams(fieldId);
-    const updated = teams.map(t => t.id === teamId ? { ...t, ...updates } : t);
-    localStorage.setItem(`jf_registered_teams_${fieldId}`, JSON.stringify(updated));
+    if (error) throw error;
+    return data as RegisteredTeam;
   },
 
   deleteRegisteredTeam: async (fieldId: string, teamId: string): Promise<void> => {
-    const teams = await api.getRegisteredTeams(fieldId);
-    localStorage.setItem(`jf_registered_teams_${fieldId}`, JSON.stringify(teams.filter(t => t.id !== teamId)));
+    const { error } = await supabase
+      .from('RegisteredTeam')
+      .delete()
+      .eq('id', teamId);
+    if (error) throw error;
   },
 
+  // --- USUÁRIOS E AUTENTICAÇÃO ---
   login: async (email: string, password: string): Promise<User> => {
     const { data: user, error } = await supabase
       .from('User')
-      .select('*, subTeams:SubTeam(*)')
+      .select('*')
       .eq('email', email)
       .eq('password', password)
       .single();
 
     if (error || !user) throw new Error('Credenciais inválidas.');
-    
-    const extra = getLocalUserData(user.id);
-    return { ...user, ...extra } as User;
+    return user as User;
   },
 
   register: async (userData: any): Promise<User> => {
-    const { subTeams, fieldData, teamName, teamCategories, teamLogoUrl, ...userFields } = userData;
-    const { data: newUser, error: userError } = await supabase.from('User').insert([userFields]).select().single();
+    const { fieldData, ...userFields } = userData;
+    
+    // Inserimos o usuário com todos os campos (agora persistidos no DB)
+    const { data: newUser, error: userError } = await supabase
+      .from('User')
+      .insert([userFields])
+      .select()
+      .single();
+
     if (userError) throw userError;
 
-    saveLocalUserData(newUser.id, { teamName, teamCategories, teamLogoUrl, teamRating: 0, teamRatingCount: 0 });
-
     if (userData.role === 'FIELD_OWNER' && fieldData) {
-      await supabase.from('Field').insert([{
+      const { error: fieldError } = await supabase.from('Field').insert([{
         ownerId: newUser.id,
         name: fieldData.name,
         location: fieldData.location,
@@ -111,142 +108,99 @@ export const api = {
         latitude: userData.latitude || -23.6337,
         longitude: userData.longitude || -46.7905
       }]);
+      if (fieldError) console.error("Erro ao criar arena:", fieldError);
     }
 
-    return { ...newUser, teamName, teamCategories, teamLogoUrl, teamRating: 0, teamRatingCount: 0 } as User;
+    return newUser as User;
   },
 
   updateUser: async (user: User): Promise<User> => {
-    const { teamName, teamCategories, teamLogoUrl, teamRating, teamRatingCount, ...dbFields } = user;
-    saveLocalUserData(user.id, { teamName, teamCategories, teamLogoUrl, teamRating, teamRatingCount });
-
-    const { error } = await supabase
+    const { id, ...updates } = user;
+    const { data, error } = await supabase
       .from('User')
-      .update({
-         name: user.name,
-         phoneNumber: user.phoneNumber,
-         subscription: user.subscription,
-         subscriptionExpiry: user.subscriptionExpiry
-      })
-      .eq('id', user.id);
+      .update(updates)
+      .eq('id', id)
+      .select()
+      .single();
 
     if (error) throw error;
-    return user;
+    return data as User;
   },
 
+  // --- ARENAS E CAMPOS ---
   getFields: async (): Promise<Field[]> => {
     const { data, error } = await supabase.from('Field').select('*');
     if (error) throw error;
     return data.map((f: any) => ({
         ...f,
-        pixConfig: { key: f.pixKey, name: f.pixName },
-        localTeams: [] 
+        pixConfig: { key: f.pixKey, name: f.pixName }
     }));
   },
   
   updateField: async (fieldId: string, updates: Partial<Field>): Promise<Field> => {
-    const dbUpdates: any = {
-        name: updates.name,
-        location: updates.location,
-        hourlyRate: updates.hourlyRate,
-        contactPhone: updates.contactPhone
-    };
+    const dbUpdates: any = { ...updates };
     if (updates.pixConfig) {
         dbUpdates.pixKey = updates.pixConfig.key;
         dbUpdates.pixName = updates.pixConfig.name;
+        delete dbUpdates.pixConfig;
     }
     const { data, error } = await supabase.from('Field').update(dbUpdates).eq('id', fieldId).select().single();
     if (error) throw error;
     return { ...data, pixConfig: { key: data.pixKey, name: data.pixName } } as Field;
   },
 
+  // --- SLOTS E HORÁRIOS ---
   getSlots: async (): Promise<MatchSlot[]> => {
-    const { data, error } = await supabase.from('MatchSlot').select('*');
+    const { data, error } = await supabase
+      .from('MatchSlot')
+      .select('*')
+      .order('date', { ascending: true })
+      .order('time', { ascending: true });
+
     if (error) throw error;
-    return (data || []).map((s: any) => {
-       const extra = getLocalSlotData(s.id);
-       return {
-          ...s,
-          durationMinutes: 60,
-          matchType: extra.matchType,
-          allowedCategories: extra.allowedCategories,
-          ratingGiven: extra.ratingGiven,
-          customImageUrl: extra.customImageUrl
-       };
-    }) as MatchSlot[];
+    return data as MatchSlot[];
   },
 
   createSlots: async (slots: Partial<MatchSlot>[]): Promise<MatchSlot[]> => {
-    // Destruturamos customImageUrl para não enviar ao Supabase
-    const slotsToInsert = slots.map(({ durationMinutes, matchType, allowedCategories, statusUpdatedAt, ratingGiven, customImageUrl, ...rest }) => ({
-        ...rest
-    }));
-
-    const { data, error } = await supabase.from('MatchSlot').insert(slotsToInsert).select();
+    const { data, error } = await supabase.from('MatchSlot').insert(slots).select();
     if (error) throw error;
-
-    if (data) {
-        data.forEach((newSlot, index) => {
-            const original = slots[index];
-            saveLocalSlotData(newSlot.id, { 
-                allowedCategories: original.allowedCategories || ["Principal"],
-                matchType: original.matchType || "AMISTOSO",
-                ratingGiven: 0,
-                customImageUrl: original.customImageUrl
-            });
-        });
-    }
-
     return api.getSlots();
   },
 
   updateSlot: async (slotId: string, data: Partial<MatchSlot>): Promise<MatchSlot> => {
-    // Destruturamos customImageUrl para não enviar ao Supabase
-    const { durationMinutes, matchType, allowedCategories, statusUpdatedAt, ratingGiven, customImageUrl, ...rest } = data;
-    
-    if (allowedCategories || matchType || ratingGiven !== undefined || customImageUrl !== undefined) {
-        const current = getLocalSlotData(slotId);
-        saveLocalSlotData(slotId, {
-            allowedCategories: allowedCategories || current.allowedCategories,
-            matchType: matchType || current.matchType,
-            ratingGiven: ratingGiven !== undefined ? ratingGiven : current.ratingGiven,
-            customImageUrl: customImageUrl !== undefined ? customImageUrl : current.customImageUrl
-        });
-    }
+    const { data: updated, error } = await supabase
+      .from('MatchSlot')
+      .update(data)
+      .eq('id', slotId)
+      .select()
+      .single();
 
-    const { data: updated, error } = await supabase.from('MatchSlot').update(rest).eq('id', slotId).select().single();
     if (error) throw error;
-
-    const finalExtra = getLocalSlotData(slotId);
-    return { 
-        ...updated, 
-        matchType: finalExtra.matchType,
-        allowedCategories: finalExtra.allowedCategories,
-        ratingGiven: finalExtra.ratingGiven,
-        customImageUrl: finalExtra.customImageUrl
-    } as MatchSlot;
+    return updated as MatchSlot;
   },
 
   deleteSlot: async (slotId: string): Promise<void> => {
     const { error } = await supabase.from('MatchSlot').delete().eq('id', slotId);
     if (error) throw error;
-    localStorage.removeItem(`jf_slot_extra_${slotId}`);
   },
 
+  // --- AVALIAÇÕES ---
   rateTeam: async (userId: string, slotId: string, rating: number): Promise<void> => {
-    const slotExtra = getLocalSlotData(slotId);
-    saveLocalSlotData(slotId, { ...slotExtra, ratingGiven: rating });
+    // Atualiza o slot com a nota dada
+    await supabase.from('MatchSlot').update({ ratingGiven: rating }).eq('id', slotId);
 
-    const userExtra = getLocalUserData(userId);
-    const currentRating = userExtra.teamRating || 0;
-    const currentCount = userExtra.teamRatingCount || 0;
+    // Busca dados atuais do usuário para calcular nova média
+    const { data: user, error: userError } = await supabase.from('User').select('teamRating, teamRatingCount').eq('id', userId).single();
+    if (userError || !user) return;
+
+    const currentRating = user.teamRating || 0;
+    const currentCount = user.teamRatingCount || 0;
     const newCount = currentCount + 1;
     const newRating = (currentRating * currentCount + rating) / newCount;
 
-    saveLocalUserData(userId, {
-        ...userExtra,
+    await supabase.from('User').update({
         teamRating: newRating,
         teamRatingCount: newCount
-    });
+    }).eq('id', userId);
   }
 };

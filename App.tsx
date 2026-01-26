@@ -24,32 +24,41 @@ const App: React.FC = () => {
   const [userLocation, setUserLocation] = useState<{lat: number, lng: number} | undefined>();
 
   useEffect(() => {
-    const savedUser = localStorage.getItem('jf_session_user');
-    if (savedUser) {
-      try {
-        const parsed = JSON.parse(savedUser);
-        setUser(parsed);
-        setView('APP');
-        if (parsed.role === UserRole.ADMIN || parsed.role === UserRole.FIELD_OWNER) setActiveTab('ADMIN');
-        refreshData();
-      } catch (e) { localStorage.removeItem('jf_session_user'); }
-    }
+    const checkSession = async () => {
+        const savedUser = localStorage.getItem('jf_session_user');
+        if (savedUser) {
+          try {
+            const parsed = JSON.parse(savedUser);
+            // IMPORTANTE: Buscamos os dados frescos do banco para garantir que mudanças em outro browser apareçam aqui
+            const freshUser = await api.updateUser(parsed); 
+            setUser(freshUser);
+            setView('APP');
+            if (freshUser.role === UserRole.ADMIN || freshUser.role === UserRole.FIELD_OWNER) setActiveTab('ADMIN');
+            refreshData();
+          } catch (e) { 
+            console.error("Falha ao recuperar sessão, deslogando...");
+            localStorage.removeItem('jf_session_user'); 
+          }
+        }
+    };
+    
+    checkSession();
     loadInitialData();
     
-    // Auto-location
     navigator.geolocation.getCurrentPosition(
         (pos) => setUserLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
         () => console.log("Permissão de local negada.")
     );
 
-    // Auto-refresh timer (Simulate Real-time)
     const interval = setInterval(() => { if (user) refreshData(); }, 30000);
     return () => clearInterval(interval);
   }, []);
 
   const loadInitialData = async () => {
-    const cats = await api.getCategories();
-    setCategories(cats);
+    try {
+        const cats = await api.getCategories();
+        setCategories(cats);
+    } catch (e) { console.error("Erro categorias:", e); }
   };
 
   const handleAuthSuccess = (loggedUser: User) => {
@@ -78,13 +87,13 @@ const App: React.FC = () => {
     await api.updateSlot(id, {
         isBooked: false,
         status: 'available',
-        bookedByTeamName: undefined,
-        bookedByUserId: undefined,
-        bookedByPhone: undefined,
-        bookedByCategory: undefined,
-        opponentTeamName: undefined,
-        receiptUrl: undefined,
-        aiVerificationResult: undefined,
+        bookedByTeamName: null as any,
+        bookedByUserId: null as any,
+        bookedByPhone: null as any,
+        bookedByCategory: null as any,
+        opponentTeamName: null as any,
+        receiptUrl: null as any,
+        aiVerificationResult: null as any,
         ratingGiven: 0
     });
     refreshData();
@@ -182,11 +191,11 @@ const App: React.FC = () => {
                     <div className="grid grid-cols-2 gap-4 w-full mt-10">
                         <div className="bg-gray-50 p-6 rounded-[2rem] border text-center">
                             <span className="block text-[8px] font-black text-gray-400 uppercase tracking-widest mb-1">Reputação</span>
-                            <span className="text-xl font-black text-pitch">4.8</span>
+                            <span className="text-xl font-black text-pitch">{(user.teamRating || 0).toFixed(1)}</span>
                         </div>
                         <div className="bg-gray-50 p-6 rounded-[2rem] border text-center">
-                            <span className="block text-[8px] font-black text-gray-400 uppercase tracking-widest mb-1">Partidas</span>
-                            <span className="text-xl font-black text-pitch">12</span>
+                            <span className="block text-[8px] font-black text-gray-400 uppercase tracking-widest mb-1">Avaliações</span>
+                            <span className="text-xl font-black text-pitch">{user.teamRatingCount || 0}</span>
                         </div>
                     </div>
 
