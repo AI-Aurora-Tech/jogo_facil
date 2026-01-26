@@ -53,6 +53,7 @@ export interface RegisteredTeam {
   fixedDay: number; // 0-6 (Sun-Sat)
   fixedTime: string;
   categories: string[]; // As 2 categorias elegíveis
+  logoUrl?: string; // Brasão da equipe
   createdAt: string;
 }
 

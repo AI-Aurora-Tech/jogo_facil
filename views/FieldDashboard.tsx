@@ -1,9 +1,10 @@
 
 import React, { useState, useEffect } from 'react';
-import { Plus, Calendar, Settings, Trash2, Shield, MapPin, Key, X, Save, Trophy, Check, CalendarDays, Clock, Repeat, Users, CircleSlash, Swords, PartyPopper, Star, UsersRound, BookOpenCheck, ChevronRight, AlertCircle, Tag } from 'lucide-react';
+import { Plus, Calendar, Settings, Trash2, Shield, MapPin, Key, X, Save, Trophy, Check, CalendarDays, Clock, Repeat, Users, CircleSlash, Swords, PartyPopper, Star, UsersRound, BookOpenCheck, ChevronRight, AlertCircle, Tag, Upload, ImageIcon } from 'lucide-react';
 import { Button } from '../components/Button';
 import { Field, MatchSlot, MatchType, User, RegisteredTeam } from '../types';
 import { api } from '../services/api';
+import { convertFileToBase64 } from '../utils';
 
 interface FieldDashboardProps {
   categories: string[];
@@ -41,6 +42,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
   const [newTeamDay, setNewTeamDay] = useState<number>(1);
   const [newTeamTime, setNewTeamTime] = useState('20:00');
   const [newTeamSelectedCategories, setNewTeamSelectedCategories] = useState<string[]>([]);
+  const [newTeamLogo, setNewTeamLogo] = useState('');
   const [teamError, setTeamError] = useState('');
 
   // States for new slot
@@ -91,6 +93,18 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
     }
   };
 
+  const handleLogoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      try {
+        const base64 = await convertFileToBase64(file);
+        setNewTeamLogo(base64);
+      } catch (err) {
+        setTeamError('Erro ao processar imagem do brasão.');
+      }
+    }
+  };
+
   const handleAddRegisteredTeam = async () => {
     if (!newTeamName.trim()) {
       setTeamError('Informe o nome da equipe.');
@@ -101,10 +115,10 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
       return;
     }
 
-    // 1. Cadastra o time como mensalista nos registros com as 2 categorias
-    const newTeam = await api.addRegisteredTeam(field.id, newTeamName.trim(), newTeamDay, newTeamTime, newTeamSelectedCategories);
+    // 1. Cadastra o time como mensalista nos registros com as 2 categorias e o brasão
+    const newTeam = await api.addRegisteredTeam(field.id, newTeamName.trim(), newTeamDay, newTeamTime, newTeamSelectedCategories, newTeamLogo);
     
-    // 2. Gera automaticamente os horários "vitalícios" (52 semanas) com as categorias informadas
+    // 2. Gera automaticamente os horários "vitalícios" (52 semanas)
     const lifetimeSlots: Omit<MatchSlot, 'id'>[] = [];
     for (let i = 0; i < 52; i++) {
         lifetimeSlots.push({
@@ -117,15 +131,17 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
             isBooked: true,
             hasLocalTeam: true,
             localTeamName: newTeamName.trim(),
-            allowedCategories: newTeamSelectedCategories, // Aqui usamos as 2 categorias
+            allowedCategories: newTeamSelectedCategories,
             bookedByTeamName: newTeamName.trim(),
-            status: 'confirmed'
+            status: 'confirmed',
+            customImageUrl: newTeamLogo || undefined
         });
     }
     
     onAddSlot(lifetimeSlots);
     setNewTeamName('');
     setNewTeamSelectedCategories([]);
+    setNewTeamLogo('');
     setTeamError('');
     loadTeams();
   };
@@ -244,9 +260,13 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                 <div key={slot.id} className="bg-white rounded-3xl p-5 shadow-sm border border-gray-100 group">
                     <div className="flex justify-between items-start mb-4">
                         <div className="flex items-center gap-3">
-                            <div className="bg-gray-50 w-12 h-12 rounded-2xl flex flex-col items-center justify-center border">
-                                <span className="text-lg font-black text-pitch">{slot.date.split('-')[2]}</span>
-                                <span className="text-[8px] font-black text-gray-400 uppercase">{slot.time}</span>
+                            <div className="bg-gray-50 w-12 h-12 rounded-2xl flex flex-col items-center justify-center border relative overflow-hidden">
+                                {slot.customImageUrl ? (
+                                    <img src={slot.customImageUrl} className="absolute inset-0 w-full h-full object-cover opacity-20" />
+                                ) : (
+                                    <span className="text-lg font-black text-pitch z-10">{slot.date.split('-')[2]}</span>
+                                )}
+                                <span className="text-[8px] font-black text-gray-400 uppercase z-10">{slot.time}</span>
                             </div>
                             <div>
                                 <h4 className="font-bold text-pitch text-sm">{slot.isBooked ? slot.bookedByTeamName : slot.allowedCategories[0]}</h4>
@@ -276,8 +296,8 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                         <div className="bg-gray-50 rounded-2xl p-4 flex flex-col gap-4 border border-gray-100">
                             <div className="flex justify-between items-center">
                                 <div className="flex items-center gap-3">
-                                    <div className="w-8 h-8 bg-pitch text-white rounded-full flex items-center justify-center font-black text-[10px]">
-                                        {slot.bookedByTeamName?.charAt(0)}
+                                    <div className="w-8 h-8 bg-pitch text-white rounded-full flex items-center justify-center font-black text-[10px] overflow-hidden">
+                                        {slot.customImageUrl ? <img src={slot.customImageUrl} className="w-full h-full object-cover"/> : slot.bookedByTeamName?.charAt(0)}
                                     </div>
                                     <p className="text-xs font-black text-pitch">{slot.bookedByTeamName}</p>
                                 </div>
@@ -303,13 +323,13 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
       {/* MODAL GESTÃO DE MENSALISTAS */}
       {showTeamsModal && (
           <div className="fixed inset-0 bg-pitch/90 backdrop-blur-md z-[150] flex items-center justify-center p-4">
-              <div className="bg-white w-full max-w-2xl rounded-[3rem] p-10 animate-in zoom-in-95 duration-200 flex flex-col max-h-[90vh]">
+              <div className="bg-white w-full max-w-2xl rounded-[3rem] p-10 animate-in zoom-in-95 duration-200 flex flex-col max-h-[95vh]">
                 <div className="flex justify-between items-center mb-6">
                     <div>
                         <h2 className="text-2xl font-black text-pitch flex items-center gap-3">
                             <UsersRound className="w-7 h-7 text-grass-500" /> Mensalistas Vitalícios
                         </h2>
-                        <p className="text-xs font-bold text-gray-400 uppercase mt-1">Gerencie times fixos e suas categorias</p>
+                        <p className="text-xs font-bold text-gray-400 uppercase mt-1">Gerencie times fixos, categorias e brasões</p>
                     </div>
                     <button onClick={() => setShowTeamsModal(false)} className="p-2 bg-gray-100 rounded-full"><X className="w-6 h-6"/></button>
                 </div>
@@ -320,8 +340,16 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                           <AlertCircle className="w-4 h-4" /> {teamError}
                       </div>
                     )}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div className="col-span-2">
+                    
+                    <div className="flex items-center gap-4 mb-4">
+                        <div className="relative group">
+                            <div className="w-20 h-20 bg-white rounded-[1.5rem] border-2 border-dashed border-gray-300 flex items-center justify-center overflow-hidden shrink-0 group-hover:border-grass-500 transition-colors">
+                                {newTeamLogo ? <img src={newTeamLogo} className="w-full h-full object-cover"/> : <Upload className="w-6 h-6 text-gray-300"/>}
+                                <input type="file" accept="image/*" onChange={handleLogoChange} className="absolute inset-0 opacity-0 cursor-pointer" />
+                            </div>
+                            <p className="text-[7px] font-black text-gray-400 uppercase text-center mt-1">Brasão</p>
+                        </div>
+                        <div className="flex-grow">
                             <label className="text-[10px] font-black text-gray-400 uppercase mb-2 block">Nome da Equipe</label>
                             <input 
                                 type="text" 
@@ -331,6 +359,9 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                                 className="w-full p-4 bg-white border rounded-2xl font-bold outline-none focus:ring-2 focus:ring-grass-500"
                             />
                         </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
                             <label className="text-[10px] font-black text-gray-400 uppercase mb-2 block">Dia da Semana</label>
                             <select 
@@ -353,7 +384,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
 
                         {/* SELEÇÃO DE 2 CATEGORIAS */}
                         <div className="col-span-2">
-                            <label className="text-[10px] font-black text-gray-400 uppercase mb-3 block tracking-widest">Informar 2 Categorias Elegíveis para a Agenda:</label>
+                            <label className="text-[10px] font-black text-gray-400 uppercase mb-3 block tracking-widest">Informar 2 Categorias Elegíveis:</label>
                             <div className="flex flex-wrap gap-2 p-4 bg-white rounded-2xl border">
                                 {categories.map(cat => {
                                   const isSelected = newTeamSelectedCategories.includes(cat);
@@ -368,13 +399,10 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                                   );
                                 })}
                             </div>
-                            <p className="text-[8px] font-black text-gray-300 uppercase mt-2 px-1">
-                                Selecionadas: {newTeamSelectedCategories.length}/2
-                            </p>
                         </div>
                     </div>
                     <Button onClick={handleAddRegisteredTeam} className="w-full py-4 rounded-2xl font-black text-sm uppercase shadow-lg">
-                        <Plus className="w-5 h-5" /> Salvar Mensalista
+                        <Plus className="w-5 h-5" /> Salvar Mensalista e Gerar Cronograma
                     </Button>
                 </div>
 
@@ -384,13 +412,13 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                     {registeredTeams.map(team => (
                         <div key={team.id} className="flex justify-between items-center p-5 bg-white rounded-2xl border-2 border-gray-50 group hover:border-grass-200 transition-all shadow-sm">
                             <div className="flex items-center gap-4">
-                                <div className="w-10 h-10 bg-pitch text-grass-500 rounded-xl flex items-center justify-center font-black text-xs">
-                                    {DAYS_OF_WEEK.find(d => d.value === team.fixedDay)?.label}
+                                <div className="w-12 h-12 bg-pitch rounded-2xl flex items-center justify-center font-black text-xs overflow-hidden text-grass-500 shrink-0">
+                                    {team.logoUrl ? <img src={team.logoUrl} className="w-full h-full object-cover" /> : DAYS_OF_WEEK.find(d => d.value === team.fixedDay)?.label}
                                 </div>
                                 <div>
                                     <p className="font-black text-pitch text-sm">{team.name}</p>
-                                    <div className="flex gap-2 mt-0.5">
-                                      <p className="text-[9px] font-bold text-gray-400 uppercase">Fixo às {team.fixedTime}</p>
+                                    <div className="flex flex-col gap-1 mt-0.5">
+                                      <p className="text-[9px] font-bold text-gray-400 uppercase">Toda {DAYS_OF_WEEK.find(d => d.value === team.fixedDay)?.label} às {team.fixedTime}</p>
                                       <div className="flex gap-1">
                                          {team.categories?.map(c => (
                                            <span key={c} className="text-[7px] font-black bg-grass-50 text-grass-600 px-1 py-0.5 rounded border border-grass-100 uppercase">{c}</span>
@@ -429,7 +457,12 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                                     onClick={() => handleManualBooking(showManualBookingModal.id, team.name)}
                                     className="p-4 bg-gray-50 rounded-2xl border font-black text-pitch text-left hover:bg-grass-500 hover:border-grass-600 transition-all flex items-center justify-between group"
                                   >
-                                      {team.name}
+                                      <div className="flex items-center gap-3">
+                                          <div className="w-8 h-8 bg-pitch rounded-lg overflow-hidden flex items-center justify-center">
+                                              {team.logoUrl ? <img src={team.logoUrl} className="w-full h-full object-cover"/> : <span className="text-[10px] text-white">{team.name.charAt(0)}</span>}
+                                          </div>
+                                          {team.name}
+                                      </div>
                                       <ChevronRight className="w-4 h-4 opacity-0 group-hover:opacity-100 transition-opacity" />
                                   </button>
                               ))
@@ -579,7 +612,9 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                                                     onClick={() => { setHostType('REGISTERED'); setSelectedHostTeamName(team.name); setSelectedHostCategory(''); }}
                                                     className="flex items-center gap-4 mb-3 cursor-pointer"
                                                 >
-                                                    <Shield className={`w-6 h-6 ${hostType === 'REGISTERED' && selectedHostTeamName === team.name ? 'text-grass-500' : 'text-gray-300'}`} />
+                                                    <div className="w-10 h-10 bg-pitch rounded-lg overflow-hidden flex items-center justify-center border border-white/10">
+                                                        {team.logoUrl ? <img src={team.logoUrl} className="w-full h-full object-cover"/> : <Shield className={`w-6 h-6 ${hostType === 'REGISTERED' && selectedHostTeamName === team.name ? 'text-grass-500' : 'text-gray-300'}`} />}
+                                                    </div>
                                                     <p className="font-black text-sm">{team.name}</p>
                                                 </div>
                                                 {hostType === 'REGISTERED' && selectedHostTeamName === team.name && (
