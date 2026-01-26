@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { Search, MapPin, Clock, MessageCircle, Filter, Trophy, Calendar, Navigation, CalendarDays, ChevronRight, AlertCircle, Tag, XCircle, CalendarCheck } from 'lucide-react';
+import { Search, MapPin, Clock, MessageCircle, Filter, Trophy, Calendar, Navigation, CalendarDays, ChevronRight, AlertCircle, Tag, XCircle, CalendarCheck, Swords, Users } from 'lucide-react';
 import { Button } from '../components/Button';
 import { Field, MatchSlot, User } from '../types';
 import { calculateDistance } from '../utils';
@@ -19,7 +19,6 @@ interface TeamDashboardProps {
 export const TeamDashboard: React.FC<TeamDashboardProps> = ({ categories, currentUser, fields, slots, onBookSlot, onCancelBooking, userLocation, viewMode }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [radiusFilter, setRadiusFilter] = useState<number>(30);
-  // Inicializa o filtro vazio para mostrar tudo que é compatível por padrão
   const [categoryFilter, setCategoryFilter] = useState<string>('');
   const [dateFilter, setDateFilter] = useState<string>('');
   const [showFilters, setShowFilters] = useState(false);
@@ -34,7 +33,15 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ categories, curren
 
     if (viewMode === 'EXPLORE') {
       if (slot.date < todayStr) return false;
-      if (slot.status !== 'available') return false;
+      
+      // Um horário é "visível" se:
+      // 1. Está disponível (aluguel livre)
+      // 2. É um mensalista (FIXO) confirmado, mas sem adversário definido (Desafio aberto)
+      const isAvailableForRent = slot.status === 'available';
+      const isOpenChallenge = slot.status === 'confirmed' && slot.matchType === 'FIXO' && !slot.opponentTeamName;
+      
+      if (!isAvailableForRent && !isOpenChallenge) return false;
+
       if (searchTerm && !field.name.toLowerCase().includes(searchTerm.toLowerCase())) return false;
       
       if (userLocation) {
@@ -42,15 +49,12 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ categories, curren
         if (dist > radiusFilter) return false;
       }
 
-      // Lógica de Categoria Corrigida:
       const slotAllowedCats = slot.allowedCategories || [];
       const userTeamCats = currentUser.teamCategories || [];
 
       if (categoryFilter) {
-        // Se houver um filtro manual, o slot deve permitir essa categoria específica ou ser Livre
         if (!slotAllowedCats.includes(categoryFilter) && !slotAllowedCats.includes('Livre')) return false;
       } else {
-        // Se não houver filtro, mostra slots que permitem QUALQUER uma das categorias do time do usuário ou sejam Livre
         const isCompatible = slotAllowedCats.some(cat => userTeamCats.includes(cat)) || slotAllowedCats.includes('Livre');
         if (!isCompatible) return false;
       }
@@ -58,14 +62,16 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ categories, curren
       if (dateFilter && slot.date !== dateFilter) return false;
       return true;
     } else {
+      // Minhas Reservas: slots onde eu sou o capitão (quem alugou ou quem desafiou)
       return slot.bookedByUserId === currentUser.id && slot.date >= todayStr;
     }
   }).sort((a, b) => new Date(`${a.date}T${a.time}`).getTime() - new Date(`${b.date}T${b.time}`).getTime());
 
   const handleWhatsApp = (field: Field, slot: MatchSlot) => {
     const cleanPhone = field.contactPhone.replace(/\D/g, '');
-    const allowedText = (slot.allowedCategories || []).join(' ou ');
-    const text = `Olá, vi o horário em ${field.name} (${allowedText}) para o dia ${slot.date.split('-').reverse().join('/')} às ${slot.time} no Jogo Fácil.`;
+    const isChallenge = !!slot.localTeamName;
+    const type = isChallenge ? `desafio contra o time ${slot.localTeamName}` : 'aluguel de horário';
+    const text = `Olá, vi o ${type} em ${field.name} para o dia ${slot.date.split('-').reverse().join('/')} às ${slot.time} no Jogo Fácil.`;
     window.open(`https://wa.me/${cleanPhone}?text=${encodeURIComponent(text)}`, '_blank');
   };
 
@@ -110,11 +116,6 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ categories, curren
                         {dateFilter.split('-').reverse().join('/')} <XCircle className="w-3 h-3 opacity-50" />
                     </button>
                 )}
-                {!categoryFilter && !dateFilter && currentUser.teamCategories.length > 0 && (
-                  <div className="px-3 py-2 rounded-xl text-[10px] font-black text-gray-400 uppercase bg-gray-50 border border-gray-100 shrink-0">
-                    Filtro Automático: {currentUser.teamCategories.join(' / ')}
-                  </div>
-                )}
             </div>
 
             {showFilters && (
@@ -147,10 +148,7 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ categories, curren
              <div className="bg-gray-50 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4">
                 <Trophy className="text-gray-200 w-10 h-10" />
              </div>
-             <p className="text-gray-400 font-black text-sm px-10 uppercase tracking-tight">
-                Nenhum horário disponível para {categoryFilter || currentUser.teamCategories.join(' ou ')}
-             </p>
-             <button onClick={() => { setCategoryFilter(''); setDateFilter(''); setSearchTerm(''); }} className="mt-4 text-grass-600 font-bold text-xs underline">Limpar todos os filtros</button>
+             <p className="text-gray-400 font-black text-sm px-10 uppercase tracking-tight">Nenhum horário ou desafio encontrado.</p>
           </div>
         ) : (
           filteredSlots.map(slot => {
@@ -159,13 +157,20 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ categories, curren
             const distance = userLocation ? calculateDistance(userLocation.lat, userLocation.lng, field.latitude, field.longitude) : null;
             const isOwner = field.ownerId === currentUser.id;
             const slotCats = slot.allowedCategories || [];
+            const isChallenge = slot.matchType === 'FIXO' && slot.hasLocalTeam;
 
             return (
               <div key={slot.id} className="bg-white rounded-[2.5rem] p-5 shadow-sm border border-gray-100 flex flex-col gap-4 relative overflow-hidden group">
+                {isChallenge && (
+                    <div className="absolute top-0 right-0 bg-orange-500 text-white text-[8px] font-black px-4 py-1.5 rounded-bl-2xl uppercase tracking-widest flex items-center gap-1.5 shadow-sm">
+                        <Swords className="w-3 h-3" /> Desafio Aberto
+                    </div>
+                )}
+                
                 <div className="flex gap-4">
                     <div className="relative shrink-0">
                         <img src={field.imageUrl} className="w-24 h-24 rounded-3xl object-cover" />
-                        <div className="absolute -bottom-2 -right-2 bg-pitch text-white text-[9px] font-black px-2 py-1 rounded-lg shadow-xl border-2 border-white uppercase">
+                        <div className={`absolute -bottom-2 -right-2 text-white text-[9px] font-black px-2 py-1 rounded-lg shadow-xl border-2 border-white uppercase ${isChallenge ? 'bg-orange-600' : 'bg-pitch'}`}>
                             {slot.matchType}
                         </div>
                     </div>
@@ -178,11 +183,20 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ categories, curren
                              ))}
                              {distance !== null && <span className="text-[9px] font-black text-grass-600 ml-auto">{distance}km</span>}
                         </div>
-                        <h3 className="font-black text-pitch text-lg truncate leading-none mb-2">{field.name}</h3>
-                        <div className="flex items-center gap-1 text-gray-400 text-[10px] font-bold mb-3 truncate">
-                            <MapPin className="w-3 h-3 text-gray-300" />
-                            {field.location}
-                        </div>
+                        <h3 className="font-black text-pitch text-lg truncate leading-none mb-1">{field.name}</h3>
+                        
+                        {isChallenge ? (
+                            <div className="flex items-center gap-2 mb-3">
+                                <div className="w-5 h-5 bg-pitch rounded flex items-center justify-center text-[10px] text-white font-black">
+                                    {slot.localTeamName?.charAt(0)}
+                                </div>
+                                <span className="text-[10px] font-bold text-gray-500">Casa: <span className="text-pitch">{slot.localTeamName}</span></span>
+                            </div>
+                        ) : (
+                            <div className="flex items-center gap-1 text-gray-400 text-[10px] font-bold mb-3 truncate">
+                                <MapPin className="w-3 h-3 text-gray-300" /> {field.location}
+                            </div>
+                        )}
                         
                         <div className="flex items-center gap-2">
                              <div className="bg-gray-50 px-2.5 py-1.5 rounded-xl flex items-center gap-1.5 border border-gray-100">
@@ -214,20 +228,19 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ categories, curren
                         </div>
                     ) : (
                         <Button 
-                            className="rounded-[1.5rem] px-8 py-3.5 text-xs font-black shadow-lg shadow-grass-500/20 active:scale-95 transition-transform" 
+                            className={`rounded-[1.5rem] px-8 py-3.5 text-xs font-black shadow-lg active:scale-95 transition-transform ${isChallenge ? 'bg-orange-500 shadow-orange-500/20 hover:bg-orange-600' : 'shadow-grass-500/20'}`} 
                             disabled={isOwner}
                             onClick={() => {
                                 if (!currentUser.teamName) {
                                     alert("Por favor, cadastre o nome do seu time no Perfil antes de agendar!");
                                 } else {
                                     setSelectedSlot(slot);
-                                    // Tenta encontrar uma categoria compatível entre o time e o slot
                                     const userMatch = currentUser.teamCategories.find(c => slotCats.includes(c));
                                     setSelectedBookingCategory(userMatch || currentUser.teamCategories[0] || '');
                                 }
                             }}
                         >
-                            {isOwner ? 'Minha Arena' : 'AGENDAR AGORA'}
+                            {isOwner ? 'Minha Arena' : isChallenge ? 'DESAFIAR' : 'AGENDAR'}
                         </Button>
                     )}
                 </div>
@@ -242,11 +255,11 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ categories, curren
             <div className="bg-white w-full rounded-t-[3rem] p-10 animate-in slide-in-from-bottom duration-500 shadow-2xl">
                 <div className="w-16 h-1.5 bg-gray-100 rounded-full mx-auto mb-8"></div>
                 <div className="flex items-center gap-4 mb-8">
-                    <div className="w-16 h-16 bg-grass-500 rounded-3xl flex items-center justify-center text-pitch shadow-lg">
-                        <CalendarCheck className="w-8 h-8" />
+                    <div className={`w-16 h-16 rounded-3xl flex items-center justify-center text-pitch shadow-lg ${selectedSlot.localTeamName ? 'bg-orange-500' : 'bg-grass-500'}`}>
+                        {selectedSlot.localTeamName ? <Swords className="w-8 h-8" /> : <CalendarCheck className="w-8 h-8" />}
                     </div>
                     <div>
-                        <h2 className="text-2xl font-black text-pitch">Confirmar Jogo</h2>
+                        <h2 className="text-2xl font-black text-pitch">{selectedSlot.localTeamName ? 'Aceitar Desafio' : 'Confirmar Aluguel'}</h2>
                         <p className="text-gray-400 text-xs font-bold uppercase tracking-widest">
                             {fields.find(f => f.id === selectedSlot.fieldId)?.name} • {selectedSlot.time}
                         </p>
@@ -254,6 +267,16 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ categories, curren
                 </div>
 
                 <div className="space-y-6 mb-10">
+                    {selectedSlot.localTeamName && (
+                        <div className="bg-orange-50 p-5 rounded-2xl border border-orange-100 flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                                <Users className="w-5 h-5 text-orange-600" />
+                                <span className="text-xs font-bold text-orange-800 uppercase">Adversário (Casa):</span>
+                            </div>
+                            <span className="font-black text-pitch uppercase text-sm">{selectedSlot.localTeamName}</span>
+                        </div>
+                    )}
+
                     <div className="bg-gray-50 p-6 rounded-[2rem] border-2 border-gray-100">
                         <label className="text-[10px] font-black text-gray-400 uppercase mb-3 block tracking-tighter">Seu Time (Visitante)</label>
                         <div className="flex items-center gap-4">
@@ -264,38 +287,19 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ categories, curren
                         </div>
                     </div>
 
-                    {currentUser.teamCategories.length > 1 && (
-                        <div className="space-y-3">
-                            <label className="text-[10px] font-black text-gray-400 uppercase block tracking-tighter">Representando qual categoria?</label>
-                            <div className="flex flex-wrap gap-2">
-                                {currentUser.teamCategories.map(cat => {
-                                    const isAllowedInSlot = selectedSlot.allowedCategories.includes(cat) || selectedSlot.allowedCategories.includes('Livre');
-                                    return (
-                                        <button 
-                                            key={cat}
-                                            disabled={!isAllowedInSlot}
-                                            onClick={() => setSelectedBookingCategory(cat)}
-                                            className={`px-4 py-2 rounded-xl text-xs font-black border transition-all ${selectedBookingCategory === cat ? 'bg-grass-500 border-grass-500 text-pitch' : isAllowedInSlot ? 'bg-white text-gray-400 border-gray-200' : 'bg-gray-50 text-gray-200 border-gray-100 opacity-50 cursor-not-allowed'}`}
-                                        >
-                                            {cat}
-                                        </button>
-                                    );
-                                })}
-                            </div>
-                        </div>
-                    )}
-
                     <div className="bg-blue-50 p-5 rounded-2xl flex gap-4 items-start border border-blue-100">
                         <MessageCircle className="w-6 h-6 text-blue-600 shrink-0" />
                         <p className="text-xs text-blue-800 font-bold leading-relaxed">
-                            Ao confirmar, abriremos o WhatsApp do campo para você enviar o comprovante de pagamento.
+                            Ao confirmar, abriremos o WhatsApp do campo para você enviar o comprovante e combinar os detalhes da partida.
                         </p>
                     </div>
                 </div>
 
                 <div className="flex gap-4">
                     <button onClick={() => setSelectedSlot(null)} className="flex-1 py-5 font-black text-gray-400 uppercase text-xs tracking-widest">Desistir</button>
-                    <Button className="flex-[2] py-5 rounded-[2rem] text-sm font-black shadow-xl" onClick={handleConfirmBooking}>CONFIRMAR E ENVIAR PIX</Button>
+                    <Button className={`flex-[2] py-5 rounded-[2rem] text-sm font-black shadow-xl ${selectedSlot.localTeamName ? 'bg-orange-500' : ''}`} onClick={handleConfirmBooking}>
+                        {selectedSlot.localTeamName ? 'ACEITAR DESAFIO' : 'CONFIRMAR AGENDAMENTO'}
+                    </Button>
                 </div>
             </div>
         </div>

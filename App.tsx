@@ -101,6 +101,7 @@ const App: React.FC = () => {
         bookedByUserId: undefined,
         bookedByPhone: undefined,
         bookedByCategory: undefined,
+        opponentTeamName: undefined,
         ratingGiven: 0
     });
     refreshData();
@@ -158,13 +159,25 @@ const App: React.FC = () => {
                 categories={categories}
                 viewMode="EXPLORE" currentUser={user} fields={fields} slots={slots}
                 onBookSlot={async (id, bookingData) => {
-                    await api.updateSlot(id, { 
-                        isBooked: true, 
-                        status: 'pending_verification', 
-                        bookedByTeamName: bookingData.teamName, 
+                    const slot = slots.find(s => s.id === id);
+                    if (!slot) return;
+
+                    const updates: any = {
+                        bookedByUserId: user.id,
                         bookedByCategory: bookingData.category,
-                        bookedByUserId: user.id 
-                    });
+                        status: 'pending_verification'
+                    };
+
+                    if (slot.hasLocalTeam) {
+                        // Desafiando um mensalista existente
+                        updates.opponentTeamName = bookingData.teamName;
+                    } else {
+                        // Alugando horário livre
+                        updates.isBooked = true;
+                        updates.bookedByTeamName = bookingData.teamName;
+                    }
+
+                    await api.updateSlot(id, updates);
                     refreshData();
                 }}
                 onCancelBooking={resetSlot}
