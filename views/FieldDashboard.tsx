@@ -1,11 +1,9 @@
 
 import React, { useState, useEffect } from 'react';
-/* Added missing FileText icon import */
-import { Plus, Calendar, Settings, Trash2, Shield, MapPin, Key, X, Save, Trophy, Check, CalendarDays, Clock, Repeat, Users, CircleSlash, Swords, PartyPopper, Star, UsersRound, BookOpenCheck, ChevronRight, AlertCircle, Tag, Upload, ImageIcon, Edit2, Loader2, Info, Sparkles, CheckCircle2, Eye, FileText } from 'lucide-react';
+import { Plus, Trash2, Shield, MapPin, X, Save, Trophy, Check, CalendarDays, Clock, Repeat, Users, Swords, Star, UsersRound, ChevronRight, AlertCircle, Tag, Upload, Edit2, Loader2, Sparkles, CheckCircle2, Eye, FileText, Calendar } from 'lucide-react';
 import { Button } from '../components/Button';
 import { Field, MatchSlot, MatchType, User, RegisteredTeam } from '../types';
 import { api } from '../services/api';
-import { convertFileToBase64 } from '../utils';
 
 interface FieldDashboardProps {
   categories: string[];
@@ -28,6 +26,39 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
   const [showTeamsModal, setShowTeamsModal] = useState(false);
   const [viewingSlot, setViewingSlot] = useState<MatchSlot | null>(null);
 
+  // Estados para Novo Horário
+  const [newSlotDate, setNewSlotDate] = useState(new Date().toISOString().split('T')[0]);
+  const [newSlotTime, setNewSlotTime] = useState('19:00');
+  const [newSlotPrice, setNewSlotPrice] = useState(field.hourlyRate.toString());
+  const [newSlotType, setNewSlotType] = useState<MatchType>('ALUGUEL');
+  const [newSlotLocalTeam, setNewSlotLocalTeam] = useState('');
+  const [newSlotCats, setNewSlotCats] = useState<string[]>(['Livre']);
+  const [registeredTeams, setRegisteredTeams] = useState<RegisteredTeam[]>([]);
+
+  useEffect(() => {
+    if (showTeamsModal) {
+      api.getRegisteredTeams(field.id).then(setRegisteredTeams);
+    }
+  }, [showTeamsModal, field.id]);
+
+  const handleCreateSlot = async () => {
+    const slot: Omit<MatchSlot, 'id'> = {
+      fieldId: field.id,
+      date: newSlotDate,
+      time: newSlotTime,
+      durationMinutes: 60,
+      matchType: newSlotType,
+      isBooked: false,
+      hasLocalTeam: newSlotType === 'FIXO',
+      localTeamName: newSlotType === 'FIXO' ? newSlotLocalTeam : undefined,
+      allowedCategories: newSlotCats,
+      status: 'available',
+      price: parseFloat(newSlotPrice)
+    };
+    await onAddSlot([slot]);
+    setShowAddModal(false);
+  };
+
   const pendingSlots = (slots || []).filter(s => s.status === 'pending_verification' && s.receiptUrl);
   const todayStr = new Date().toISOString().split('T')[0];
   const sortedSlots = (slots || [])
@@ -42,8 +73,12 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
             <p className="text-[10px] font-black text-grass-600 uppercase tracking-[0.2em]">{field?.name}</p>
         </div>
         <div className="flex gap-2">
-            <button onClick={() => setShowTeamsModal(true)} className="p-3 bg-gray-100 rounded-2xl text-pitch active:scale-95 transition-transform"><UsersRound className="w-5 h-5" /></button>
-            <button onClick={() => setShowAddModal(true)} className="p-3 bg-pitch rounded-2xl text-white active:scale-95 transition-transform"><Plus className="w-5 h-5" /></button>
+            <button onClick={() => setShowTeamsModal(true)} className="p-3 bg-gray-100 rounded-2xl text-pitch active:scale-95 transition-transform">
+              <UsersRound className="w-5 h-5" />
+            </button>
+            <button onClick={() => setShowAddModal(true)} className="p-3 bg-pitch rounded-2xl text-white active:scale-95 transition-transform">
+              <Plus className="w-5 h-5" />
+            </button>
         </div>
       </div>
 
@@ -131,6 +166,91 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
             </div>
         </div>
       </div>
+
+      {/* MODAL: Adicionar Novo Horário */}
+      {showAddModal && (
+        <div className="fixed inset-0 bg-pitch/90 backdrop-blur-md z-[100] flex items-end animate-in fade-in duration-300">
+          <div className="bg-white w-full rounded-t-[3rem] p-10 shadow-2xl animate-in slide-in-from-bottom duration-500 max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center mb-8">
+              <h2 className="text-2xl font-black text-pitch">Abrir Horário</h2>
+              <button onClick={() => setShowAddModal(false)} className="p-2 bg-gray-100 rounded-full"><X className="w-6 h-6" /></button>
+            </div>
+
+            <div className="space-y-6">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-[10px] font-black text-gray-400 uppercase block mb-1">Data</label>
+                  <input type="date" className="w-full p-4 bg-gray-50 border rounded-2xl font-bold outline-none" value={newSlotDate} onChange={e => setNewSlotDate(e.target.value)} />
+                </div>
+                <div>
+                  <label className="text-[10px] font-black text-gray-400 uppercase block mb-1">Hora</label>
+                  <input type="time" className="w-full p-4 bg-gray-50 border rounded-2xl font-bold outline-none" value={newSlotTime} onChange={e => setNewSlotTime(e.target.value)} />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-[10px] font-black text-gray-400 uppercase block mb-1">Tipo de Match</label>
+                <div className="flex gap-2">
+                  {(['ALUGUEL', 'FIXO'] as MatchType[]).map(t => (
+                    <button key={t} onClick={() => setNewSlotType(t)} className={`flex-1 py-3 rounded-xl font-black text-xs border-2 transition-all ${newSlotType === t ? 'border-grass-500 bg-grass-50 text-grass-700' : 'border-gray-100 text-gray-400'}`}>
+                      {t === 'ALUGUEL' ? 'Aluguel Avulso' : 'Mensalista / Fixo'}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {newSlotType === 'FIXO' && (
+                <div>
+                  <label className="text-[10px] font-black text-gray-400 uppercase block mb-1">Time da Casa (Mensalista)</label>
+                  <input type="text" className="w-full p-4 bg-gray-50 border rounded-2xl font-bold outline-none" placeholder="Ex: Galáticos FC" value={newSlotLocalTeam} onChange={e => setNewSlotLocalTeam(e.target.value)} />
+                </div>
+              )}
+
+              <div>
+                <label className="text-[10px] font-black text-gray-400 uppercase block mb-1">Valor (Total)</label>
+                <div className="relative">
+                  <span className="absolute left-4 top-4 font-black text-gray-400 text-sm">R$</span>
+                  <input type="number" className="w-full pl-12 p-4 bg-gray-50 border rounded-2xl font-bold outline-none" value={newSlotPrice} onChange={e => setNewSlotPrice(e.target.value)} />
+                </div>
+              </div>
+
+              <Button onClick={handleCreateSlot} className="w-full py-5 rounded-[2rem] font-black text-lg shadow-xl shadow-grass-500/20">CRIAR HORÁRIO</Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: Gestão de Mensalistas */}
+      {showTeamsModal && (
+        <div className="fixed inset-0 bg-pitch/90 backdrop-blur-md z-[100] flex items-end animate-in fade-in duration-300">
+          <div className="bg-white w-full rounded-t-[3rem] p-10 shadow-2xl animate-in slide-in-from-bottom duration-500 max-h-[85vh] overflow-y-auto">
+             <div className="flex justify-between items-center mb-8">
+              <h2 className="text-2xl font-black text-pitch">Mensalistas</h2>
+              <button onClick={() => setShowTeamsModal(false)} className="p-2 bg-gray-100 rounded-full"><X className="w-6 h-6" /></button>
+            </div>
+            
+            <div className="space-y-4">
+              {registeredTeams.length === 0 ? (
+                <div className="text-center py-10 text-gray-400">Nenhum mensalista cadastrado.</div>
+              ) : (
+                registeredTeams.map(team => (
+                  <div key={team.id} className="bg-gray-50 p-4 rounded-2xl border flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 bg-pitch rounded-lg flex items-center justify-center text-white font-black">{team.name.charAt(0)}</div>
+                      <div>
+                        <p className="font-black text-pitch text-sm">{team.name}</p>
+                        <p className="text-[10px] text-gray-400 font-bold uppercase">Dia {team.fixedDay} às {team.fixedTime}</p>
+                      </div>
+                    </div>
+                    <button className="text-red-500 p-2"><Trash2 className="w-4 h-4" /></button>
+                  </div>
+                ))
+              )}
+              <Button variant="outline" className="w-full border-dashed rounded-2xl py-4 mt-4">CADASTRAR NOVO MENSALISTA</Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Modal Visualização Comprovante */}
       {viewingSlot && (

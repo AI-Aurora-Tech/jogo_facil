@@ -1,6 +1,5 @@
 
 import React, { useState, useEffect } from 'react';
-/* Removed non-existent Notification type from imports */
 import { UserRole, Field, MatchSlot, User, SubscriptionPlan, SubTeam } from './types';
 import { Landing } from './views/Landing';
 import { Auth } from './views/Auth';
@@ -22,6 +21,7 @@ const App: React.FC = () => {
   const [categories, setCategories] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [userLocation, setUserLocation] = useState<{lat: number, lng: number} | undefined>();
+  const [notifications, setNotifications] = useState(2);
 
   useEffect(() => {
     const checkSession = async () => {
@@ -29,7 +29,6 @@ const App: React.FC = () => {
         if (savedUser) {
           try {
             const parsed = JSON.parse(savedUser);
-            // IMPORTANTE: Buscamos dados novos do Supabase para garantir sincronia entre browsers
             const freshUser = await api.updateUser(parsed); 
             setUser(freshUser);
             setView('APP');
@@ -99,6 +98,15 @@ const App: React.FC = () => {
     refreshData();
   };
 
+  const handleBellClick = () => {
+    if (notifications > 0) {
+      alert(`Você tem ${notifications} novas atualizações de partidas!`);
+      setNotifications(0);
+    } else {
+      alert("Nenhuma notificação nova no momento.");
+    }
+  };
+
   if (view === 'LANDING') return <Landing onStart={() => setView('AUTH')} />;
   if (view === 'AUTH') return <Auth categories={categories} onLogin={handleAuthSuccess} onCancel={() => setView('LANDING')} />;
   if (view === 'SUBSCRIPTION' && user) return <Subscription userRole={user.role} onSubscribe={async (p) => {
@@ -120,11 +128,13 @@ const App: React.FC = () => {
               <span className="text-xl font-black text-pitch tracking-tighter italic">JOGO FÁCIL</span>
           </div>
           <div className="flex items-center gap-4">
-              <button className="relative p-2 text-gray-400 hover:text-pitch">
+              <button onClick={handleBellClick} className="relative p-2 text-gray-400 hover:text-pitch transition-colors">
                   <Bell className="w-6 h-6" />
-                  <span className="absolute top-2 right-2 w-2 h-2 bg-grass-500 rounded-full border-2 border-white"></span>
+                  {notifications > 0 && (
+                    <span className="absolute top-2 right-2 w-2 h-2 bg-grass-500 rounded-full border-2 border-white animate-pulse"></span>
+                  )}
               </button>
-              <button onClick={refreshData} className={`p-2 ${isLoading ? 'animate-spin' : ''}`}>
+              <button onClick={refreshData} className={`p-2 transition-transform active:rotate-180 ${isLoading ? 'animate-spin' : ''}`}>
                   <RefreshCw className="w-5 h-5 text-grass-500" />
               </button>
           </div>
@@ -146,10 +156,8 @@ const App: React.FC = () => {
                     };
                     
                     if (slot.hasLocalTeam) {
-                      // Se tem time da casa, o usuário entra como oponente (desafiante)
                       updates.opponentTeamName = data.teamName;
                     } else {
-                      // Aluguel normal
                       updates.isBooked = true; 
                       updates.bookedByTeamName = data.teamName; 
                     }
