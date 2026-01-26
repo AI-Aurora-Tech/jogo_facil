@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { UserRole, SubscriptionPlan } from '../types';
 import { Button } from '../components/Button';
-import { Mail, Lock, User as UserIcon, ArrowRight, Phone, MapPin, DollarSign, Key, AlertCircle, Image as ImageIcon, Upload, X } from 'lucide-react';
+import { Mail, Lock, User as UserIcon, ArrowRight, Phone, MapPin, DollarSign, Key, AlertCircle, Image as ImageIcon, Upload, X, Tag, Plus } from 'lucide-react';
 import { api } from '../services/api';
 import { convertFileToBase64 } from '../utils';
 
@@ -30,8 +30,25 @@ export const Auth: React.FC<AuthProps> = ({ categories, onLogin, onCancel }) => 
 
   // Team Specific
   const [teamName, setTeamName] = useState('');
-  const [teamCategory, setTeamCategory] = useState(categories[0] || "Principal");
+  const [teamCategories, setTeamCategories] = useState<string[]>([]);
+  const [selectedCatToAdd, setSelectedCatToAdd] = useState(categories[0] || "");
   const [teamLogo, setTeamLogo] = useState('');
+
+  const handleAddCategory = () => {
+    if (!selectedCatToAdd) return;
+    if (teamCategories.length >= 2) {
+      setError('Você pode escolher no máximo 2 categorias para o seu time.');
+      return;
+    }
+    if (!teamCategories.includes(selectedCatToAdd)) {
+      setTeamCategories([...teamCategories, selectedCatToAdd]);
+      setError('');
+    }
+  };
+
+  const handleRemoveCategory = (cat: string) => {
+    setTeamCategories(teamCategories.filter(c => c !== cat));
+  };
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -52,6 +69,12 @@ export const Auth: React.FC<AuthProps> = ({ categories, onLogin, onCancel }) => 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+
+    if (isRegistering && role === UserRole.TEAM_CAPTAIN && teamCategories.length === 0) {
+      setError('Selecione ao menos uma categoria para o seu time.');
+      return;
+    }
+
     setIsLoading(true);
 
     try {
@@ -75,7 +98,7 @@ export const Auth: React.FC<AuthProps> = ({ categories, onLogin, onCancel }) => 
           latitude: -23.6337,
           longitude: -46.7905,
           teamName: role === UserRole.TEAM_CAPTAIN ? teamName : undefined,
-          teamCategories: role === UserRole.TEAM_CAPTAIN ? [teamCategory] : [],
+          teamCategories: role === UserRole.TEAM_CAPTAIN ? teamCategories : [],
           teamLogoUrl: role === UserRole.TEAM_CAPTAIN ? teamLogo : undefined,
           subTeams: [],
           fieldData: role === UserRole.FIELD_OWNER ? {
@@ -169,7 +192,7 @@ export const Auth: React.FC<AuthProps> = ({ categories, onLogin, onCancel }) => 
                     <label className="block text-sm font-medium text-gray-300 mb-1">Seu Nome Completo</label>
                     <div className="relative">
                       <UserIcon className="absolute left-3 top-3 text-gray-400 w-5 h-5" />
-                      <input type="text" required className={inputClass} placeholder="Nome" value={name} onChange={e => setName(e.target.value)} />
+                      <input type="text" required className={inputClass} placeholder="Nome" value={name} onChange={setName ? (e => setName(e.target.value)) : undefined} />
                     </div>
                  </div>
                  <div>
@@ -205,18 +228,38 @@ export const Auth: React.FC<AuthProps> = ({ categories, onLogin, onCancel }) => 
                       <input type="text" required className={simpleInputClass} placeholder="Ex: Os Boleiros FC" value={teamName} onChange={e => setTeamName(e.target.value)} />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-300 mb-1">Categoria</label>
-                      <select 
-                        className={simpleInputClass}
-                        value={teamCategory}
-                        onChange={e => setTeamCategory(e.target.value)}
-                      >
-                        {categories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
-                      </select>
+                      <label className="block text-sm font-medium text-gray-300 mb-1">Categorias (Máx 2)</label>
+                      <div className="flex gap-2">
+                        <select 
+                          className="flex-grow p-3 bg-gray-600 border border-gray-500 rounded-lg text-white outline-none focus:ring-1 focus:ring-grass-500"
+                          value={selectedCatToAdd}
+                          onChange={e => setSelectedCatToAdd(e.target.value)}
+                        >
+                          {categories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+                        </select>
+                        <button 
+                          type="button" 
+                          onClick={handleAddCategory}
+                          className="bg-grass-600 p-3 rounded-lg hover:bg-grass-500 transition active:scale-95 disabled:opacity-50"
+                          disabled={teamCategories.length >= 2}
+                        >
+                          <Plus className="w-5 h-5 text-white" />
+                        </button>
+                      </div>
                     </div>
+
                     <div className="col-span-2">
+                       <div className="flex flex-wrap gap-2 mb-4">
+                          {teamCategories.length === 0 && <p className="text-xs text-gray-400 italic">Nenhuma categoria selecionada.</p>}
+                          {teamCategories.map(cat => (
+                            <div key={cat} className="bg-grass-900/50 border border-grass-500 text-grass-400 px-3 py-1.5 rounded-full text-xs font-black flex items-center gap-2">
+                               {cat}
+                               <button type="button" onClick={() => handleRemoveCategory(cat)} className="hover:text-red-400"><X className="w-3.5 h-3.5" /></button>
+                            </div>
+                          ))}
+                       </div>
+
                        <label className="block text-sm font-medium text-gray-300 mb-1">Logo do Time</label>
-                       
                        {!teamLogo ? (
                          <div className="relative border-2 border-dashed border-gray-500 rounded-lg p-4 hover:border-grass-500 hover:bg-gray-600 transition cursor-pointer text-center group">
                             <input 

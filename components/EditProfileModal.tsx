@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { User } from '../types';
 import { Button } from './Button';
-import { X, User as UserIcon, Shield, Upload, Check, Plus } from 'lucide-react';
+import { X, User as UserIcon, Shield, Upload, Check, Plus, AlertCircle } from 'lucide-react';
 import { convertFileToBase64 } from '../utils';
 
 interface EditProfileModalProps {
@@ -19,14 +19,21 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({ categories, 
   const [teamCategories, setTeamCategories] = useState<string[]>(user.teamCategories || []);
   const [teamLogo, setTeamLogo] = useState(user.teamLogoUrl || '');
   const [selectedNewCat, setSelectedNewCat] = useState(categories[0] || '');
+  const [error, setError] = useState('');
 
   const addCategory = () => {
+    setError('');
+    if (teamCategories.length >= 2) {
+      setError('O limite máximo é de 2 categorias por time.');
+      return;
+    }
     if (selectedNewCat && !teamCategories.includes(selectedNewCat)) {
       setTeamCategories([...teamCategories, selectedNewCat]);
     }
   };
 
   const removeCategory = (cat: string) => {
+    setError('');
     setTeamCategories(teamCategories.filter(c => c !== cat));
   };
 
@@ -42,6 +49,10 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({ categories, 
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (user.role === 'TEAM_CAPTAIN' && teamCategories.length === 0) {
+      setError('Escolha pelo menos 1 categoria.');
+      return;
+    }
     onUpdate({
       ...user,
       name,
@@ -62,6 +73,12 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({ categories, 
         </div>
 
         <form onSubmit={handleSubmit} className="p-8 space-y-8 overflow-y-auto">
+          {error && (
+            <div className="bg-red-50 text-red-600 p-4 rounded-2xl flex items-center gap-3 border border-red-100 text-xs font-bold">
+              <AlertCircle className="w-5 h-5" /> {error}
+            </div>
+          )}
+
           <section className="space-y-4">
             <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Informações Pessoais</h4>
             <div className="grid grid-cols-2 gap-4">
@@ -92,16 +109,24 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({ categories, 
             </div>
 
             <div className="space-y-3">
-                <label className="text-[10px] font-bold text-gray-400">Vincular CategoriasOficiais:</label>
+                <label className="text-[10px] font-bold text-gray-400">Categorias (Máx 2):</label>
                 <div className="flex gap-2">
                     <select 
                         value={selectedNewCat}
                         onChange={e => setSelectedNewCat(e.target.value)}
-                        className="flex-grow p-4 bg-gray-50 border rounded-2xl font-bold outline-none focus:ring-2 focus:ring-grass-500"
+                        className="flex-grow p-4 bg-gray-50 border rounded-2xl font-bold outline-none focus:ring-2 focus:ring-grass-500 disabled:opacity-50"
+                        disabled={teamCategories.length >= 2}
                     >
                         {categories.map(c => <option key={c} value={c}>{c}</option>)}
                     </select>
-                    <button type="button" onClick={addCategory} className="bg-pitch text-white px-6 rounded-2xl active:scale-95 transition-transform"><Plus className="w-6 h-6"/></button>
+                    <button 
+                      type="button" 
+                      onClick={addCategory} 
+                      className="bg-pitch text-white px-6 rounded-2xl active:scale-95 transition-transform disabled:opacity-50"
+                      disabled={teamCategories.length >= 2}
+                    >
+                      <Plus className="w-6 h-6"/>
+                    </button>
                 </div>
 
                 <div className="flex flex-wrap gap-2 pt-2">
