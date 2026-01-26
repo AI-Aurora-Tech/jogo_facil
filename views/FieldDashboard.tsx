@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { Plus, Calendar, Settings, Trash2, Shield, MapPin, Key, X, Save, Trophy, Check, CalendarDays, Clock, Repeat, Users, CircleSlash, Swords, PartyPopper, Star, UsersRound, BookOpenCheck, ChevronRight, AlertCircle, Tag, Upload, ImageIcon, Edit2 } from 'lucide-react';
+import { Plus, Calendar, Settings, Trash2, Shield, MapPin, Key, X, Save, Trophy, Check, CalendarDays, Clock, Repeat, Users, CircleSlash, Swords, PartyPopper, Star, UsersRound, BookOpenCheck, ChevronRight, AlertCircle, Tag, Upload, ImageIcon, Edit2, Loader2 } from 'lucide-react';
 import { Button } from '../components/Button';
 import { Field, MatchSlot, MatchType, User, RegisteredTeam } from '../types';
 import { api } from '../services/api';
@@ -39,6 +39,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
   
   const [registeredTeams, setRegisteredTeams] = useState<RegisteredTeam[]>([]);
   const [editingTeam, setEditingTeam] = useState<RegisteredTeam | null>(null);
+  const [isProcessing, setIsProcessing] = useState(false);
 
   // Form states for adding/editing teams
   const [newTeamName, setNewTeamName] = useState('');
@@ -118,43 +119,69 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
       return;
     }
 
-    if (editingTeam) {
-        await api.updateRegisteredTeam(field.id, editingTeam.id, {
-            name: newTeamName.trim(),
-            fixedDay: newTeamDay,
-            fixedTime: newTeamTime,
-            categories: newTeamSelectedCategories,
-            logoUrl: newTeamLogo
-        });
-        setEditingTeam(null);
-    } else {
-        const newTeam = await api.addRegisteredTeam(field.id, newTeamName.trim(), newTeamDay, newTeamTime, newTeamSelectedCategories, newTeamLogo);
-        const lifetimeSlots: Omit<MatchSlot, 'id'>[] = [];
-        for (let i = 0; i < 52; i++) {
-            lifetimeSlots.push({
-                fieldId: field.id,
-                date: getNextOccurrence(newTeamDay, i),
-                time: newTeamTime,
-                price: field.hourlyRate,
-                matchType: 'FIXO',
-                durationMinutes: 60,
-                isBooked: true,
-                hasLocalTeam: true,
-                localTeamName: newTeamName.trim(),
-                allowedCategories: newTeamSelectedCategories,
-                bookedByTeamName: newTeamName.trim(),
-                status: 'confirmed',
-                customImageUrl: newTeamLogo || undefined
+    setIsProcessing(true);
+    try {
+        if (editingTeam) {
+            // Caso 1: Edição de Equipe
+            const oldName = editingTeam.name;
+            const newName = newTeamName.trim();
+            
+            await api.updateRegisteredTeam(field.id, editingTeam.id, {
+                name: newName,
+                fixedDay: newTeamDay,
+                fixedTime: newTeamTime,
+                categories: newTeamSelectedCategories,
+                logoUrl: newTeamLogo
             });
+
+            // Sincronizar slots futuros se houver mudança de nome, logo ou categorias
+            const today = new Date().toISOString().split('T')[0];
+            const futureSlots = slots.filter(s => s.bookedByTeamName === oldName && s.date >= today);
+            
+            for (const slot of futureSlots) {
+                await api.updateSlot(slot.id, {
+                    bookedByTeamName: newName,
+                    localTeamName: slot.hasLocalTeam ? newName : undefined,
+                    allowedCategories: newTeamSelectedCategories,
+                    customImageUrl: newTeamLogo || undefined
+                });
+            }
+            setEditingTeam(null);
+        } else {
+            // Caso 2: Nova Equipe
+            const newTeam = await api.addRegisteredTeam(field.id, newTeamName.trim(), newTeamDay, newTeamTime, newTeamSelectedCategories, newTeamLogo);
+            const lifetimeSlots: Omit<MatchSlot, 'id'>[] = [];
+            for (let i = 0; i < 52; i++) {
+                lifetimeSlots.push({
+                    fieldId: field.id,
+                    date: getNextOccurrence(newTeamDay, i),
+                    time: newTeamTime,
+                    price: field.hourlyRate,
+                    matchType: 'FIXO',
+                    durationMinutes: 60,
+                    isBooked: true,
+                    hasLocalTeam: true,
+                    localTeamName: newTeamName.trim(),
+                    allowedCategories: newTeamSelectedCategories,
+                    bookedByTeamName: newTeamName.trim(),
+                    status: 'confirmed',
+                    customImageUrl: newTeamLogo || undefined
+                });
+            }
+            onAddSlot(lifetimeSlots);
         }
-        onAddSlot(lifetimeSlots);
+        
+        setNewTeamName('');
+        setNewTeamSelectedCategories([]);
+        setNewTeamLogo('');
+        setTeamError('');
+        await loadTeams();
+        if (editingTeam) window.location.reload(); // Forçar refresh para ver as mudanças nos slots
+    } catch (err) {
+        setTeamError('Erro ao salvar equipe mensalista.');
+    } finally {
+        setIsProcessing(false);
     }
-    
-    setNewTeamName('');
-    setNewTeamSelectedCategories([]);
-    setNewTeamLogo('');
-    setTeamError('');
-    loadTeams();
   };
 
   const handleEditTeam = (team: RegisteredTeam) => {
@@ -169,19 +196,26 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
 
   const handleDeleteRegisteredTeam = async (team: RegisteredTeam) => {
     if (confirm(`AVISO CRÍTICO: Deseja excluir a equipe "${team.name}"? Isso removerá permanentemente TODA A AGENDA (todos os horários futuros) vinculada a este time.`)) {
-      // 1. Remove dos registros locais
-      await api.deleteRegisteredTeam(field.id, team.id);
-      
-      // 2. Busca e remove todos os slots futuros vinculados a este nome de equipe
-      const today = new Date().toISOString().split('T')[0];
-      const slotsToDelete = slots.filter(s => s.bookedByTeamName === team.name && s.date >= today);
-      
-      for (const slot of slotsToDelete) {
-          await api.deleteSlot(slot.id);
+      setIsProcessing(true);
+      try {
+          // 1. Remove dos registros locais
+          await api.deleteRegisteredTeam(field.id, team.id);
+          
+          // 2. Busca e remove todos os slots futuros vinculados a este nome de equipe
+          const today = new Date().toISOString().split('T')[0];
+          const slotsToDelete = slots.filter(s => s.bookedByTeamName === team.name && s.date >= today);
+          
+          for (const slot of slotsToDelete) {
+              await api.deleteSlot(slot.id);
+          }
+          
+          await loadTeams();
+          window.location.reload(); // Recarrega para limpar a agenda visualmente
+      } catch (err) {
+          alert('Erro ao excluir equipe e agenda.');
+      } finally {
+          setIsProcessing(false);
       }
-      
-      loadTeams();
-      window.location.reload(); // Recarrega para limpar a agenda visualmente
     }
   };
 
@@ -239,20 +273,6 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
     setRepeatWeeks(1);
     setHostType('NONE');
   };
-
-  const StarRating = ({ rating, onRate, readonly = false }: { rating: number, onRate?: (r: number) => void, readonly?: boolean }) => {
-    return (
-      <div className="flex gap-1">
-        {[1, 2, 3, 4, 5].map(star => (
-          <Star 
-            key={star} 
-            onClick={() => !readonly && onRate?.(star)}
-            className={`w-5 h-5 ${star <= rating ? 'fill-yellow-400 text-yellow-400' : 'text-gray-300'} ${!readonly ? 'cursor-pointer hover:scale-110 active:scale-90' : ''} transition-all`} 
-          />
-        ))}
-      </div>
-    );
-  }
 
   return (
     <div className="bg-gray-50 min-h-full pb-20">
@@ -355,7 +375,14 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
       {/* MODAL GESTÃO DE MENSALISTAS */}
       {showTeamsModal && (
           <div className="fixed inset-0 bg-pitch/90 backdrop-blur-md z-[150] flex items-center justify-center p-4">
-              <div className="bg-white w-full max-w-2xl rounded-[3rem] p-10 animate-in zoom-in-95 duration-200 flex flex-col max-h-[95vh]">
+              <div className="bg-white w-full max-w-2xl rounded-[3rem] p-10 animate-in zoom-in-95 duration-200 flex flex-col max-h-[95vh] relative">
+                {isProcessing && (
+                  <div className="absolute inset-0 bg-white/60 backdrop-blur-sm z-50 flex flex-col items-center justify-center rounded-[3rem]">
+                      <Loader2 className="w-10 h-10 text-pitch animate-spin mb-2" />
+                      <p className="text-xs font-black uppercase text-pitch">Sincronizando Agenda...</p>
+                  </div>
+                )}
+                
                 <div className="flex justify-between items-center mb-6">
                     <div>
                         <h2 className="text-2xl font-black text-pitch flex items-center gap-3">
@@ -437,8 +464,8 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                             </div>
                         </div>
                     </div>
-                    <Button onClick={handleAddRegisteredTeam} className="w-full py-4 rounded-2xl font-black text-sm uppercase shadow-lg">
-                        {editingTeam ? 'Atualizar Dados' : <><Plus className="w-5 h-5" /> Salvar Mensalista e Gerar Cronograma</>}
+                    <Button onClick={handleAddRegisteredTeam} disabled={isProcessing} className="w-full py-4 rounded-2xl font-black text-sm uppercase shadow-lg">
+                        {editingTeam ? 'Atualizar Dados da Equipe' : <><Plus className="w-5 h-5" /> Salvar Mensalista e Gerar Agenda</>}
                     </Button>
                 </div>
 

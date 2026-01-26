@@ -9,7 +9,7 @@ import { TeamDashboard } from './views/TeamDashboard';
 import { AdminDashboard } from './views/AdminDashboard';
 import { EditProfileModal } from './components/EditProfileModal';
 import { api } from './services/api';
-import { Search, Trophy, User as UserIcon, RefreshCw, Settings } from 'lucide-react';
+import { Search, Trophy, User as UserIcon, RefreshCw, Settings, Building2, MapPin, CalendarDays } from 'lucide-react';
 
 const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
@@ -179,25 +179,58 @@ const App: React.FC = () => {
                     </div>
                     <h2 className="text-2xl font-black text-pitch">{user.name}</h2>
                     <p className="text-gray-400 mb-6 font-medium">{user.email}</p>
-                    <div className="bg-pitch/5 px-4 py-1.5 rounded-full mb-6">
-                        <span className="text-[10px] font-black text-pitch uppercase tracking-widest">{user.role}</span>
+                    <div className="bg-pitch/5 px-4 py-1.5 rounded-full mb-8">
+                        <span className="text-[10px] font-black text-pitch uppercase tracking-widest">
+                          {user.role === UserRole.FIELD_OWNER ? 'Proprietário de Arena' : user.role}
+                        </span>
                     </div>
                     
                     <div className="grid grid-cols-2 gap-3 w-full mb-8">
-                        <div className="bg-gray-50 p-4 rounded-3xl border border-gray-100 text-center">
+                        <div className="bg-gray-50 p-4 rounded-3xl border border-gray-100 text-center flex flex-col items-center justify-center">
                             <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest mb-1">Status Plano</p>
                             <p className="text-xs font-black text-grass-600 uppercase">{user.subscription.split('_')[1] || 'Ativo'}</p>
                         </div>
-                        <div className="bg-gray-50 p-4 rounded-3xl border border-gray-100 text-center flex flex-col items-center">
-                            <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest mb-1">Reputação Time</p>
-                            <div className="flex items-center gap-1">
-                                <span className="text-xs font-black text-pitch">{(user.teamRating || 0).toFixed(1)}</span>
-                                <Trophy className="w-3 h-3 text-yellow-500" />
-                            </div>
-                        </div>
+                        {user.role === UserRole.FIELD_OWNER ? (
+                          <div className="bg-gray-50 p-4 rounded-3xl border border-gray-100 text-center flex flex-col items-center justify-center">
+                              <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest mb-1">Grade Agenda</p>
+                              <div className="flex items-center gap-1">
+                                  <span className="text-xs font-black text-pitch">{mySlots.length} Horários</span>
+                              </div>
+                          </div>
+                        ) : (
+                          <div className="bg-gray-50 p-4 rounded-3xl border border-gray-100 text-center flex flex-col items-center justify-center">
+                              <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest mb-1">Reputação Time</p>
+                              <div className="flex items-center gap-1">
+                                  <span className="text-xs font-black text-pitch">{(user.teamRating || 0).toFixed(1)}</span>
+                                  <Trophy className="w-3 h-3 text-yellow-500" />
+                              </div>
+                          </div>
+                        )}
                     </div>
 
-                    <button onClick={() => setShowProfileModal(true)} className="w-full py-5 bg-pitch text-white rounded-[2rem] font-black shadow-xl active:scale-95 transition-transform uppercase text-xs tracking-widest">Editar Perfil e Time</button>
+                    {user.role === UserRole.FIELD_OWNER && myField && (
+                      <div className="w-full bg-gray-50 rounded-[2rem] p-6 border mb-8 animate-in zoom-in-95 duration-200">
+                          <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-4 flex items-center gap-2">
+                            <Building2 className="w-4 h-4" /> Minha Arena Registrada
+                          </h4>
+                          <div className="space-y-3">
+                              <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 bg-pitch rounded-xl flex items-center justify-center">
+                                  <Trophy className="w-5 h-5 text-grass-500" />
+                                </div>
+                                <span className="font-black text-pitch">{myField.name}</span>
+                              </div>
+                              <div className="flex items-center gap-3 text-gray-400">
+                                <MapPin className="w-4 h-4" />
+                                <span className="text-xs font-bold truncate">{myField.location}</span>
+                              </div>
+                          </div>
+                      </div>
+                    )}
+
+                    <button onClick={() => setShowProfileModal(true)} className="w-full py-5 bg-pitch text-white rounded-[2rem] font-black shadow-xl active:scale-95 transition-transform uppercase text-xs tracking-widest">
+                      Editar Meus Dados
+                    </button>
                     
                     <button onClick={() => window.location.reload()} className="mt-8 text-gray-400 font-bold text-xs hover:text-red-500 uppercase tracking-widest">Sair da Conta</button>
                 </div>
