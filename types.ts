@@ -52,8 +52,8 @@ export interface RegisteredTeam {
   fieldId: string;
   fixedDay: number; // 0-6 (Sun-Sat)
   fixedTime: string;
-  categories: string[]; // As 2 categorias elegíveis
-  logoUrl?: string; // Brasão da equipe
+  categories: string[];
+  logoUrl?: string;
   createdAt: string;
 }
 
@@ -94,34 +94,13 @@ export interface MatchSlot {
   statusUpdatedAt?: string;
   price: number;
   ratingGiven?: number;
+  receiptUrl?: string; // URL ou Base64 do comprovante
+  aiVerificationResult?: string; // Resultado da análise da Gemini
 }
-
-export const COMMON_CATEGORIES = [
-  "Livre",
-  "Sub-09", 
-  "Sub-11", 
-  "Sub-13", 
-  "Sub-15", 
-  "Sub-17", 
-  "Sub-20", 
-  "Principal", 
-  "Veteranos (35+)", 
-  "Cinquentão (50+)", 
-  "Feminino"
-];
 
 export interface VerificationResult {
   isValid: boolean;
   amountFound: number | null;
   dateFound: string | null;
   reason: string;
-}
-
-export interface Notification {
-  id: string;
-  title: string;
-  message: string;
-  type: 'booking' | 'payment' | 'system';
-  read: boolean;
-  createdAt: string;
 }

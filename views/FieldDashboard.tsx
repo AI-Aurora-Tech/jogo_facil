@@ -1,6 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
-import { Plus, Calendar, Settings, Trash2, Shield, MapPin, Key, X, Save, Trophy, Check, CalendarDays, Clock, Repeat, Users, CircleSlash, Swords, PartyPopper, Star, UsersRound, BookOpenCheck, ChevronRight, AlertCircle, Tag, Upload, ImageIcon, Edit2, Loader2, Info } from 'lucide-react';
+/* Added missing FileText icon import */
+import { Plus, Calendar, Settings, Trash2, Shield, MapPin, Key, X, Save, Trophy, Check, CalendarDays, Clock, Repeat, Users, CircleSlash, Swords, PartyPopper, Star, UsersRound, BookOpenCheck, ChevronRight, AlertCircle, Tag, Upload, ImageIcon, Edit2, Loader2, Info, Sparkles, CheckCircle2, Eye, FileText } from 'lucide-react';
 import { Button } from '../components/Button';
 import { Field, MatchSlot, MatchType, User, RegisteredTeam } from '../types';
 import { api } from '../services/api';
@@ -20,445 +21,158 @@ interface FieldDashboardProps {
   onRateTeam: (userId: string, slotId: string, rating: number) => void;
 }
 
-const DAYS_OF_WEEK = [
-  { label: 'Dom', value: 0 },
-  { label: 'Seg', value: 1 },
-  { label: 'Ter', value: 2 },
-  { label: 'Qua', value: 3 },
-  { label: 'Qui', value: 4 },
-  { label: 'Sex', value: 5 },
-  { label: 'Sáb', value: 6 },
-];
-
 export const FieldDashboard: React.FC<FieldDashboardProps> = ({ 
   categories = [], field, slots = [], currentUser, onAddSlot, onRefreshData, onDeleteSlot, onConfirmBooking, onRejectBooking, onUpdateField, onRateTeam
 }) => {
   const [showAddModal, setShowAddModal] = useState(false);
-  const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [showTeamsModal, setShowTeamsModal] = useState(false);
-  const [showManualBookingModal, setShowManualBookingModal] = useState<MatchSlot | null>(null);
-  
-  const [registeredTeams, setRegisteredTeams] = useState<RegisteredTeam[]>([]);
-  const [editingTeam, setEditingTeam] = useState<RegisteredTeam | null>(null);
-  const [isProcessing, setIsProcessing] = useState(false);
+  const [viewingSlot, setViewingSlot] = useState<MatchSlot | null>(null);
 
-  // Form states for adding/editing teams
-  const [newTeamName, setNewTeamName] = useState('');
-  const [newTeamDay, setNewTeamDay] = useState<number>(1);
-  const [newTeamTime, setNewTeamTime] = useState('20:00');
-  const [newTeamSelectedCategories, setNewTeamSelectedCategories] = useState<string[]>([]);
-  const [newTeamLogo, setNewTeamLogo] = useState('');
-  const [teamError, setTeamError] = useState('');
-
-  // States for new single slot
-  const [selectedDay, setSelectedDay] = useState<number | null>(null);
-  const [newTime, setNewTime] = useState('19:00');
-  const [matchType, setMatchType] = useState<MatchType>('AMISTOSO');
-  const [selectedCategory, setSelectedCategory] = useState(categories[0] || "Principal");
-  const [price, setPrice] = useState(field?.hourlyRate?.toString() || "0");
-  
-  // Settings states
-  const [editName, setEditName] = useState(field?.name || '');
-  const [editLoc, setEditLoc] = useState(field?.location || '');
-  const [editRate, setEditRate] = useState(field?.hourlyRate?.toString() || "0");
-  const [editPixKey, setEditPixKey] = useState(field?.pixConfig?.key || '');
-  const [editPixName, setEditPixName] = useState(field?.pixConfig?.name || '');
-
-  useEffect(() => {
-    if (field?.id) loadTeams();
-  }, [field?.id]);
-
-  const loadTeams = async () => {
-    try {
-        const teams = await api.getRegisteredTeams(field.id);
-        setRegisteredTeams(teams || []);
-    } catch (e) {
-        setRegisteredTeams([]);
-    }
-  };
-
-  const resetTeamForm = () => {
-      setNewTeamName('');
-      setNewTeamDay(1);
-      setNewTeamTime('20:00');
-      setNewTeamSelectedCategories([]);
-      setNewTeamLogo('');
-      setTeamError('');
-      setEditingTeam(null);
-  };
-
-  const getNextOccurrence = (dayOfWeek: number, weeksAhead: number = 0) => {
-    const d = new Date();
-    d.setDate(d.getDate() + (dayOfWeek + 7 - d.getDay()) % 7 + (weeksAhead * 7));
-    return d.toISOString().split('T')[0];
-  };
-
-  const handleToggleCategory = (cat: string) => {
-    setTeamError('');
-    if (newTeamSelectedCategories.includes(cat)) {
-      setNewTeamSelectedCategories(newTeamSelectedCategories.filter(c => c !== cat));
-    } else {
-      if (newTeamSelectedCategories.length >= 2) {
-        setTeamError('Selecione exatamente 2 categorias.');
-        return;
-      }
-      setNewTeamSelectedCategories([...newTeamSelectedCategories, cat]);
-    }
-  };
-
-  const handleLogoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      try {
-        const base64 = await convertFileToBase64(file);
-        setNewTeamLogo(base64);
-      } catch (err) {
-        setTeamError('Erro ao processar imagem do brasão.');
-      }
-    }
-  };
-
-  const handleAddRegisteredTeam = async () => {
-    if (!newTeamName.trim()) {
-      setTeamError('Informe o nome da equipe.');
-      return;
-    }
-    if (newTeamSelectedCategories.length !== 2) {
-      setTeamError('Você deve informar EXATAMENTE 2 categorias elegíveis.');
-      return;
-    }
-
-    setIsProcessing(true);
-    try {
-        if (editingTeam) {
-            const oldName = editingTeam.name;
-            const newName = newTeamName.trim();
-            
-            await api.updateRegisteredTeam(field.id, editingTeam.id, {
-                name: newName,
-                fixedDay: newTeamDay,
-                fixedTime: newTeamTime,
-                categories: newTeamSelectedCategories,
-                logoUrl: newTeamLogo
-            });
-
-            // Sincronizar slots futuros
-            const today = new Date().toISOString().split('T')[0];
-            const futureSlots = (slots || []).filter(s => s.bookedByTeamName === oldName && s.date >= today);
-            
-            for (const slot of futureSlots) {
-                await api.updateSlot(slot.id, {
-                    bookedByTeamName: newName,
-                    localTeamName: slot.hasLocalTeam ? newName : undefined,
-                    allowedCategories: newTeamSelectedCategories,
-                    customImageUrl: newTeamLogo || undefined
-                });
-            }
-        } else {
-            // 1. Registrar a equipe
-            await api.addRegisteredTeam(field.id, newTeamName.trim(), newTeamDay, newTeamTime, newTeamSelectedCategories, newTeamLogo);
-            
-            // 2. Gerar agenda de 52 semanas
-            const lifetimeSlots: Omit<MatchSlot, 'id'>[] = [];
-            for (let i = 0; i < 52; i++) {
-                lifetimeSlots.push({
-                    fieldId: field.id,
-                    date: getNextOccurrence(newTeamDay, i),
-                    time: newTeamTime,
-                    price: field.hourlyRate,
-                    matchType: 'FIXO',
-                    durationMinutes: 60,
-                    isBooked: true,
-                    hasLocalTeam: true,
-                    localTeamName: newTeamName.trim(),
-                    allowedCategories: newTeamSelectedCategories,
-                    bookedByTeamName: newTeamName.trim(),
-                    status: 'confirmed',
-                    customImageUrl: newTeamLogo || undefined
-                });
-            }
-            // 3. Aguardar a inserção no banco
-            await onAddSlot(lifetimeSlots);
-        }
-        
-        // 4. Limpar e atualizar
-        resetTeamForm();
-        await loadTeams();
-        // A função addSlots em App.tsx já chama refreshData(), então não precisamos chamar aqui de novo.
-    } catch (err) {
-        console.error("Erro ao processar mensalista:", err);
-        setTeamError('Erro técnico ao salvar. Verifique sua conexão.');
-    } finally {
-        setIsProcessing(false);
-    }
-  };
-
-  const handleEditTeam = (team: RegisteredTeam) => {
-    setEditingTeam(team);
-    setNewTeamName(team.name);
-    setNewTeamDay(team.fixedDay);
-    setNewTeamTime(team.fixedTime);
-    setNewTeamSelectedCategories(team.categories || []);
-    setNewTeamLogo(team.logoUrl || '');
-    setTeamError('');
-  };
-
-  const handleDeleteRegisteredTeam = async (team: RegisteredTeam) => {
-    if (confirm(`AVISO CRÍTICO: Deseja excluir a equipe "${team.name}"? Isso removerá permanentemente TODA A AGENDA (todos os horários futuros) vinculada a este time.`)) {
-      setIsProcessing(true);
-      try {
-          await api.deleteRegisteredTeam(field.id, team.id);
-          const today = new Date().toISOString().split('T')[0];
-          const slotsToDelete = (slots || []).filter(s => s.bookedByTeamName === team.name && s.date >= today);
-          
-          for (const slot of slotsToDelete) {
-              await api.deleteSlot(slot.id);
-          }
-          
-          await loadTeams();
-          onRefreshData();
-          resetTeamForm();
-      } catch (err) {
-          alert('Erro ao excluir equipe e agenda.');
-      } finally {
-          setIsProcessing(false);
-      }
-    }
-  };
-
-  const handleManualBooking = async (slotId: string, teamName: string) => {
-    if (!teamName) return;
-    await api.updateSlot(slotId, {
-      isBooked: true,
-      bookedByTeamName: teamName,
-      status: 'confirmed',
-      bookedByCategory: 'Reserva Arena'
-    });
-    setShowManualBookingModal(null);
-    onRefreshData();
-  };
-
+  const pendingSlots = (slots || []).filter(s => s.status === 'pending_verification' && s.receiptUrl);
   const todayStr = new Date().toISOString().split('T')[0];
   const sortedSlots = (slots || [])
     .filter(s => s.date >= todayStr)
     .sort((a, b) => new Date(`${a.date}T${a.time}`).getTime() - new Date(`${b.date}T${b.time}`).getTime());
 
-  const handleSaveSettings = async () => {
-    const success = await onUpdateField(field.id, {
-        name: editName,
-        location: editLoc,
-        hourlyRate: Number(editRate),
-        pixConfig: { key: editPixKey, name: editPixName }
-    });
-    if (success) setShowSettingsModal(false);
-  };
-
-  const handlePublishSlots = async () => {
-    if (selectedDay === null || !newTime) return alert("Selecione o dia e a hora");
-    setIsProcessing(true);
-    try {
-      const newSlots: Omit<MatchSlot, 'id'>[] = [];
-      const weeksToPublish = 4;
-      for (let i = 0; i < weeksToPublish; i++) {
-        newSlots.push({
-          fieldId: field.id,
-          date: getNextOccurrence(selectedDay, i),
-          time: newTime,
-          price: Number(price) || field.hourlyRate,
-          matchType,
-          durationMinutes: 60,
-          isBooked: false,
-          hasLocalTeam: false,
-          allowedCategories: [selectedCategory],
-          status: 'available'
-        });
-      }
-      await onAddSlot(newSlots);
-      setShowAddModal(false);
-    } finally {
-      setIsProcessing(false);
-    }
-  };
-
   return (
-    <div className="bg-gray-50 min-h-full pb-20">
-      <div className="p-5 bg-white border-b sticky top-0 z-10 flex justify-between items-center">
+    <div className="bg-gray-50 min-h-screen pb-24">
+      <div className="p-6 bg-white border-b sticky top-0 z-20 flex justify-between items-center glass">
         <div>
-            <h1 className="text-2xl font-black text-pitch">Minha Arena</h1>
-            <p className="text-gray-500 text-xs font-bold uppercase tracking-tighter">{field?.name || 'Carregando...'}</p>
+            <h1 className="text-2xl font-black text-pitch tracking-tight">Gestão Arena</h1>
+            <p className="text-[10px] font-black text-grass-600 uppercase tracking-[0.2em]">{field?.name}</p>
         </div>
         <div className="flex gap-2">
-            <button onClick={() => { resetTeamForm(); setShowTeamsModal(true); }} className="p-2.5 bg-gray-50 rounded-xl text-gray-500 active:scale-95 transition-transform flex items-center gap-2">
-                <UsersRound className="w-5 h-5" />
-                <span className="text-[10px] font-black uppercase hidden sm:block">Mensalistas</span>
-            </button>
-            <button onClick={() => setShowSettingsModal(true)} className="p-2.5 bg-gray-50 rounded-xl text-gray-500 active:scale-95 transition-transform"><Settings className="w-5 h-5" /></button>
+            <button onClick={() => setShowTeamsModal(true)} className="p-3 bg-gray-100 rounded-2xl text-pitch active:scale-95 transition-transform"><UsersRound className="w-5 h-5" /></button>
+            <button onClick={() => setShowAddModal(true)} className="p-3 bg-pitch rounded-2xl text-white active:scale-95 transition-transform"><Plus className="w-5 h-5" /></button>
         </div>
       </div>
 
-      <div className="p-5 space-y-6">
-        <div className="grid grid-cols-2 gap-4">
-            <div onClick={() => { resetTeamForm(); setShowTeamsModal(true); }} className="bg-white p-5 rounded-[2rem] shadow-sm border border-gray-100 flex flex-col items-center justify-center cursor-pointer active:scale-95 transition-transform group">
-                <div className="bg-grass-100 p-3 rounded-2xl text-grass-600 mb-2 group-hover:scale-110 transition-transform">
-                    <UsersRound className="w-6 h-6" />
-                </div>
-                <p className="text-[10px] font-black text-gray-400 uppercase">Mensalistas</p>
-                <p className="text-xl font-black text-pitch">{(registeredTeams || []).length}</p>
+      <div className="p-6 space-y-8">
+        {/* Task Center */}
+        {pendingSlots.length > 0 && (
+          <div className="bg-orange-50 border-2 border-orange-100 rounded-[2.5rem] p-6 animate-in slide-in-from-left duration-500">
+            <div className="flex items-center gap-2 mb-4">
+                <Sparkles className="w-5 h-5 text-orange-600" />
+                <h3 className="text-sm font-black text-orange-900 uppercase tracking-widest">Aguardando Aprovação ({pendingSlots.length})</h3>
             </div>
-            <div onClick={() => setShowAddModal(true)} className="bg-pitch p-5 rounded-[2rem] shadow-lg flex flex-col items-center justify-center cursor-pointer active:scale-95 transition-transform group">
-                <div className="bg-grass-500 p-3 rounded-2xl text-pitch mb-2 group-hover:rotate-90 transition-transform">
-                    <Plus className="w-6 h-6" />
-                </div>
-                <p className="text-[10px] font-black text-grass-400 uppercase">Novo Horário</p>
-                <p className="text-xs font-black text-white uppercase">Abrir Agenda</p>
-            </div>
-        </div>
-
-        <div className="bg-white rounded-[2rem] p-6 shadow-sm border border-gray-100">
-            <div className="flex justify-between items-center mb-6">
-                <div>
-                    <p className="text-gray-400 text-[10px] font-black uppercase tracking-widest mb-1">Agenda Próximos Dias</p>
-                    <h2 className="text-2xl font-black text-pitch">{(sortedSlots || []).length} Slots Criados</h2>
-                </div>
-                <Calendar className="w-8 h-8 text-gray-100" />
-            </div>
-
             <div className="space-y-3">
-                {(!sortedSlots || sortedSlots.length === 0) && (
-                  <div className="text-center py-10 bg-gray-50 rounded-3xl border border-dashed border-gray-200">
-                    <p className="text-gray-400 font-bold text-xs uppercase">Agenda Vazia</p>
-                  </div>
-                )}
-                {(sortedSlots || []).slice(0, 10).map(slot => (
-                    <div key={slot.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-2xl border border-gray-100 group">
-                        <div className="flex items-center gap-3">
-                            <div className="text-center bg-white w-10 h-10 rounded-xl flex flex-col items-center justify-center border shadow-sm">
-                                <span className="text-[8px] font-black text-gray-400 uppercase">{slot.date.split('-')[2]}</span>
-                                <span className="text-[10px] font-black text-pitch">{slot.time}</span>
+                {pendingSlots.map(slot => (
+                    <div key={slot.id} className="bg-white p-4 rounded-3xl border border-orange-200 flex items-center justify-between shadow-sm">
+                        <div className="flex items-center gap-3 min-w-0">
+                            <div className="w-10 h-10 bg-orange-100 rounded-xl flex items-center justify-center text-orange-600 shrink-0">
+                                <FileText className="w-5 h-5" />
                             </div>
-                            <div>
-                                <p className="text-xs font-black text-pitch truncate max-w-[120px]">{slot.isBooked ? slot.bookedByTeamName : 'Disponível'}</p>
-                                <span className={`text-[8px] font-black uppercase px-1.5 py-0.5 rounded ${slot.matchType === 'FIXO' ? 'bg-orange-100 text-orange-600' : 'bg-grass-100 text-grass-600'}`}>{slot.matchType}</span>
+                            <div className="min-w-0">
+                                <p className="text-xs font-black text-pitch truncate">{slot.bookedByTeamName || slot.opponentTeamName}</p>
+                                <p className="text-[9px] font-bold text-gray-400 uppercase tracking-tighter">{slot.time} • R$ {slot.price}</p>
                             </div>
                         </div>
                         <div className="flex gap-2">
-                             {slot.status === 'pending_verification' && (
-                                 <div className="w-2 h-2 rounded-full bg-orange-500 animate-pulse"></div>
-                             )}
-                             <button onClick={() => onDeleteSlot(slot.id)} className="p-2 text-gray-300 hover:text-red-500"><Trash2 className="w-4 h-4" /></button>
+                            <button onClick={() => setViewingSlot(slot)} className="p-2.5 bg-gray-50 text-gray-400 rounded-xl hover:text-pitch"><Eye className="w-4 h-4" /></button>
+                            <button onClick={() => onConfirmBooking(slot.id)} className="p-2.5 bg-orange-500 text-white rounded-xl shadow-lg active:scale-90 transition-transform"><Check className="w-4 h-4" /></button>
                         </div>
+                    </div>
+                ))}
+            </div>
+          </div>
+        )}
+
+        <div className="grid grid-cols-2 gap-4">
+            <div className="bg-white p-6 rounded-[2.5rem] border border-gray-100 shadow-sm flex flex-col items-center">
+                <div className="bg-grass-50 p-4 rounded-2xl text-grass-600 mb-2">
+                    <Trophy className="w-6 h-6" />
+                </div>
+                <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Ocupação</span>
+                <span className="text-2xl font-black text-pitch">
+                    {slots.length > 0 ? ((slots.filter(s => s.status === 'confirmed').length / slots.length) * 100).toFixed(0) : 0}%
+                </span>
+            </div>
+            <div className="bg-white p-6 rounded-[2.5rem] border border-gray-100 shadow-sm flex flex-col items-center">
+                <div className="bg-blue-50 p-4 rounded-2xl text-blue-600 mb-2">
+                    <Star className="w-6 h-6" />
+                </div>
+                <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Avaliação</span>
+                <span className="text-2xl font-black text-pitch">4.9</span>
+            </div>
+        </div>
+
+        <div className="bg-pitch rounded-[3rem] p-8 text-white shadow-2xl relative overflow-hidden group">
+            <div className="absolute top-0 right-0 w-32 h-32 bg-grass-500 rounded-full blur-[80px] opacity-20 group-hover:opacity-40 transition-opacity"></div>
+            <div className="relative z-10 flex justify-between items-end">
+                <div>
+                    <h3 className="text-3xl font-black mb-1">Grade Ativa</h3>
+                    <p className="text-[10px] font-black text-grass-500 uppercase tracking-[0.3em]">Gerenciar Próximos Jogos</p>
+                </div>
+                <div className="text-right">
+                    <span className="block text-xs font-black text-gray-400 uppercase">Hoje</span>
+                    <span className="text-3xl font-black">{sortedSlots.filter(s => s.date === todayStr).length}</span>
+                </div>
+            </div>
+            
+            <div className="mt-8 space-y-4">
+                {sortedSlots.slice(0, 5).map(slot => (
+                    <div key={slot.id} className="bg-white/5 border border-white/10 p-4 rounded-3xl flex items-center justify-between group hover:bg-white/10 transition-colors">
+                        <div className="flex items-center gap-4">
+                            <div className="text-center">
+                                <span className="block text-[10px] font-black text-grass-500 uppercase">{slot.time}</span>
+                                <span className="text-xs font-bold text-gray-400 uppercase tracking-tighter">{slot.date.split('-').reverse().slice(0,2).join('/')}</span>
+                            </div>
+                            <div className="w-px h-8 bg-white/10"></div>
+                            <div>
+                                <p className="text-sm font-black truncate max-w-[120px]">{slot.isBooked ? slot.bookedByTeamName : slot.opponentTeamName ? `${slot.localTeamName} vs ${slot.opponentTeamName}` : 'Livre'}</p>
+                                <span className={`text-[8px] font-black uppercase px-2 py-0.5 rounded ${slot.status === 'confirmed' ? 'bg-grass-500 text-pitch' : 'bg-white/10 text-gray-400'}`}>
+                                    {slot.status === 'confirmed' ? 'Confirmado' : 'Disponível'}
+                                </span>
+                            </div>
+                        </div>
+                        <button onClick={() => onDeleteSlot(slot.id)} className="p-2 text-white/20 hover:text-red-400 transition-colors"><Trash2 className="w-4 h-4"/></button>
                     </div>
                 ))}
             </div>
         </div>
       </div>
 
-      {showTeamsModal && (
-          <div className="fixed inset-0 bg-pitch/90 backdrop-blur-md z-[150] flex items-center justify-center p-4">
-              <div className="bg-white w-full max-w-2xl rounded-[3rem] p-10 animate-in zoom-in-95 duration-200 flex flex-col max-h-[95vh] relative overflow-hidden">
-                {isProcessing && (
-                  <div className="absolute inset-0 bg-white/60 backdrop-blur-sm z-[160] flex flex-col items-center justify-center">
-                      <Loader2 className="w-10 h-10 text-pitch animate-spin mb-2" />
-                      <p className="text-xs font-black uppercase text-pitch">Salvando Dados e Gerando Agenda...</p>
-                  </div>
-                )}
-                
-                <div className="flex justify-between items-center mb-8 shrink-0">
+      {/* Modal Visualização Comprovante */}
+      {viewingSlot && (
+          <div className="fixed inset-0 bg-pitch/95 backdrop-blur-xl z-[200] flex items-center justify-center p-6 animate-in fade-in duration-300">
+             <div className="bg-white w-full max-w-lg rounded-[3rem] p-10 shadow-2xl animate-in zoom-in-95 duration-300">
+                <div className="flex justify-between items-start mb-8">
                     <div>
-                        <h2 className="text-2xl font-black text-pitch flex items-center gap-3">
-                            <UsersRound className="w-7 h-7 text-grass-500" /> Centro de Mensalistas
-                        </h2>
-                        <p className="text-xs font-bold text-gray-400 uppercase mt-1">Times fixos com renovação automática</p>
+                        <h3 className="text-2xl font-black text-pitch">Análise de Pagamento</h3>
+                        <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mt-1">Validação IA Inteligente</p>
                     </div>
-                    <button onClick={() => { setShowTeamsModal(false); resetTeamForm(); }} className="p-2 bg-gray-100 rounded-full"><X className="w-6 h-6"/></button>
-                </div>
-                
-                <div className="bg-gray-50 p-6 rounded-[2rem] border border-gray-100 mb-8 space-y-4 shrink-0">
-                    <h4 className="text-[11px] font-black text-pitch uppercase tracking-widest px-1">
-                        {editingTeam ? '📝 Editando Dados da Equipe' : '✨ Novo Mensalista Vitalício'}
-                    </h4>
-
-                    {teamError && (
-                      <div className="bg-red-50 p-3 rounded-xl border border-red-100 flex items-center gap-2 text-red-600 text-[10px] font-bold uppercase">
-                        <AlertCircle className="w-4 h-4" /> {teamError}
-                      </div>
-                    )}
-                    
-                    <div className="flex gap-4">
-                        <div className="w-20 h-20 bg-white rounded-[1.5rem] border-2 border-dashed border-gray-300 flex items-center justify-center overflow-hidden shrink-0 relative group">
-                            {newTeamLogo ? <img src={newTeamLogo} className="w-full h-full object-cover"/> : <Upload className="w-6 h-6 text-gray-300"/>}
-                            <input type="file" accept="image/*" onChange={handleLogoChange} className="absolute inset-0 opacity-0 cursor-pointer" title="Brasão do Time" />
-                        </div>
-                        <div className="flex-grow space-y-3">
-                            <input 
-                                type="text" 
-                                placeholder="Nome da Equipe (Ex: Amigos da Segunda)" 
-                                value={newTeamName}
-                                onChange={e => setNewTeamName(e.target.value)}
-                                className="w-full p-4 bg-white border rounded-2xl font-black outline-none focus:ring-2 focus:ring-grass-500"
-                            />
-                            <div className="grid grid-cols-2 gap-2">
-                                <select value={newTeamDay} onChange={e => setNewTeamDay(Number(e.target.value))} className="p-3 bg-white border rounded-xl font-bold text-xs outline-none">
-                                    {(DAYS_OF_WEEK || []).map(d => <option key={d.value} value={d.value}>{d.label}</option>)}
-                                </select>
-                                <input type="time" value={newTeamTime} onChange={e => setNewTeamTime(e.target.value)} className="p-3 bg-white border rounded-xl font-bold text-xs outline-none" />
-                            </div>
-                        </div>
-                    </div>
-
-                    <div className="space-y-2">
-                        <p className="text-[9px] font-black text-gray-400 uppercase pl-1">Categorias Elegíveis (Selecione 2):</p>
-                        <div className="flex flex-wrap gap-2">
-                            {(categories || []).map(cat => (
-                                <button
-                                    key={cat}
-                                    onClick={() => handleToggleCategory(cat)}
-                                    className={`px-3 py-1.5 rounded-lg text-[9px] font-black uppercase border transition-all ${newTeamSelectedCategories.includes(cat) ? 'bg-pitch border-pitch text-white' : 'bg-white text-gray-400 border-gray-100'}`}
-                                >
-                                    {cat}
-                                </button>
-                            ))}
-                        </div>
-                    </div>
-
-                    <Button onClick={handleAddRegisteredTeam} className="w-full py-4 rounded-2xl font-black shadow-lg">
-                        {editingTeam ? 'Sincronizar Alterações' : 'Salvar e Gerar Agenda Anual'}
-                    </Button>
-                    {editingTeam && (
-                        <button onClick={resetTeamForm} className="w-full text-xs font-black text-gray-400 uppercase">Cancelar Edição</button>
-                    )}
+                    <button onClick={() => setViewingSlot(null)} className="p-2 bg-gray-100 rounded-full"><X className="w-6 h-6"/></button>
                 </div>
 
-                <div className="overflow-y-auto space-y-3 flex-grow pr-2 custom-scrollbar">
-                    <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-1 mb-2">Equipes Registradas {(registeredTeams || []).length}</h4>
-                    {(!registeredTeams || registeredTeams.length === 0) && (
-                        <div className="text-center py-12">
-                            <Users className="w-12 h-12 text-gray-100 mx-auto mb-3" />
-                            <p className="text-gray-300 font-bold text-xs uppercase italic">Nenhum mensalista ainda.</p>
-                        </div>
-                    )}
-                    {(registeredTeams || []).map(team => (
-                        <div key={team.id} className={`p-5 bg-white rounded-2xl border flex justify-between items-center group transition-all ${editingTeam?.id === team.id ? 'border-grass-500 bg-grass-50' : 'border-gray-100 hover:border-grass-200'}`}>
-                            <div className="flex items-center gap-4">
-                                <div className="w-12 h-12 bg-pitch rounded-2xl overflow-hidden flex items-center justify-center text-grass-500 font-black text-xs">
-                                    {team.logoUrl ? <img src={team.logoUrl} className="w-full h-full object-cover" /> : team?.name?.charAt(0)}
+                <div className="bg-gray-50 rounded-[2rem] border overflow-hidden mb-8">
+                    <img src={viewingSlot.receiptUrl} className="w-full h-48 object-contain bg-white" alt="Comprovante" />
+                    <div className="p-6">
+                        {viewingSlot.aiVerificationResult && (
+                            <div className="bg-white p-5 rounded-2xl border mb-4">
+                                <div className="flex items-center gap-2 mb-2">
+                                    <Sparkles className="w-4 h-4 text-grass-600" />
+                                    <span className="text-[10px] font-black text-grass-600 uppercase tracking-widest">Resultado Gemini AI</span>
                                 </div>
-                                <div>
-                                    <p className="font-black text-pitch text-sm">{team.name}</p>
-                                    <p className="text-[9px] font-bold text-gray-400 uppercase">Toda {(DAYS_OF_WEEK || []).find(d => d.value === team.fixedDay)?.label} • {team.fixedTime}</p>
-                                    <div className="flex gap-1 mt-1">
-                                        {(team.categories || []).map(c => <span key={c} className="text-[7px] bg-gray-50 px-1 py-0.5 rounded font-black text-gray-400 border border-gray-100 uppercase">{c}</span>)}
-                                    </div>
-                                </div>
+                                <p className="text-xs font-bold text-pitch italic">
+                                    {JSON.parse(viewingSlot.aiVerificationResult).reason}
+                                </p>
                             </div>
-                            <div className="flex gap-2">
-                                <button onClick={() => handleEditTeam(team)} className="p-2.5 bg-gray-50 text-gray-400 rounded-xl hover:text-pitch transition-colors"><Edit2 className="w-4 h-4" /></button>
-                                <button onClick={() => handleDeleteRegisteredTeam(team)} className="p-2.5 bg-red-50 text-red-400 rounded-xl hover:bg-red-500 hover:text-white transition-all"><Trash2 className="w-4 h-4" /></button>
-                            </div>
+                        )}
+                        <div className="flex items-center justify-between">
+                            <span className="text-xs font-black text-gray-400 uppercase tracking-widest">Valor Esperado:</span>
+                            <span className="text-lg font-black text-pitch">R$ {viewingSlot.price}</span>
                         </div>
-                    ))}
+                    </div>
                 </div>
-              </div>
+
+                <div className="flex gap-4">
+                    <button onClick={() => onRejectBooking(viewingSlot.id)} className="flex-1 py-4 font-black text-red-500 uppercase text-[10px] tracking-widest hover:bg-red-50 rounded-2xl transition-colors">Invalidar</button>
+                    <Button className="flex-[2] py-4 rounded-2xl font-black" onClick={() => {
+                        onConfirmBooking(viewingSlot.id);
+                        setViewingSlot(null);
+                    }}>APROVAR RESERVA</Button>
+                </div>
+             </div>
           </div>
       )}
     </div>

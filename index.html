@@ -4,9 +4,9 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
-    <title>Jogo Fácil</title>
+    <title>Jogo Fácil | Pro Football Management</title>
     
-    <!-- PWA / Mobile Meta Tags -->
+    <!-- PWA Meta Tags -->
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="Jogo Fácil" />
@@ -29,47 +29,64 @@
                 900: '#064e3b',
               },
               pitch: '#022c22',
+              card: '#ffffff',
             },
             borderRadius: {
               '2xl': '1.25rem',
               '3xl': '1.5rem',
+              '4xl': '2rem',
+              '5xl': '2.5rem',
+            },
+            animation: {
+              'pulse-fast': 'pulse 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+              'slide-up': 'slideUp 0.4s ease-out forwards',
+              'fade-in': 'fadeIn 0.3s ease-out forwards',
+            },
+            keyframes: {
+              slideUp: {
+                '0%': { transform: 'translateY(100%)' },
+                '100%': { transform: 'translateY(0)' },
+              },
+              fadeIn: {
+                '0%': { opacity: '0' },
+                '100%': { opacity: '1' },
+              }
             }
           }
         }
       }
     </script>
     <style>
-      @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+      @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap');
       
       body {
-        font-family: 'Inter', sans-serif;
+        font-family: 'Plus Jakarta Sans', sans-serif;
         overscroll-behavior-y: none;
         -webkit-tap-highlight-color: transparent;
-        user-select: none;
-        background-color: #f9fafb;
+        background-color: #f8fafc;
+        color: #0f172a;
       }
       
-      /* Safe area adjustments for iOS notches */
-      .pb-safe {
-        padding-bottom: env(safe-area-inset-bottom);
-      }
-      .pt-safe {
-        padding-top: env(safe-area-inset-top);
+      .pb-safe { padding-bottom: env(safe-area-inset-bottom); }
+      .pt-safe { padding-top: env(safe-area-inset-top); }
+
+      ::-webkit-scrollbar { width: 0px; display: none; }
+
+      .glass {
+        background: rgba(255, 255, 255, 0.8);
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+        border: 1px solid rgba(255, 255, 255, 0.2);
       }
 
-      /* Custom scrollbar for desktop preview */
-      ::-webkit-scrollbar {
-        width: 0px;
-      }
+      .no-scrollbar::-webkit-scrollbar { display: none; }
+      .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 
-      /* Bottom Nav styling */
-      .active-tab {
+      input, select, button { outline: none !important; }
+
+      .active-nav-item {
         color: #10b981;
-      }
-      
-      /* Card shadows */
-      .app-card {
-        box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+        transform: translateY(-2px);
       }
     </style>
   <script type="importmap">
@@ -87,7 +104,7 @@
 }
 </script>
 </head>
-  <body class="bg-gray-50 text-gray-900 overflow-x-hidden antialiased">
+  <body class="overflow-x-hidden antialiased">
     <div id="root"></div>
     <script type="module" src="/index.tsx"></script>
   </body>
