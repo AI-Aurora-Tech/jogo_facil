@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { Plus, Calendar, Settings, Trash2, Shield, MapPin, Key, X, Save, Trophy, Check, CalendarDays, Clock, Repeat, Users, CircleSlash, Swords, PartyPopper, Star, UsersRound, BookOpenCheck } from 'lucide-react';
+import { Plus, Calendar, Settings, Trash2, Shield, MapPin, Key, X, Save, Trophy, Check, CalendarDays, Clock, Repeat, Users, CircleSlash, Swords, PartyPopper, Star, UsersRound, BookOpenCheck, ChevronRight } from 'lucide-react';
 import { Button } from '../components/Button';
 import { Field, MatchSlot, MatchType, User, RegisteredTeam } from '../types';
 import { api } from '../services/api';
@@ -45,7 +45,10 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
   const [matchType, setMatchType] = useState<MatchType>('AMISTOSO');
   const [selectedCategory, setSelectedCategory] = useState(categories[0] || "Principal");
   const [price, setPrice] = useState(field.hourlyRate.toString());
-  const [hostType, setHostType] = useState<'NONE' | 'OWNER'>('NONE');
+  
+  // Host selection states
+  const [hostType, setHostType] = useState<'NONE' | 'OWNER' | 'REGISTERED'>('NONE');
+  const [selectedHostTeamName, setSelectedHostTeamName] = useState<string>('');
   const [selectedHostCategory, setSelectedHostCategory] = useState<string>('');
   const [repeatWeeks, setRepeatWeeks] = useState(1);
 
@@ -89,7 +92,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
       bookedByCategory: 'Reserva Arena'
     });
     setShowManualBookingModal(null);
-    window.location.reload(); // Refresh local state via re-render trigger (or parent update)
+    window.location.reload(); 
   };
 
   const todayStr = new Date().toISOString().split('T')[0];
@@ -127,9 +130,9 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
         matchType,
         durationMinutes: 60,
         isBooked: false,
-        hasLocalTeam: hostType === 'OWNER',
-        localTeamName: hostType === 'OWNER' ? currentUser.teamName : undefined,
-        allowedCategories: [hostType === 'OWNER' ? selectedHostCategory : selectedCategory],
+        hasLocalTeam: hostType !== 'NONE',
+        localTeamName: hostType === 'OWNER' ? currentUser.teamName : (hostType === 'REGISTERED' ? selectedHostTeamName : undefined),
+        allowedCategories: [hostType !== 'NONE' ? selectedHostCategory : selectedCategory],
         status: 'available'
       });
     }
@@ -141,6 +144,8 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
     setRepeatWeeks(1);
     setHostType('NONE');
     setMatchType('AMISTOSO');
+    setSelectedHostTeamName('');
+    setSelectedHostCategory('');
   };
 
   const StarRating = ({ rating, onRate, readonly = false }: { rating: number, onRate?: (r: number) => void, readonly?: boolean }) => {
@@ -377,8 +382,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                   <CalendarDays className="w-8 h-8 text-grass-500" /> Novo Horário
                 </h2>
                 
-                <div className="space-y-8">
-                    {/* Seleção de Dia da Semana */}
+                <div className="space-y-8 pb-10">
                     <div className="space-y-3">
                         <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block">Qual dia da semana?</label>
                         <div className="grid grid-cols-7 gap-1.5">
@@ -408,7 +412,6 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                         </div>
                     </div>
 
-                    {/* SELEÇÃO DE TIPO DE JOGO */}
                     <div className="space-y-3">
                         <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block">Tipo de Jogo</label>
                         <div className="grid grid-cols-2 gap-3">
@@ -429,33 +432,69 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                         </div>
                     </div>
 
-                    {/* SELEÇÃO DE MANDANTE */}
-                    <div className="space-y-3">
+                    <div className="space-y-4">
                         <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block">Quem é o Mandante?</label>
-                        <div className="grid grid-cols-1 gap-2">
+                        
+                        <div className="flex flex-col gap-3">
                             <button 
-                                onClick={() => { setHostType('NONE'); setSelectedHostCategory(''); }}
-                                className={`flex items-center gap-4 p-4 rounded-2xl border transition-all ${hostType === 'NONE' ? 'bg-pitch border-pitch text-white' : 'bg-gray-50 border-gray-100 text-gray-400'}`}
+                                onClick={() => { setHostType('NONE'); setSelectedHostTeamName(''); setSelectedHostCategory(''); }}
+                                className={`flex items-center gap-4 p-4 rounded-2xl border transition-all ${hostType === 'NONE' ? 'bg-pitch border-pitch text-white shadow-md' : 'bg-gray-50 border-gray-100 text-gray-400'}`}
                             >
                                 <CircleSlash className={`w-6 h-6 ${hostType === 'NONE' ? 'text-grass-500' : 'text-gray-300'}`} />
                                 <div className="text-left">
                                     <p className="font-black text-sm">Campo Aberto</p>
-                                    <p className="text-[9px] font-bold uppercase opacity-60 text-grass-500">Qualquer time pode agendar</p>
+                                    <p className="text-[9px] font-bold uppercase opacity-60">Qualquer time pode agendar</p>
                                 </div>
                             </button>
 
                             {currentUser.teamName && (
-                                <div className="space-y-2">
-                                    <p className="text-[9px] font-black text-gray-400 uppercase pl-1">Meu Time: {currentUser.teamName}</p>
+                                <div className={`p-4 rounded-2xl border transition-all ${hostType === 'OWNER' ? 'bg-pitch border-pitch text-white shadow-md' : 'bg-gray-50 border-gray-100 text-gray-400'}`}>
+                                    <div className="flex items-center gap-4 mb-3">
+                                        <Trophy className={`w-6 h-6 ${hostType === 'OWNER' ? 'text-grass-500' : 'text-gray-300'}`} />
+                                        <p className="font-black text-sm uppercase">{currentUser.teamName} (Meu Time)</p>
+                                    </div>
                                     <div className="flex flex-wrap gap-2">
                                         {currentUser.teamCategories.map(cat => (
                                             <button 
                                                 key={cat}
-                                                onClick={() => { setHostType('OWNER'); setSelectedHostCategory(cat); }}
-                                                className={`flex-1 min-w-[120px] p-3 rounded-xl border transition-all text-center ${hostType === 'OWNER' && selectedHostCategory === cat ? 'bg-grass-500 border-grass-500 text-pitch scale-105 shadow-lg' : 'bg-gray-50 border-gray-100 text-gray-400'}`}
+                                                onClick={() => { setHostType('OWNER'); setSelectedHostCategory(cat); setSelectedHostTeamName(currentUser.teamName!); }}
+                                                className={`px-3 py-1.5 rounded-lg border text-[10px] font-black transition-all ${hostType === 'OWNER' && selectedHostCategory === cat ? 'bg-grass-500 border-grass-600 text-pitch' : 'bg-white/5 border-white/10 text-gray-400'}`}
                                             >
-                                                <p className="font-black text-[11px]">{cat}</p>
+                                                {cat}
                                             </button>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
+                            {registeredTeams.length > 0 && (
+                                <div className="space-y-2">
+                                    <p className="text-[9px] font-black text-gray-400 uppercase pl-1">Outras Equipes da Casa</p>
+                                    <div className="grid grid-cols-1 gap-2">
+                                        {registeredTeams.map(team => (
+                                            <div key={team.id} className={`p-4 rounded-2xl border transition-all ${hostType === 'REGISTERED' && selectedHostTeamName === team.name ? 'bg-pitch border-pitch text-white shadow-md' : 'bg-gray-50 border-gray-100 text-gray-400'}`}>
+                                                <div 
+                                                    onClick={() => { setHostType('REGISTERED'); setSelectedHostTeamName(team.name); setSelectedHostCategory(''); }}
+                                                    className="flex items-center gap-4 mb-3 cursor-pointer"
+                                                >
+                                                    <Shield className={`w-6 h-6 ${hostType === 'REGISTERED' && selectedHostTeamName === team.name ? 'text-grass-500' : 'text-gray-300'}`} />
+                                                    <p className="font-black text-sm">{team.name}</p>
+                                                </div>
+                                                {hostType === 'REGISTERED' && selectedHostTeamName === team.name && (
+                                                    <div className="flex flex-wrap gap-2 animate-in fade-in slide-in-from-top-1 duration-200">
+                                                        <p className="w-full text-[9px] font-black text-grass-500 uppercase mb-1">Selecione a Categoria:</p>
+                                                        {categories.map(cat => (
+                                                            <button 
+                                                                key={cat}
+                                                                onClick={() => setSelectedHostCategory(cat)}
+                                                                className={`px-3 py-1.5 rounded-lg border text-[10px] font-black transition-all ${selectedHostCategory === cat ? 'bg-grass-500 border-grass-600 text-pitch' : 'bg-white/5 border-white/10 text-gray-400'}`}
+                                                            >
+                                                                {cat}
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                            </div>
                                         ))}
                                     </div>
                                 </div>
@@ -465,7 +504,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
 
                     {hostType === 'NONE' && (
                         <div className="space-y-2">
-                            <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block">Categoria de Preferência</label>
+                            <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block">Categoria Recomendada</label>
                             <select 
                                 value={selectedCategory} 
                                 onChange={e => setSelectedCategory(e.target.value)} 
@@ -490,9 +529,13 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                         </select>
                     </div>
 
-                    <div className="flex gap-4 pt-4">
+                    <div className="flex gap-4 pt-6">
                         <button onClick={() => setShowAddModal(false)} className="flex-1 py-5 font-black text-gray-400 uppercase text-xs tracking-widest">Cancelar</button>
-                        <Button className="flex-[2] py-5 rounded-[2rem] text-sm font-black shadow-xl uppercase tracking-widest" onClick={handlePublishSlots}>
+                        <Button 
+                            className="flex-[2] py-5 rounded-[2rem] text-sm font-black shadow-xl uppercase tracking-widest" 
+                            onClick={handlePublishSlots}
+                            disabled={hostType !== 'NONE' && !selectedHostCategory}
+                        >
                           Publicar Agenda
                         </Button>
                     </div>
@@ -503,8 +546,3 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
     </div>
   );
 };
-
-// Internal icon for chevron
-const ChevronRight = ({ className }: { className?: string }) => (
-    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="m9 18 6-6-6-6"/></svg>
-);
