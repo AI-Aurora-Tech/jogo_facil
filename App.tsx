@@ -90,28 +90,32 @@ const App: React.FC = () => {
   const handleUpdateProfile = async (updatedUser: User, updatedField?: Partial<Field>) => {
     setIsLoading(true);
     try {
-      // 1. Atualizar dados do Usuário
+      // 1. Primeiro atualizamos o Usuário
       const resUser = await api.updateUser(updatedUser);
       setUser(resUser);
       localStorage.setItem('jf_session_user', JSON.stringify(resUser));
 
-      // 2. Se for dono de campo e enviou dados da arena, atualizar a arena
+      // 2. Depois a Arena, se existir
       if (updatedField && user?.role === UserRole.FIELD_OWNER) {
-        const myField = fields.find(f => f.ownerId === user.id);
-        if (myField) {
-          await api.updateField(myField.id, updatedField);
+        // Buscamos a arena atual do estado para ter o ID correto
+        const currentArena = fields.find(f => f.ownerId === user.id);
+        if (currentArena) {
+          await api.updateField(currentArena.id, updatedField);
         }
       }
 
       setNotifications([
-        { id: Math.random().toString(), title: 'Perfil Atualizado', description: 'Suas informações foram salvas com sucesso.', timestamp: 'Agora', type: 'success', read: false },
+        { id: Math.random().toString(), title: 'Sucesso!', description: 'Perfil e dados da Arena atualizados.', timestamp: 'Agora', type: 'success', read: false },
         ...notifications
       ]);
       
       await refreshData();
-    } catch (err) {
-      console.error(err);
-      alert("Erro ao salvar alterações.");
+      setShowProfileModal(false);
+    } catch (err: any) {
+      console.error("ERRO COMPLETO AO SALVAR:", err);
+      // O erro do Supabase geralmente vem no campo message
+      const msg = err.message || "Verifique sua conexão e tente novamente.";
+      alert(`Erro ao salvar: ${msg}`);
     } finally {
       setIsLoading(false);
     }
@@ -314,7 +318,7 @@ const App: React.FC = () => {
 
                     <div className="w-full mt-8 space-y-3">
                         <button onClick={() => setShowProfileModal(true)} className="w-full py-5 bg-pitch text-white rounded-[2.5rem] font-black shadow-xl active:scale-95 transition-all flex items-center justify-center gap-3 uppercase text-xs tracking-[0.2em]">
-                            <Edit2 className="w-4 h-4" /> Editar Perfil & Arena/Time
+                            <Edit2 className="w-4 h-4" /> Editar Tudo (Perfil & Arena)
                         </button>
                         
                         {user.role === UserRole.TEAM_CAPTAIN && user.subTeams && user.subTeams.length > 0 && (
