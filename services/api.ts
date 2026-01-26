@@ -13,7 +13,7 @@ const saveLocalUserData = (userId: string, data: any) => {
 
 const getLocalSlotData = (slotId: string) => {
     const data = localStorage.getItem(`jf_slot_extra_${slotId}`);
-    return data ? JSON.parse(data) : { allowedCategories: ["Principal"], matchType: "AMISTOSO", ratingGiven: 0 };
+    return data ? JSON.parse(data) : { allowedCategories: ["Principal"], matchType: "AMISTOSO", ratingGiven: 0, customImageUrl: undefined };
 };
 
 const saveLocalSlotData = (slotId: string, data: any) => {
@@ -170,13 +170,15 @@ export const api = {
           durationMinutes: 60,
           matchType: extra.matchType,
           allowedCategories: extra.allowedCategories,
-          ratingGiven: extra.ratingGiven
+          ratingGiven: extra.ratingGiven,
+          customImageUrl: extra.customImageUrl
        };
     }) as MatchSlot[];
   },
 
   createSlots: async (slots: Partial<MatchSlot>[]): Promise<MatchSlot[]> => {
-    const slotsToInsert = slots.map(({ durationMinutes, matchType, allowedCategories, statusUpdatedAt, ratingGiven, ...rest }) => ({
+    // Destruturamos customImageUrl para não enviar ao Supabase
+    const slotsToInsert = slots.map(({ durationMinutes, matchType, allowedCategories, statusUpdatedAt, ratingGiven, customImageUrl, ...rest }) => ({
         ...rest
     }));
 
@@ -189,7 +191,8 @@ export const api = {
             saveLocalSlotData(newSlot.id, { 
                 allowedCategories: original.allowedCategories || ["Principal"],
                 matchType: original.matchType || "AMISTOSO",
-                ratingGiven: 0
+                ratingGiven: 0,
+                customImageUrl: original.customImageUrl
             });
         });
     }
@@ -198,14 +201,16 @@ export const api = {
   },
 
   updateSlot: async (slotId: string, data: Partial<MatchSlot>): Promise<MatchSlot> => {
-    const { durationMinutes, matchType, allowedCategories, statusUpdatedAt, ratingGiven, ...rest } = data;
+    // Destruturamos customImageUrl para não enviar ao Supabase
+    const { durationMinutes, matchType, allowedCategories, statusUpdatedAt, ratingGiven, customImageUrl, ...rest } = data;
     
-    if (allowedCategories || matchType || ratingGiven !== undefined) {
+    if (allowedCategories || matchType || ratingGiven !== undefined || customImageUrl !== undefined) {
         const current = getLocalSlotData(slotId);
         saveLocalSlotData(slotId, {
             allowedCategories: allowedCategories || current.allowedCategories,
             matchType: matchType || current.matchType,
-            ratingGiven: ratingGiven !== undefined ? ratingGiven : current.ratingGiven
+            ratingGiven: ratingGiven !== undefined ? ratingGiven : current.ratingGiven,
+            customImageUrl: customImageUrl !== undefined ? customImageUrl : current.customImageUrl
         });
     }
 
@@ -217,7 +222,8 @@ export const api = {
         ...updated, 
         matchType: finalExtra.matchType,
         allowedCategories: finalExtra.allowedCategories,
-        ratingGiven: finalExtra.ratingGiven
+        ratingGiven: finalExtra.ratingGiven,
+        customImageUrl: finalExtra.customImageUrl
     } as MatchSlot;
   },
 
