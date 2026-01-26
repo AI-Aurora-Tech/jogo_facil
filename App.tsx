@@ -9,7 +9,7 @@ import { TeamDashboard } from './views/TeamDashboard';
 import { AdminDashboard } from './views/AdminDashboard';
 import { EditProfileModal } from './components/EditProfileModal';
 import { api } from './services/api';
-import { Search, Trophy, User as UserIcon, RefreshCw, Settings, Building2, MapPin, CalendarDays } from 'lucide-react';
+import { Search, Trophy, User as UserIcon, RefreshCw, Settings, Building2, MapPin, CalendarDays, TrendingUp, Users2, BarChart3 } from 'lucide-react';
 
 const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
@@ -111,6 +111,8 @@ const App: React.FC = () => {
 
   const myField = user?.role === UserRole.FIELD_OWNER ? fields.find(f => f.ownerId === user.id) : null;
   const mySlots = myField ? slots.filter(s => s.fieldId === myField.id) : [];
+  const confirmedSlots = mySlots.filter(s => s.status === 'confirmed');
+  const estimatedRevenue = confirmedSlots.reduce((acc, s) => acc + s.price, 0);
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col pb-safe">
@@ -174,30 +176,45 @@ const App: React.FC = () => {
         {activeTab === 'PROFILE' && user && (
             <div className="p-8 space-y-6">
                 <div className="bg-white rounded-[2.5rem] p-8 shadow-xl border flex flex-col items-center">
-                    <div className="w-24 h-24 bg-grass-100 rounded-full flex items-center justify-center text-grass-700 text-4xl font-black mb-4">
+                    <div className="w-24 h-24 bg-pitch text-grass-500 rounded-full flex items-center justify-center text-4xl font-black mb-4 shadow-inner border-4 border-gray-50">
                         {user.name.charAt(0)}
                     </div>
                     <h2 className="text-2xl font-black text-pitch">{user.name}</h2>
                     <p className="text-gray-400 mb-6 font-medium">{user.email}</p>
                     <div className="bg-pitch/5 px-4 py-1.5 rounded-full mb-8">
                         <span className="text-[10px] font-black text-pitch uppercase tracking-widest">
-                          {user.role === UserRole.FIELD_OWNER ? 'Proprietário de Arena' : user.role}
+                          {user.role === UserRole.FIELD_OWNER ? 'Gestor de Arena' : 'Capitão de Time'}
                         </span>
                     </div>
                     
-                    <div className="grid grid-cols-2 gap-3 w-full mb-8">
-                        <div className="bg-gray-50 p-4 rounded-3xl border border-gray-100 text-center flex flex-col items-center justify-center">
-                            <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest mb-1">Status Plano</p>
-                            <p className="text-xs font-black text-grass-600 uppercase">{user.subscription.split('_')[1] || 'Ativo'}</p>
+                    {user.role === UserRole.FIELD_OWNER ? (
+                      <div className="grid grid-cols-1 gap-4 w-full mb-8">
+                        <div className="bg-grass-50 p-6 rounded-[2rem] border border-grass-100 flex items-center justify-between group">
+                            <div>
+                                <p className="text-[10px] font-black text-grass-700 uppercase tracking-widest mb-1">Receita Prevista</p>
+                                <p className="text-2xl font-black text-pitch">R$ {estimatedRevenue}</p>
+                            </div>
+                            <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center shadow-sm text-grass-500 group-hover:scale-110 transition-transform">
+                                <TrendingUp className="w-6 h-6" />
+                            </div>
                         </div>
-                        {user.role === UserRole.FIELD_OWNER ? (
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="bg-gray-50 p-5 rounded-[2rem] border border-gray-100 flex flex-col items-center">
+                                <p className="text-[9px] font-black text-gray-400 uppercase mb-2">Jogos Ativos</p>
+                                <p className="text-xl font-black text-pitch">{confirmedSlots.length}</p>
+                            </div>
+                            <div className="bg-gray-50 p-5 rounded-[2rem] border border-gray-100 flex flex-col items-center">
+                                <p className="text-[9px] font-black text-gray-400 uppercase mb-2">Grade Total</p>
+                                <p className="text-xl font-black text-pitch">{mySlots.length}</p>
+                            </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-2 gap-3 w-full mb-8">
                           <div className="bg-gray-50 p-4 rounded-3xl border border-gray-100 text-center flex flex-col items-center justify-center">
-                              <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest mb-1">Grade Agenda</p>
-                              <div className="flex items-center gap-1">
-                                  <span className="text-xs font-black text-pitch">{mySlots.length} Horários</span>
-                              </div>
+                              <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest mb-1">Status Plano</p>
+                              <p className="text-xs font-black text-grass-600 uppercase">{user.subscription.split('_')[1] || 'Ativo'}</p>
                           </div>
-                        ) : (
                           <div className="bg-gray-50 p-4 rounded-3xl border border-gray-100 text-center flex flex-col items-center justify-center">
                               <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest mb-1">Reputação Time</p>
                               <div className="flex items-center gap-1">
@@ -205,24 +222,35 @@ const App: React.FC = () => {
                                   <Trophy className="w-3 h-3 text-yellow-500" />
                               </div>
                           </div>
-                        )}
-                    </div>
+                      </div>
+                    )}
 
                     {user.role === UserRole.FIELD_OWNER && myField && (
-                      <div className="w-full bg-gray-50 rounded-[2rem] p-6 border mb-8 animate-in zoom-in-95 duration-200">
-                          <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-4 flex items-center gap-2">
-                            <Building2 className="w-4 h-4" /> Minha Arena Registrada
+                      <div className="w-full bg-pitch rounded-[2rem] p-8 border mb-8 animate-in zoom-in-95 duration-300 shadow-xl shadow-pitch/20">
+                          <h4 className="text-[10px] font-black text-grass-500 uppercase tracking-widest mb-6 flex items-center gap-2">
+                            <Building2 className="w-4 h-4" /> Dados da Unidade
                           </h4>
-                          <div className="space-y-3">
-                              <div className="flex items-center gap-3">
-                                <div className="w-10 h-10 bg-pitch rounded-xl flex items-center justify-center">
-                                  <Trophy className="w-5 h-5 text-grass-500" />
+                          <div className="space-y-4">
+                              <div className="flex items-center gap-4">
+                                <div className="w-12 h-12 bg-white/10 rounded-2xl flex items-center justify-center border border-white/5">
+                                  <Trophy className="w-6 h-6 text-grass-500" />
                                 </div>
-                                <span className="font-black text-pitch">{myField.name}</span>
+                                <div>
+                                    <p className="text-white font-black text-lg leading-tight">{myField.name}</p>
+                                    <div className="flex items-center gap-1.5 text-gray-400 mt-1">
+                                      <MapPin className="w-3.5 h-3.5" />
+                                      <span className="text-[10px] font-bold truncate max-w-[150px]">{myField.location}</span>
+                                    </div>
+                                </div>
                               </div>
-                              <div className="flex items-center gap-3 text-gray-400">
-                                <MapPin className="w-4 h-4" />
-                                <span className="text-xs font-bold truncate">{myField.location}</span>
+                              <div className="pt-4 border-t border-white/5 flex justify-between items-center">
+                                  <div className="flex items-center gap-2">
+                                      <BarChart3 className="w-4 h-4 text-grass-500" />
+                                      <span className="text-[10px] font-black text-white uppercase">Taxa Ocupação</span>
+                                  </div>
+                                  <span className="text-xs font-black text-grass-500">
+                                      {mySlots.length > 0 ? ((confirmedSlots.length / mySlots.length) * 100).toFixed(0) : 0}%
+                                  </span>
                               </div>
                           </div>
                       </div>

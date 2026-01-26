@@ -13,15 +13,17 @@ interface EditProfileModalProps {
 }
 
 export const EditProfileModal: React.FC<EditProfileModalProps> = ({ categories, user, onUpdate, onClose }) => {
+  const isFieldOwner = user.role === UserRole.FIELD_OWNER;
+  
   const [name, setName] = useState(user.name);
   const [phone, setPhone] = useState(user.phoneNumber);
+  
+  // Estados de time inicializados apenas se necessário
   const [teamName, setTeamName] = useState(user.teamName || '');
   const [teamCategories, setTeamCategories] = useState<string[]>(user.teamCategories || []);
   const [teamLogo, setTeamLogo] = useState(user.teamLogoUrl || '');
   const [selectedNewCat, setSelectedNewCat] = useState(categories[0] || '');
   const [error, setError] = useState('');
-
-  const isFieldOwner = user.role === UserRole.FIELD_OWNER;
 
   const addCategory = () => {
     setError('');
@@ -55,14 +57,18 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({ categories, 
       setError('Escolha pelo menos 1 categoria.');
       return;
     }
-    onUpdate({
+    
+    // Payload limpo para Dono de Campo
+    const updatedData: User = {
       ...user,
       name,
       phoneNumber: phone,
       teamName: isFieldOwner ? undefined : teamName,
       teamCategories: isFieldOwner ? [] : teamCategories,
       teamLogoUrl: isFieldOwner ? undefined : teamLogo
-    });
+    };
+    
+    onUpdate(updatedData);
     onClose();
   };
 
@@ -70,7 +76,7 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({ categories, 
     <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-[200] p-4">
       <div className="bg-white rounded-[2.5rem] w-full max-w-2xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
         <div className="bg-pitch p-6 text-white flex justify-between items-center">
-          <h3 className="text-xl font-black">Configurações do Perfil</h3>
+          <h3 className="text-xl font-black">{isFieldOwner ? 'Dados do Gestor' : 'Configurações do Perfil'}</h3>
           <button onClick={onClose} className="p-2 bg-white/10 rounded-full"><X className="w-5 h-5"/></button>
         </div>
 
@@ -82,21 +88,21 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({ categories, 
           )}
 
           <section className="space-y-4">
-            <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Informações Pessoais</h4>
+            <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Identificação</h4>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100">
-                    <label className="text-[10px] font-black text-gray-400 uppercase block mb-1">Seu Nome</label>
+                    <label className="text-[10px] font-black text-gray-400 uppercase block mb-1">Nome Completo</label>
                     <input type="text" className="w-full bg-transparent font-bold outline-none text-pitch" value={name} onChange={e => setName(e.target.value)} required />
                 </div>
                 <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100">
-                    <label className="text-[10px] font-black text-gray-400 uppercase block mb-1">WhatsApp</label>
+                    <label className="text-[10px] font-black text-gray-400 uppercase block mb-1">WhatsApp de Contato</label>
                     <input type="text" className="w-full bg-transparent font-bold outline-none text-pitch" value={phone} onChange={e => setPhone(e.target.value)} required />
                 </div>
             </div>
           </section>
 
           {!isFieldOwner && (
-            <section className="space-y-6 animate-in fade-in duration-300">
+            <section className="space-y-6 animate-in fade-in duration-300 border-t pt-8">
               <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Meu Time</h4>
               <div className="flex items-center gap-6">
                   <div className="relative group">
@@ -146,7 +152,7 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({ categories, 
           )}
 
           <Button type="submit" className="w-full py-5 rounded-[2rem] text-lg shadow-xl uppercase font-black tracking-widest">
-            Atualizar Meus Dados
+            Salvar Alterações
           </Button>
         </form>
       </div>

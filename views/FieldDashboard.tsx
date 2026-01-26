@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { Plus, Calendar, Settings, Trash2, Shield, MapPin, Key, X, Save, Trophy, Check, CalendarDays, Clock, Repeat, Users, CircleSlash, Swords, PartyPopper, Star, UsersRound, BookOpenCheck, ChevronRight, AlertCircle, Tag, Upload, ImageIcon, Edit2, Loader2 } from 'lucide-react';
+import { Plus, Calendar, Settings, Trash2, Shield, MapPin, Key, X, Save, Trophy, Check, CalendarDays, Clock, Repeat, Users, CircleSlash, Swords, PartyPopper, Star, UsersRound, BookOpenCheck, ChevronRight, AlertCircle, Tag, Upload, ImageIcon, Edit2, Loader2, Info } from 'lucide-react';
 import { Button } from '../components/Button';
 import { Field, MatchSlot, MatchType, User, RegisteredTeam } from '../types';
 import { api } from '../services/api';
@@ -122,7 +122,6 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
     setIsProcessing(true);
     try {
         if (editingTeam) {
-            // Caso 1: Edição de Equipe
             const oldName = editingTeam.name;
             const newName = newTeamName.trim();
             
@@ -134,7 +133,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                 logoUrl: newTeamLogo
             });
 
-            // Sincronizar slots futuros se houver mudança de nome, logo ou categorias
+            // Sincronizar slots futuros
             const today = new Date().toISOString().split('T')[0];
             const futureSlots = slots.filter(s => s.bookedByTeamName === oldName && s.date >= today);
             
@@ -148,7 +147,6 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
             }
             setEditingTeam(null);
         } else {
-            // Caso 2: Nova Equipe
             const newTeam = await api.addRegisteredTeam(field.id, newTeamName.trim(), newTeamDay, newTeamTime, newTeamSelectedCategories, newTeamLogo);
             const lifetimeSlots: Omit<MatchSlot, 'id'>[] = [];
             for (let i = 0; i < 52; i++) {
@@ -176,7 +174,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
         setNewTeamLogo('');
         setTeamError('');
         await loadTeams();
-        if (editingTeam) window.location.reload(); // Forçar refresh para ver as mudanças nos slots
+        if (editingTeam) window.location.reload();
     } catch (err) {
         setTeamError('Erro ao salvar equipe mensalista.');
     } finally {
@@ -192,16 +190,14 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
     setNewTeamSelectedCategories(team.categories || []);
     setNewTeamLogo(team.logoUrl || '');
     setTeamError('');
+    setShowTeamsModal(true);
   };
 
   const handleDeleteRegisteredTeam = async (team: RegisteredTeam) => {
     if (confirm(`AVISO CRÍTICO: Deseja excluir a equipe "${team.name}"? Isso removerá permanentemente TODA A AGENDA (todos os horários futuros) vinculada a este time.`)) {
       setIsProcessing(true);
       try {
-          // 1. Remove dos registros locais
           await api.deleteRegisteredTeam(field.id, team.id);
-          
-          // 2. Busca e remove todos os slots futuros vinculados a este nome de equipe
           const today = new Date().toISOString().split('T')[0];
           const slotsToDelete = slots.filter(s => s.bookedByTeamName === team.name && s.date >= today);
           
@@ -210,7 +206,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
           }
           
           await loadTeams();
-          window.location.reload(); // Recarrega para limpar a agenda visualmente
+          window.location.reload();
       } catch (err) {
           alert('Erro ao excluir equipe e agenda.');
       } finally {
@@ -248,9 +244,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
 
   const handlePublishSlots = () => {
     if (selectedDay === null || !newTime) return alert("Selecione o dia e a hora");
-
     const newSlots: Omit<MatchSlot, 'id'>[] = [];
-    
     for (let i = 0; i < repeatWeeks; i++) {
       newSlots.push({
         fieldId: field.id,
@@ -266,12 +260,8 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
         status: 'available'
       });
     }
-
     onAddSlot(newSlots);
     setShowAddModal(false);
-    setSelectedDay(null);
-    setRepeatWeeks(1);
-    setHostType('NONE');
   };
 
   return (
@@ -291,208 +281,159 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
       </div>
 
       <div className="p-5 space-y-6">
-        <div className="bg-pitch text-white rounded-[2rem] p-6 shadow-xl flex justify-between items-center">
-            <div>
-                <p className="text-grass-400 text-[10px] font-black uppercase tracking-widest mb-1">Agenda de Jogos</p>
-                <h2 className="text-3xl font-black">{sortedSlots.length} {sortedSlots.length === 1 ? 'Horário' : 'Horários'}</h2>
+        {/* Card de Atalho para Mensalistas */}
+        <div className="grid grid-cols-2 gap-4">
+            <div onClick={() => setShowTeamsModal(true)} className="bg-white p-5 rounded-[2rem] shadow-sm border border-gray-100 flex flex-col items-center justify-center cursor-pointer active:scale-95 transition-transform group">
+                <div className="bg-grass-100 p-3 rounded-2xl text-grass-600 mb-2 group-hover:scale-110 transition-transform">
+                    <UsersRound className="w-6 h-6" />
+                </div>
+                <p className="text-[10px] font-black text-gray-400 uppercase">Mensalistas</p>
+                <p className="text-xl font-black text-pitch">{registeredTeams.length}</p>
             </div>
-            <button onClick={() => setShowAddModal(true)} className="w-14 h-14 bg-grass-500 rounded-2xl flex items-center justify-center text-pitch shadow-lg active:scale-90 transition-transform">
-                <Plus className="w-8 h-8" />
-            </button>
+            <div onClick={() => setShowAddModal(true)} className="bg-pitch p-5 rounded-[2rem] shadow-lg flex flex-col items-center justify-center cursor-pointer active:scale-95 transition-transform group">
+                <div className="bg-grass-500 p-3 rounded-2xl text-pitch mb-2 group-hover:rotate-90 transition-transform">
+                    <Plus className="w-6 h-6" />
+                </div>
+                <p className="text-[10px] font-black text-grass-400 uppercase">Novo Horário</p>
+                <p className="text-xs font-black text-white uppercase">Abrir Agenda</p>
+            </div>
         </div>
 
-        <div className="space-y-4">
-            {sortedSlots.length === 0 && (
-              <div className="text-center py-12 bg-white rounded-3xl border border-dashed border-gray-200">
-                <Calendar className="w-12 h-12 text-gray-200 mx-auto mb-3" />
-                <p className="text-gray-400 font-bold text-xs uppercase">Nenhum horário criado</p>
-              </div>
-            )}
-            {sortedSlots.map(slot => (
-                <div key={slot.id} className="bg-white rounded-3xl p-5 shadow-sm border border-gray-100 group">
-                    <div className="flex justify-between items-start mb-4">
+        <div className="bg-white rounded-[2rem] p-6 shadow-sm border border-gray-100">
+            <div className="flex justify-between items-center mb-6">
+                <div>
+                    <p className="text-gray-400 text-[10px] font-black uppercase tracking-widest mb-1">Agenda Próximos Dias</p>
+                    <h2 className="text-2xl font-black text-pitch">{sortedSlots.length} Slots Criados</h2>
+                </div>
+                <Calendar className="w-8 h-8 text-gray-100" />
+            </div>
+
+            <div className="space-y-3">
+                {sortedSlots.length === 0 && (
+                  <div className="text-center py-10 bg-gray-50 rounded-3xl border border-dashed border-gray-200">
+                    <p className="text-gray-400 font-bold text-xs uppercase">Agenda Vazia</p>
+                  </div>
+                )}
+                {sortedSlots.slice(0, 10).map(slot => (
+                    <div key={slot.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-2xl border border-gray-100 group">
                         <div className="flex items-center gap-3">
-                            <div className="bg-gray-50 w-12 h-12 rounded-2xl flex flex-col items-center justify-center border relative overflow-hidden">
-                                {slot.customImageUrl ? (
-                                    <img src={slot.customImageUrl} className="absolute inset-0 w-full h-full object-cover opacity-20" />
-                                ) : (
-                                    <span className="text-lg font-black text-pitch z-10">{slot.date.split('-')[2]}</span>
-                                )}
-                                <span className="text-[8px] font-black text-gray-400 uppercase z-10">{slot.time}</span>
+                            <div className="text-center bg-white w-10 h-10 rounded-xl flex flex-col items-center justify-center border shadow-sm">
+                                <span className="text-[8px] font-black text-gray-400 uppercase">{slot.date.split('-')[2]}</span>
+                                <span className="text-[10px] font-black text-pitch">{slot.time}</span>
                             </div>
                             <div>
-                                <h4 className="font-bold text-pitch text-sm">{slot.isBooked ? slot.bookedByTeamName : slot.allowedCategories[0]}</h4>
-                                <div className="flex gap-1 mt-1">
-                                  <span className={`text-[8px] px-1.5 py-0.5 rounded-md font-black uppercase ${slot.matchType === 'FIXO' ? 'bg-orange-100 text-orange-700' : 'bg-indigo-50 text-indigo-600'}`}>{slot.matchType}</span>
-                                  <span className="text-[8px] bg-grass-50 text-grass-700 px-1.5 py-0.5 rounded-md font-black uppercase">R$ {slot.price}</span>
-                                </div>
+                                <p className="text-xs font-black text-pitch truncate max-w-[120px]">{slot.isBooked ? slot.bookedByTeamName : 'Disponível'}</p>
+                                <span className={`text-[8px] font-black uppercase px-1.5 py-0.5 rounded ${slot.matchType === 'FIXO' ? 'bg-orange-100 text-orange-600' : 'bg-grass-100 text-grass-600'}`}>{slot.matchType}</span>
                             </div>
                         </div>
-                        <button onClick={() => onDeleteSlot(slot.id)} className="p-2 text-gray-200 hover:text-red-500 transition-colors"><Trash2 className="w-4 h-4" /></button>
+                        <div className="flex gap-2">
+                             {slot.status === 'pending_verification' && (
+                                 <div className="w-2 h-2 rounded-full bg-orange-500 animate-pulse"></div>
+                             )}
+                             <button onClick={() => onDeleteSlot(slot.id)} className="p-2 text-gray-300 hover:text-red-500"><Trash2 className="w-4 h-4" /></button>
+                        </div>
                     </div>
-
-                    {slot.status === 'available' ? (
-                        <div className="flex justify-between items-center">
-                            <div className="text-[9px] text-gray-400 font-black uppercase flex items-center gap-2">
-                                 <div className={`w-1.5 h-1.5 rounded-full animate-pulse ${slot.hasLocalTeam ? 'bg-orange-500' : 'bg-grass-500'}`}></div>
-                                 {slot.hasLocalTeam ? `Aguardando Adversário (${slot.localTeamName})` : 'Campo Livre'}
-                            </div>
-                            <button 
-                                onClick={() => setShowManualBookingModal(slot)}
-                                className="text-[9px] font-black uppercase bg-pitch text-white px-3 py-1.5 rounded-lg flex items-center gap-1.5 shadow-md active:scale-95 transition-transform"
-                            >
-                                <BookOpenCheck className="w-3 h-3 text-grass-500" /> Reserva Manual
-                            </button>
-                        </div>
-                    ) : (
-                        <div className="bg-gray-50 rounded-2xl p-4 flex flex-col gap-4 border border-gray-100">
-                            <div className="flex justify-between items-center">
-                                <div className="flex items-center gap-3">
-                                    <div className="w-8 h-8 bg-pitch text-white rounded-full flex items-center justify-center font-black text-[10px] overflow-hidden">
-                                        {slot.customImageUrl ? <img src={slot.customImageUrl} className="w-full h-full object-cover"/> : slot.bookedByTeamName?.charAt(0)}
-                                    </div>
-                                    <p className="text-xs font-black text-pitch">{slot.bookedByTeamName}</p>
-                                </div>
-                                {slot.status === 'pending_verification' && (
-                                    <div className="flex gap-1">
-                                        <button onClick={() => onConfirmBooking(slot.id)} className="p-2.5 bg-grass-500 text-pitch rounded-xl shadow-md active:scale-90 transition-transform"><Check className="w-4 h-4" /></button>
-                                        <button onClick={() => onRejectBooking(slot.id)} className="p-2.5 bg-red-100 text-red-600 rounded-xl active:scale-90 transition-transform"><X className="w-4 h-4" /></button>
-                                    </div>
-                                )}
-                                {slot.status === 'confirmed' && (
-                                    <span className={`text-[9px] font-black uppercase px-2 py-1 rounded-md ${slot.matchType === 'FIXO' ? 'bg-orange-500 text-white' : 'bg-grass-100 text-grass-700'}`}>
-                                        {slot.matchType === 'FIXO' ? 'MENSALISTA' : 'Confirmado'}
-                                    </span>
-                                )}
-                            </div>
-                        </div>
-                    )}
-                </div>
-            ))}
+                ))}
+                {sortedSlots.length > 10 && (
+                    <p className="text-center text-[10px] font-black text-gray-400 uppercase py-2">+ {sortedSlots.length - 10} outros horários</p>
+                )}
+            </div>
         </div>
       </div>
 
-      {/* MODAL GESTÃO DE MENSALISTAS */}
+      {/* MODAL GESTÃO DE MENSALISTAS - COMPLETO */}
       {showTeamsModal && (
           <div className="fixed inset-0 bg-pitch/90 backdrop-blur-md z-[150] flex items-center justify-center p-4">
-              <div className="bg-white w-full max-w-2xl rounded-[3rem] p-10 animate-in zoom-in-95 duration-200 flex flex-col max-h-[95vh] relative">
+              <div className="bg-white w-full max-w-2xl rounded-[3rem] p-10 animate-in zoom-in-95 duration-200 flex flex-col max-h-[95vh] relative overflow-hidden">
                 {isProcessing && (
-                  <div className="absolute inset-0 bg-white/60 backdrop-blur-sm z-50 flex flex-col items-center justify-center rounded-[3rem]">
+                  <div className="absolute inset-0 bg-white/60 backdrop-blur-sm z-50 flex flex-col items-center justify-center">
                       <Loader2 className="w-10 h-10 text-pitch animate-spin mb-2" />
-                      <p className="text-xs font-black uppercase text-pitch">Sincronizando Agenda...</p>
+                      <p className="text-xs font-black uppercase text-pitch">Processando Alterações...</p>
                   </div>
                 )}
                 
-                <div className="flex justify-between items-center mb-6">
+                <div className="flex justify-between items-center mb-8 shrink-0">
                     <div>
                         <h2 className="text-2xl font-black text-pitch flex items-center gap-3">
-                            <UsersRound className="w-7 h-7 text-grass-500" /> Mensalistas Vitalícios
+                            <UsersRound className="w-7 h-7 text-grass-500" /> Centro de Mensalistas
                         </h2>
-                        <p className="text-xs font-bold text-gray-400 uppercase mt-1">Gerencie times fixos, categorias e brasões</p>
+                        <p className="text-xs font-bold text-gray-400 uppercase mt-1">Times fixos com renovação automática</p>
                     </div>
-                    <button onClick={() => setShowTeamsModal(false)} className="p-2 bg-gray-100 rounded-full"><X className="w-6 h-6"/></button>
+                    <button onClick={() => { setShowTeamsModal(false); setEditingTeam(null); }} className="p-2 bg-gray-100 rounded-full"><X className="w-6 h-6"/></button>
                 </div>
                 
-                <div className="bg-gray-50 p-6 rounded-[2rem] border-2 border-dashed border-gray-200 mb-8 space-y-4">
-                    <div className="flex justify-between items-center mb-2 px-1">
-                        <h4 className="text-[11px] font-black text-pitch uppercase tracking-widest">{editingTeam ? 'Editando Equipe' : 'Cadastrar Novo Mensalista'}</h4>
-                        {editingTeam && <button onClick={() => { setEditingTeam(null); setNewTeamName(''); setNewTeamLogo(''); setNewTeamSelectedCategories([]); }} className="text-[9px] font-black text-red-500 uppercase underline">Cancelar Edição</button>}
-                    </div>
-
-                    {teamError && (
-                      <div className="flex items-center gap-2 p-3 bg-red-50 text-red-600 rounded-xl text-[10px] font-black uppercase border border-red-100 animate-in shake duration-300">
-                          <AlertCircle className="w-4 h-4" /> {teamError}
-                      </div>
-                    )}
+                <div className="bg-gray-50 p-6 rounded-[2rem] border border-gray-100 mb-8 space-y-4 shrink-0">
+                    <h4 className="text-[11px] font-black text-pitch uppercase tracking-widest px-1">
+                        {editingTeam ? '📝 Editando Dados da Equipe' : '✨ Novo Mensalista Vitalício'}
+                    </h4>
                     
-                    <div className="flex items-center gap-4 mb-4">
-                        <div className="relative group">
-                            <div className="w-20 h-20 bg-white rounded-[1.5rem] border-2 border-dashed border-gray-300 flex items-center justify-center overflow-hidden shrink-0 group-hover:border-grass-500 transition-colors">
-                                {newTeamLogo ? <img src={newTeamLogo} className="w-full h-full object-cover"/> : <Upload className="w-6 h-6 text-gray-300"/>}
-                                <input type="file" accept="image/*" onChange={handleLogoChange} className="absolute inset-0 opacity-0 cursor-pointer" />
-                            </div>
-                            <p className="text-[7px] font-black text-gray-400 uppercase text-center mt-1">Brasão</p>
+                    <div className="flex gap-4">
+                        <div className="w-20 h-20 bg-white rounded-[1.5rem] border-2 border-dashed border-gray-300 flex items-center justify-center overflow-hidden shrink-0 relative group">
+                            {newTeamLogo ? <img src={newTeamLogo} className="w-full h-full object-cover"/> : <Upload className="w-6 h-6 text-gray-300"/>}
+                            <input type="file" accept="image/*" onChange={handleLogoChange} className="absolute inset-0 opacity-0 cursor-pointer" title="Brasão do Time" />
                         </div>
-                        <div className="flex-grow">
-                            <label className="text-[10px] font-black text-gray-400 uppercase mb-2 block">Nome da Equipe</label>
+                        <div className="flex-grow space-y-3">
                             <input 
                                 type="text" 
-                                placeholder="Ex: Amigos da Segunda FC" 
+                                placeholder="Nome da Equipe (Ex: Amigos da Segunda)" 
                                 value={newTeamName}
                                 onChange={e => setNewTeamName(e.target.value)}
-                                className="w-full p-4 bg-white border rounded-2xl font-bold outline-none focus:ring-2 focus:ring-grass-500"
+                                className="w-full p-4 bg-white border rounded-2xl font-black outline-none focus:ring-2 focus:ring-grass-500"
                             />
-                        </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div>
-                            <label className="text-[10px] font-black text-gray-400 uppercase mb-2 block">Dia da Semana</label>
-                            <select 
-                                value={newTeamDay} 
-                                onChange={e => setNewTeamDay(Number(e.target.value))}
-                                className="w-full p-4 bg-white border rounded-2xl font-bold outline-none"
-                            >
-                                {DAYS_OF_WEEK.map(d => <option key={d.value} value={d.value}>{d.label}</option>)}
-                            </select>
-                        </div>
-                        <div>
-                            <label className="text-[10px] font-black text-gray-400 uppercase mb-2 block">Horário Fixo</label>
-                            <input 
-                                type="time" 
-                                value={newTeamTime}
-                                onChange={e => setNewTeamTime(e.target.value)}
-                                className="w-full p-4 bg-white border rounded-2xl font-bold outline-none"
-                            />
-                        </div>
-
-                        <div className="col-span-2">
-                            <label className="text-[10px] font-black text-gray-400 uppercase mb-3 block tracking-widest">Informar 2 Categorias Elegíveis:</label>
-                            <div className="flex flex-wrap gap-2 p-4 bg-white rounded-2xl border">
-                                {categories.map(cat => {
-                                  const isSelected = newTeamSelectedCategories.includes(cat);
-                                  return (
-                                    <button
-                                      key={cat}
-                                      onClick={() => handleToggleCategory(cat)}
-                                      className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase transition-all flex items-center gap-1.5 border ${isSelected ? 'bg-grass-500 border-grass-600 text-pitch shadow-md scale-105' : 'bg-gray-50 border-gray-100 text-gray-400 hover:bg-gray-100'}`}
-                                    >
-                                      {cat} {isSelected && <Check className="w-3 h-3" />}
-                                    </button>
-                                  );
-                                })}
+                            <div className="grid grid-cols-2 gap-2">
+                                <select value={newTeamDay} onChange={e => setNewTeamDay(Number(e.target.value))} className="p-3 bg-white border rounded-xl font-bold text-xs outline-none">
+                                    {DAYS_OF_WEEK.map(d => <option key={d.value} value={d.value}>{d.label}</option>)}
+                                </select>
+                                <input type="time" value={newTeamTime} onChange={e => setNewTeamTime(e.target.value)} className="p-3 bg-white border rounded-xl font-bold text-xs outline-none" />
                             </div>
                         </div>
                     </div>
-                    <Button onClick={handleAddRegisteredTeam} disabled={isProcessing} className="w-full py-4 rounded-2xl font-black text-sm uppercase shadow-lg">
-                        {editingTeam ? 'Atualizar Dados da Equipe' : <><Plus className="w-5 h-5" /> Salvar Mensalista e Gerar Agenda</>}
+
+                    <div className="space-y-2">
+                        <p className="text-[9px] font-black text-gray-400 uppercase pl-1">Categorias Elegíveis (Selecione 2):</p>
+                        <div className="flex flex-wrap gap-2">
+                            {categories.map(cat => (
+                                <button
+                                    key={cat}
+                                    onClick={() => handleToggleCategory(cat)}
+                                    className={`px-3 py-1.5 rounded-lg text-[9px] font-black uppercase border transition-all ${newTeamSelectedCategories.includes(cat) ? 'bg-pitch border-pitch text-white' : 'bg-white text-gray-400 border-gray-100'}`}
+                                >
+                                    {cat}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+
+                    <Button onClick={handleAddRegisteredTeam} className="w-full py-4 rounded-2xl font-black shadow-lg">
+                        {editingTeam ? 'Sincronizar Alterações' : 'Salvar e Gerar Agenda Anual'}
                     </Button>
                 </div>
 
-                <div className="overflow-y-auto space-y-3 flex-grow pr-2">
-                    <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">Equipes Ativas</h4>
-                    {registeredTeams.length === 0 && <p className="text-center text-gray-300 font-bold py-10 uppercase text-xs">Nenhuma equipe fixa.</p>}
+                <div className="overflow-y-auto space-y-3 flex-grow pr-2 custom-scrollbar">
+                    <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-1 mb-2">Equipes Registradas ({registeredTeams.length})</h4>
+                    {registeredTeams.length === 0 && (
+                        <div className="text-center py-12">
+                            <Users className="w-12 h-12 text-gray-100 mx-auto mb-3" />
+                            <p className="text-gray-300 font-bold text-xs uppercase italic">Nenhum mensalista ainda.</p>
+                        </div>
+                    )}
                     {registeredTeams.map(team => (
-                        <div key={team.id} className="flex justify-between items-center p-5 bg-white rounded-2xl border-2 border-gray-50 group hover:border-grass-200 transition-all shadow-sm">
+                        <div key={team.id} className="p-5 bg-white rounded-2xl border border-gray-100 flex justify-between items-center group hover:border-grass-200 transition-all">
                             <div className="flex items-center gap-4">
-                                <div className="w-12 h-12 bg-pitch rounded-2xl flex items-center justify-center font-black text-xs overflow-hidden text-grass-500 shrink-0">
-                                    {team.logoUrl ? <img src={team.logoUrl} className="w-full h-full object-cover" /> : DAYS_OF_WEEK.find(d => d.value === team.fixedDay)?.label}
+                                <div className="w-12 h-12 bg-pitch rounded-2xl overflow-hidden flex items-center justify-center text-grass-500 font-black text-xs">
+                                    {team.logoUrl ? <img src={team.logoUrl} className="w-full h-full object-cover" /> : team.name.charAt(0)}
                                 </div>
                                 <div>
                                     <p className="font-black text-pitch text-sm">{team.name}</p>
-                                    <div className="flex flex-col gap-1 mt-0.5">
-                                      <p className="text-[9px] font-bold text-gray-400 uppercase">Toda {DAYS_OF_WEEK.find(d => d.value === team.fixedDay)?.label} às {team.fixedTime}</p>
-                                      <div className="flex gap-1">
-                                         {team.categories?.map(c => (
-                                           <span key={c} className="text-[7px] font-black bg-grass-50 text-grass-600 px-1 py-0.5 rounded border border-grass-100 uppercase">{c}</span>
-                                         ))}
-                                      </div>
+                                    <p className="text-[9px] font-bold text-gray-400 uppercase">Toda {DAYS_OF_WEEK.find(d => d.value === team.fixedDay)?.label} • {team.fixedTime}</p>
+                                    <div className="flex gap-1 mt-1">
+                                        {team.categories.map(c => <span key={c} className="text-[7px] bg-gray-50 px-1 py-0.5 rounded font-black text-gray-400 border border-gray-100 uppercase">{c}</span>)}
                                     </div>
                                 </div>
                             </div>
                             <div className="flex gap-2">
-                                <button onClick={() => handleEditTeam(team)} className="p-2 text-gray-300 hover:text-pitch transition-colors"><Edit2 className="w-4 h-4"/></button>
-                                <button onClick={() => handleDeleteRegisteredTeam(team)} className="p-2 text-gray-200 hover:text-red-500 transition-colors"><Trash2 className="w-4 h-4"/></button>
+                                <button onClick={() => handleEditTeam(team)} className="p-2.5 bg-gray-50 text-gray-400 rounded-xl hover:text-pitch transition-colors"><Edit2 className="w-4 h-4" /></button>
+                                <button onClick={() => handleDeleteRegisteredTeam(team)} className="p-2.5 bg-red-50 text-red-400 rounded-xl hover:bg-red-500 hover:text-white transition-all"><Trash2 className="w-4 h-4" /></button>
                             </div>
                         </div>
                     ))}
@@ -509,40 +450,31 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                   <p className="text-xs font-bold text-gray-400 uppercase mb-8">Dia {showManualBookingModal.date.split('-').reverse().join('/')} às {showManualBookingModal.time}</p>
                   
                   <div className="space-y-4">
-                      <label className="text-[10px] font-black text-gray-400 uppercase block tracking-widest">Para qual equipe?</label>
+                      <label className="text-[10px] font-black text-gray-400 uppercase block tracking-widest">Selecione o Time:</label>
                       <div className="grid grid-cols-1 gap-2 max-h-[300px] overflow-y-auto pr-2">
-                          {registeredTeams.length === 0 ? (
-                              <div className="p-6 bg-orange-50 rounded-2xl border border-orange-100 text-center">
-                                  <p className="text-xs font-bold text-orange-700">Nenhuma equipe cadastrada para seleção rápida.</p>
-                                  <button onClick={() => { setShowManualBookingModal(null); setShowTeamsModal(true); }} className="mt-2 text-[10px] font-black text-pitch uppercase underline">Cadastrar Agora</button>
-                              </div>
-                          ) : (
-                              registeredTeams.map(team => (
-                                  <button 
-                                    key={team.id}
-                                    onClick={() => handleManualBooking(showManualBookingModal.id, team.name)}
-                                    className="p-4 bg-gray-50 rounded-2xl border font-black text-pitch text-left hover:bg-grass-500 hover:border-grass-600 transition-all flex items-center justify-between group"
-                                  >
-                                      <div className="flex items-center gap-3">
-                                          <div className="w-8 h-8 bg-pitch rounded-lg overflow-hidden flex items-center justify-center">
-                                              {team.logoUrl ? <img src={team.logoUrl} className="w-full h-full object-cover"/> : <span className="text-[10px] text-white">{team.name.charAt(0)}</span>}
-                                          </div>
-                                          {team.name}
+                          {registeredTeams.map(team => (
+                              <button 
+                                key={team.id}
+                                onClick={() => handleManualBooking(showManualBookingModal.id, team.name)}
+                                className="p-4 bg-gray-50 rounded-2xl border font-black text-pitch text-left hover:bg-grass-500 hover:border-grass-600 transition-all flex items-center justify-between group"
+                              >
+                                  <div className="flex items-center gap-3">
+                                      <div className="w-8 h-8 bg-pitch rounded-lg overflow-hidden flex items-center justify-center">
+                                          {team.logoUrl ? <img src={team.logoUrl} className="w-full h-full object-cover"/> : <span className="text-[10px] text-white">{team.name.charAt(0)}</span>}
                                       </div>
-                                      <ChevronRight className="w-4 h-4 opacity-0 group-hover:opacity-100 transition-opacity" />
-                                  </button>
-                              ))
-                          )}
+                                      {team.name}
+                                  </div>
+                                  <ChevronRight className="w-4 h-4" />
+                              </button>
+                          ))}
                       </div>
-                      
-                      <div className="flex gap-4 pt-6">
-                          <button onClick={() => setShowManualBookingModal(null)} className="flex-1 py-4 font-black text-gray-400 uppercase text-xs">Cancelar</button>
-                      </div>
+                      <button onClick={() => setShowManualBookingModal(null)} className="w-full py-4 font-black text-gray-400 uppercase text-xs">Cancelar</button>
                   </div>
               </div>
           </div>
       )}
 
+      {/* MODAL CONFIGURAÇÕES */}
       {showSettingsModal && (
         <div className="fixed inset-0 bg-pitch/95 backdrop-blur-md z-[150] flex items-end">
             <div className="bg-white w-full rounded-t-[3rem] p-8 animate-in slide-in-from-bottom duration-300 overflow-y-auto max-h-[85vh]">
@@ -566,7 +498,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                         </div>
                         <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100">
                             <label className="text-[10px] font-black text-gray-400 uppercase mb-1 block">Chave PIX</label>
-                            <input type="text" value={editPixKey} onChange={e => setEditPixKey(e.target.value)} placeholder="Celular, CPF ou E-mail" className="w-full bg-transparent font-bold outline-none text-pitch" />
+                            <input type="text" value={editPixKey} onChange={e => setEditPixKey(e.target.value)} className="w-full bg-transparent font-bold outline-none text-pitch" />
                         </div>
                     </div>
                     <Button className="w-full py-5 rounded-[2rem] text-sm font-black uppercase tracking-widest" onClick={handleSaveSettings}>Atualizar Arena</Button>
@@ -575,6 +507,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
         </div>
       )}
 
+      {/* MODAL ADICIONAR SLOTS */}
       {showAddModal && (
           <div className="fixed inset-0 bg-pitch/95 backdrop-blur-md z-[150] flex items-end">
             <div className="bg-white w-full rounded-t-[3.5rem] p-10 animate-in slide-in-from-bottom duration-500 shadow-2xl overflow-y-auto max-h-[90vh]">
@@ -613,121 +546,18 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                         </div>
                     </div>
 
-                    <div className="space-y-3">
-                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block">Tipo de Jogo</label>
-                        <div className="grid grid-cols-2 gap-3">
-                            <button 
-                                onClick={() => setMatchType('AMISTOSO')}
-                                className={`flex flex-col items-center gap-2 p-4 rounded-2xl border transition-all ${matchType === 'AMISTOSO' ? 'bg-pitch border-pitch text-white' : 'bg-gray-50 border-gray-100 text-gray-400'}`}
-                            >
-                                <Swords className={`w-6 h-6 ${matchType === 'AMISTOSO' ? 'text-grass-500' : 'text-gray-300'}`} />
-                                <span className="font-black text-[11px] uppercase">Amistoso</span>
-                            </button>
-                            <button 
-                                onClick={() => setMatchType('FESTIVAL')}
-                                className={`flex flex-col items-center gap-2 p-4 rounded-2xl border transition-all ${matchType === 'FESTIVAL' ? 'bg-pitch border-pitch text-white' : 'bg-gray-50 border-gray-100 text-gray-400'}`}
-                            >
-                                <PartyPopper className={`w-6 h-6 ${matchType === 'FESTIVAL' ? 'text-grass-500' : 'text-gray-300'}`} />
-                                <span className="font-black text-[11px] uppercase">Festival</span>
-                            </button>
-                        </div>
-                    </div>
-
-                    <div className="space-y-4">
-                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block">Quem é o Mandante?</label>
-                        
-                        <div className="flex flex-col gap-3">
-                            <button 
-                                onClick={() => { setHostType('NONE'); setSelectedHostTeamName(''); setSelectedHostCategory(''); }}
-                                className={`flex items-center gap-4 p-4 rounded-2xl border transition-all ${hostType === 'NONE' ? 'bg-pitch border-pitch text-white shadow-md' : 'bg-gray-50 border-gray-100 text-gray-400'}`}
-                            >
-                                <CircleSlash className={`w-6 h-6 ${hostType === 'NONE' ? 'text-grass-500' : 'text-gray-300'}`} />
-                                <div className="text-left">
-                                    <p className="font-black text-sm">Campo Aberto</p>
-                                    <p className="text-[9px] font-bold uppercase opacity-60">Qualquer time pode agendar</p>
-                                </div>
-                            </button>
-
-                            {currentUser.teamName && (
-                                <div className={`p-4 rounded-2xl border transition-all ${hostType === 'OWNER' ? 'bg-pitch border-pitch text-white shadow-md' : 'bg-gray-50 border-gray-100 text-gray-400'}`}>
-                                    <div className="flex items-center gap-4 mb-3">
-                                        <Trophy className={`w-6 h-6 ${hostType === 'OWNER' ? 'text-grass-500' : 'text-gray-300'}`} />
-                                        <p className="font-black text-sm uppercase">{currentUser.teamName} (Meu Time)</p>
-                                    </div>
-                                    <div className="flex flex-wrap gap-2">
-                                        {currentUser.teamCategories.map(cat => (
-                                            <button 
-                                                key={cat}
-                                                onClick={() => { setHostType('OWNER'); setSelectedHostCategory(cat); setSelectedHostTeamName(currentUser.teamName!); }}
-                                                className={`px-3 py-1.5 rounded-lg border text-[10px] font-black transition-all ${hostType === 'OWNER' && selectedHostCategory === cat ? 'bg-grass-500 border-grass-600 text-pitch' : 'bg-white/5 border-white/10 text-gray-400'}`}
-                                            >
-                                                {cat}
-                                            </button>
-                                        ))}
-                                    </div>
-                                </div>
-                            )}
-
-                            {registeredTeams.length > 0 && (
-                                <div className="space-y-2">
-                                    <p className="text-[9px] font-black text-gray-400 uppercase pl-1">Outras Equipes da Casa</p>
-                                    <div className="grid grid-cols-1 gap-2">
-                                        {registeredTeams.map(team => (
-                                            <div key={team.id} className={`p-4 rounded-2xl border transition-all ${hostType === 'REGISTERED' && selectedHostTeamName === team.name ? 'bg-pitch border-pitch text-white shadow-md' : 'bg-gray-50 border-gray-100 text-gray-400'}`}>
-                                                <div 
-                                                    onClick={() => { setHostType('REGISTERED'); setSelectedHostTeamName(team.name); setSelectedHostCategory(''); }}
-                                                    className="flex items-center gap-4 mb-3 cursor-pointer"
-                                                >
-                                                    <div className="w-10 h-10 bg-pitch rounded-lg overflow-hidden flex items-center justify-center border border-white/10">
-                                                        {team.logoUrl ? <img src={team.logoUrl} className="w-full h-full object-cover"/> : <Shield className={`w-6 h-6 ${hostType === 'REGISTERED' && selectedHostTeamName === team.name ? 'text-grass-500' : 'text-gray-300'}`} />}
-                                                    </div>
-                                                    <p className="font-black text-sm">{team.name}</p>
-                                                </div>
-                                                {hostType === 'REGISTERED' && selectedHostTeamName === team.name && (
-                                                    <div className="flex flex-wrap gap-2 animate-in fade-in slide-in-from-top-1 duration-200">
-                                                        <p className="w-full text-[9px] font-black text-grass-500 uppercase mb-1">Selecione a Categoria:</p>
-                                                        {categories.map(cat => (
-                                                            <button 
-                                                                key={cat}
-                                                                onClick={() => setSelectedHostCategory(cat)}
-                                                                className={`px-3 py-1.5 rounded-lg border text-[10px] font-black transition-all ${selectedHostCategory === cat ? 'bg-grass-500 border-grass-600 text-pitch' : 'bg-white/5 border-white/10 text-gray-400'}`}
-                                                            >
-                                                                {cat}
-                                                            </button>
-                                                        ))}
-                                                    </div>
-                                                )}
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
-                            )}
-                        </div>
-                    </div>
-
                     <div className="space-y-2">
                         <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block">Recorrência Extra (Semanal)</label>
-                        <select 
-                          value={repeatWeeks} 
-                          onChange={e => setRepeatWeeks(Number(e.target.value))} 
-                          className="w-full p-4 bg-gray-50 rounded-2xl font-black border border-gray-100 appearance-none text-pitch text-sm"
-                        >
-                            <option value={1}>Horário Único (Apenas esta semana)</option>
-                            <option value={4}>Repetir por 4 Semanas</option>
-                            <option value={8}>Repetir por 8 Semanas</option>
-                            <option value={12}>Repetir por 12 Semanas</option>
+                        <select value={repeatWeeks} onChange={e => setRepeatWeeks(Number(e.target.value))} className="w-full p-4 bg-gray-50 rounded-2xl font-black border border-gray-100 appearance-none text-pitch text-sm">
+                            <option value={1}>Horário Único</option>
+                            <option value={4}>4 Semanas</option>
+                            <option value={8}>8 Semanas</option>
                         </select>
                     </div>
 
                     <div className="flex gap-4 pt-6">
                         <button onClick={() => setShowAddModal(false)} className="flex-1 py-5 font-black text-gray-400 uppercase text-xs tracking-widest">Cancelar</button>
-                        <Button 
-                            className="flex-[2] py-5 rounded-[2rem] text-sm font-black shadow-xl uppercase tracking-widest" 
-                            onClick={handlePublishSlots}
-                            disabled={hostType !== 'NONE' && !selectedHostCategory}
-                        >
-                          Publicar Agenda
-                        </Button>
+                        <Button className="flex-[2] py-5 rounded-[2rem] text-sm font-black shadow-xl uppercase tracking-widest" onClick={handlePublishSlots}>Publicar Agenda</Button>
                     </div>
                 </div>
             </div>
