@@ -1,8 +1,9 @@
 
-import React, { useState } from 'react';
-import { Plus, Calendar, Settings, Trash2, Shield, MapPin, Key, X, Save, Trophy, Check, CalendarDays, Clock, Repeat, Users, CircleSlash, Swords, PartyPopper, Star } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Plus, Calendar, Settings, Trash2, Shield, MapPin, Key, X, Save, Trophy, Check, CalendarDays, Clock, Repeat, Users, CircleSlash, Swords, PartyPopper, Star, UsersRound, BookOpenCheck } from 'lucide-react';
 import { Button } from '../components/Button';
-import { Field, MatchSlot, MatchType, User } from '../types';
+import { Field, MatchSlot, MatchType, User, RegisteredTeam } from '../types';
+import { api } from '../services/api';
 
 interface FieldDashboardProps {
   categories: string[];
@@ -32,7 +33,12 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
 }) => {
   const [showAddModal, setShowAddModal] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
+  const [showTeamsModal, setShowTeamsModal] = useState(false);
+  const [showManualBookingModal, setShowManualBookingModal] = useState<MatchSlot | null>(null);
   
+  const [registeredTeams, setRegisteredTeams] = useState<RegisteredTeam[]>([]);
+  const [newTeamName, setNewTeamName] = useState('');
+
   // States for new slot
   const [selectedDay, setSelectedDay] = useState<number | null>(null);
   const [newTime, setNewTime] = useState('19:00');
@@ -49,6 +55,42 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
   const [editRate, setEditRate] = useState(field.hourlyRate.toString());
   const [editPixKey, setEditPixKey] = useState(field.pixConfig.key || '');
   const [editPixName, setEditPixName] = useState(field.pixConfig.name || '');
+
+  useEffect(() => {
+    loadTeams();
+  }, [field.id]);
+
+  const loadTeams = async () => {
+    const teams = await api.getRegisteredTeams(field.id);
+    setRegisteredTeams(teams);
+  };
+
+  const handleAddRegisteredTeam = async () => {
+    if (newTeamName.trim()) {
+      await api.addRegisteredTeam(field.id, newTeamName.trim());
+      setNewTeamName('');
+      loadTeams();
+    }
+  };
+
+  const handleDeleteRegisteredTeam = async (id: string) => {
+    if (confirm("Deseja remover esta equipe dos seus registros?")) {
+      await api.deleteRegisteredTeam(field.id, id);
+      loadTeams();
+    }
+  };
+
+  const handleManualBooking = async (slotId: string, teamName: string) => {
+    if (!teamName) return;
+    await api.updateSlot(slotId, {
+      isBooked: true,
+      bookedByTeamName: teamName,
+      status: 'confirmed',
+      bookedByCategory: 'Reserva Arena'
+    });
+    setShowManualBookingModal(null);
+    window.location.reload(); // Refresh local state via re-render trigger (or parent update)
+  };
 
   const todayStr = new Date().toISOString().split('T')[0];
   const sortedSlots = slots
@@ -122,7 +164,10 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
             <h1 className="text-2xl font-black text-pitch">Minha Arena</h1>
             <p className="text-gray-500 text-xs font-bold uppercase tracking-tighter">{field.name}</p>
         </div>
-        <button onClick={() => setShowSettingsModal(true)} className="p-2 bg-gray-100 rounded-xl text-gray-500 active:scale-95 transition-transform"><Settings className="w-5 h-5" /></button>
+        <div className="flex gap-2">
+            <button onClick={() => setShowTeamsModal(true)} className="p-2.5 bg-gray-50 rounded-xl text-gray-500 active:scale-95 transition-transform"><UsersRound className="w-5 h-5" /></button>
+            <button onClick={() => setShowSettingsModal(true)} className="p-2.5 bg-gray-50 rounded-xl text-gray-500 active:scale-95 transition-transform"><Settings className="w-5 h-5" /></button>
+        </div>
       </div>
 
       <div className="p-5 space-y-6">
@@ -163,9 +208,17 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                     </div>
 
                     {slot.status === 'available' ? (
-                        <div className="text-[9px] text-gray-400 font-black uppercase flex items-center gap-2">
-                             <div className={`w-1.5 h-1.5 rounded-full animate-pulse ${slot.hasLocalTeam ? 'bg-orange-500' : 'bg-grass-500'}`}></div>
-                             {slot.hasLocalTeam ? `Aguardando Adversário (${slot.localTeamName})` : 'Campo Livre'}
+                        <div className="flex justify-between items-center">
+                            <div className="text-[9px] text-gray-400 font-black uppercase flex items-center gap-2">
+                                 <div className={`w-1.5 h-1.5 rounded-full animate-pulse ${slot.hasLocalTeam ? 'bg-orange-500' : 'bg-grass-500'}`}></div>
+                                 {slot.hasLocalTeam ? `Aguardando Adversário (${slot.localTeamName})` : 'Campo Livre'}
+                            </div>
+                            <button 
+                                onClick={() => setShowManualBookingModal(slot)}
+                                className="text-[9px] font-black uppercase bg-pitch text-white px-3 py-1.5 rounded-lg flex items-center gap-1.5 shadow-md active:scale-95 transition-transform"
+                            >
+                                <BookOpenCheck className="w-3 h-3 text-grass-500" /> Reserva Manual
+                            </button>
                         </div>
                     ) : (
                         <div className="bg-gray-50 rounded-2xl p-4 flex flex-col gap-4 border border-gray-100">
@@ -208,6 +261,81 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
             ))}
         </div>
       </div>
+
+      {/* MODAL GESTÃO DE EQUIPES */}
+      {showTeamsModal && (
+          <div className="fixed inset-0 bg-pitch/90 backdrop-blur-md z-[150] flex items-center justify-center p-4">
+              <div className="bg-white w-full max-w-lg rounded-[2.5rem] p-8 animate-in zoom-in-95 duration-200 flex flex-col max-h-[85vh]">
+                <div className="flex justify-between items-center mb-6">
+                    <h2 className="text-2xl font-black text-pitch flex items-center gap-3">
+                        <UsersRound className="w-7 h-7 text-grass-500" /> Equipes da Casa
+                    </h2>
+                    <button onClick={() => setShowTeamsModal(false)} className="p-2 bg-gray-100 rounded-full"><X className="w-6 h-6"/></button>
+                </div>
+                
+                <div className="flex gap-2 mb-6">
+                    <input 
+                        type="text" 
+                        placeholder="Nome do time que joga aqui..." 
+                        value={newTeamName}
+                        onChange={e => setNewTeamName(e.target.value)}
+                        onKeyDown={e => e.key === 'Enter' && handleAddRegisteredTeam()}
+                        className="flex-grow p-4 bg-gray-50 border rounded-2xl font-bold outline-none focus:ring-2 focus:ring-grass-500"
+                    />
+                    <button onClick={handleAddRegisteredTeam} className="bg-pitch text-white px-6 rounded-2xl active:scale-95 transition-transform">
+                        <Plus className="w-6 h-6" />
+                    </button>
+                </div>
+
+                <div className="overflow-y-auto space-y-2 flex-grow">
+                    {registeredTeams.length === 0 && <p className="text-center text-gray-400 font-bold py-10 uppercase text-xs">Nenhuma equipe cadastrada.</p>}
+                    {registeredTeams.map(team => (
+                        <div key={team.id} className="flex justify-between items-center p-4 bg-gray-50 rounded-2xl border group hover:border-grass-200 transition-colors">
+                            <span className="font-black text-pitch">{team.name}</span>
+                            <button onClick={() => handleDeleteRegisteredTeam(team.id)} className="p-2 text-gray-300 hover:text-red-500 transition-colors"><Trash2 className="w-4 h-4"/></button>
+                        </div>
+                    ))}
+                </div>
+              </div>
+          </div>
+      )}
+
+      {/* MODAL RESERVA MANUAL */}
+      {showManualBookingModal && (
+          <div className="fixed inset-0 bg-pitch/90 backdrop-blur-xl z-[200] flex items-center justify-center p-4">
+              <div className="bg-white w-full max-w-lg rounded-[2.5rem] p-8 animate-in zoom-in-95 duration-200">
+                  <h2 className="text-2xl font-black text-pitch mb-2">Reserva Manual</h2>
+                  <p className="text-xs font-bold text-gray-400 uppercase mb-8">Dia {showManualBookingModal.date.split('-').reverse().join('/')} às {showManualBookingModal.time}</p>
+                  
+                  <div className="space-y-4">
+                      <label className="text-[10px] font-black text-gray-400 uppercase block tracking-widest">Para qual equipe?</label>
+                      <div className="grid grid-cols-1 gap-2 max-h-[300px] overflow-y-auto pr-2">
+                          {registeredTeams.length === 0 ? (
+                              <div className="p-6 bg-orange-50 rounded-2xl border border-orange-100 text-center">
+                                  <p className="text-xs font-bold text-orange-700">Nenhuma equipe cadastrada para seleção rápida.</p>
+                                  <button onClick={() => { setShowManualBookingModal(null); setShowTeamsModal(true); }} className="mt-2 text-[10px] font-black text-pitch uppercase underline">Cadastrar Agora</button>
+                              </div>
+                          ) : (
+                              registeredTeams.map(team => (
+                                  <button 
+                                    key={team.id}
+                                    onClick={() => handleManualBooking(showManualBookingModal.id, team.name)}
+                                    className="p-4 bg-gray-50 rounded-2xl border font-black text-pitch text-left hover:bg-grass-500 hover:border-grass-600 transition-all flex items-center justify-between group"
+                                  >
+                                      {team.name}
+                                      <ChevronRight className="w-4 h-4 opacity-0 group-hover:opacity-100 transition-opacity" />
+                                  </button>
+                              ))
+                          )}
+                      </div>
+                      
+                      <div className="flex gap-4 pt-6">
+                          <button onClick={() => setShowManualBookingModal(null)} className="flex-1 py-4 font-black text-gray-400 uppercase text-xs">Cancelar</button>
+                      </div>
+                  </div>
+              </div>
+          </div>
+      )}
 
       {showSettingsModal && (
         <div className="fixed inset-0 bg-pitch/95 backdrop-blur-md z-[150] flex items-end">
@@ -375,3 +503,8 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
     </div>
   );
 };
+
+// Internal icon for chevron
+const ChevronRight = ({ className }: { className?: string }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="m9 18 6-6-6-6"/></svg>
+);

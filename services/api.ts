@@ -1,6 +1,6 @@
 
 import { supabase } from '../supabaseClient';
-import { User, Field, MatchSlot } from '../types';
+import { User, Field, MatchSlot, RegisteredTeam } from '../types';
 
 const getLocalUserData = (userId: string) => {
     const data = localStorage.getItem(`jf_user_extra_${userId}`);
@@ -37,6 +37,29 @@ export const api = {
     return categories;
   },
 
+  // Equipes registradas pela arena
+  getRegisteredTeams: async (fieldId: string): Promise<RegisteredTeam[]> => {
+    const data = localStorage.getItem(`jf_registered_teams_${fieldId}`);
+    return data ? JSON.parse(data) : [];
+  },
+
+  addRegisteredTeam: async (fieldId: string, teamName: string): Promise<RegisteredTeam> => {
+    const teams = await api.getRegisteredTeams(fieldId);
+    const newTeam: RegisteredTeam = {
+      id: Math.random().toString(36).substr(2, 9),
+      name: teamName,
+      fieldId,
+      createdAt: new Date().toISOString()
+    };
+    localStorage.setItem(`jf_registered_teams_${fieldId}`, JSON.stringify([...teams, newTeam]));
+    return newTeam;
+  },
+
+  deleteRegisteredTeam: async (fieldId: string, teamId: string): Promise<void> => {
+    const teams = await api.getRegisteredTeams(fieldId);
+    localStorage.setItem(`jf_registered_teams_${fieldId}`, JSON.stringify(teams.filter(t => t.id !== teamId)));
+  },
+
   login: async (email: string, password: string): Promise<User> => {
     const { data: user, error } = await supabase
       .from('User')
@@ -64,8 +87,8 @@ export const api = {
         name: fieldData.name,
         location: fieldData.location,
         hourlyRate: fieldData.hourlyRate,
-        pixKey: fieldData.pixConfig.key,
-        pixName: fieldData.pixConfig.name,
+        pixKey: fieldData.pixKey || '',
+        pixName: fieldData.pixName || '',
         imageUrl: 'https://images.unsplash.com/photo-1529900748604-07564a03e7a6?auto=format&fit=crop&q=80&w=1000',
         contactPhone: fieldData.contactPhone,
         latitude: userData.latitude || -23.6337,

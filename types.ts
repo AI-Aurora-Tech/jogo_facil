@@ -46,6 +46,13 @@ export interface PixConfig {
   name: string;
 }
 
+export interface RegisteredTeam {
+  id: string;
+  name: string;
+  fieldId: string;
+  createdAt: string;
+}
+
 export interface Field {
   id: string;
   ownerId: string;
