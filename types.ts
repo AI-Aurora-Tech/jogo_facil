@@ -50,6 +50,8 @@ export interface RegisteredTeam {
   id: string;
   name: string;
   fieldId: string;
+  fixedDay: number; // 0-6 (Sun-Sat)
+  fixedTime: string;
   createdAt: string;
 }
 

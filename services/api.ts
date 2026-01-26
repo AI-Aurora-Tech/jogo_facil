@@ -37,18 +37,20 @@ export const api = {
     return categories;
   },
 
-  // Equipes registradas pela arena
+  // Equipes registradas pela arena (Mensalistas)
   getRegisteredTeams: async (fieldId: string): Promise<RegisteredTeam[]> => {
     const data = localStorage.getItem(`jf_registered_teams_${fieldId}`);
     return data ? JSON.parse(data) : [];
   },
 
-  addRegisteredTeam: async (fieldId: string, teamName: string): Promise<RegisteredTeam> => {
+  addRegisteredTeam: async (fieldId: string, teamName: string, fixedDay: number, fixedTime: string): Promise<RegisteredTeam> => {
     const teams = await api.getRegisteredTeams(fieldId);
     const newTeam: RegisteredTeam = {
       id: Math.random().toString(36).substr(2, 9),
       name: teamName,
       fieldId,
+      fixedDay,
+      fixedTime,
       createdAt: new Date().toISOString()
     };
     localStorage.setItem(`jf_registered_teams_${fieldId}`, JSON.stringify([...teams, newTeam]));

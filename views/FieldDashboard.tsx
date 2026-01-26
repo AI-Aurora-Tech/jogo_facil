@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { Plus, Calendar, Settings, Trash2, Shield, MapPin, Key, X, Save, Trophy, Check, CalendarDays, Clock, Repeat, Users, CircleSlash, Swords, PartyPopper, Star, UsersRound, BookOpenCheck, ChevronRight } from 'lucide-react';
+import { Plus, Calendar, Settings, Trash2, Shield, MapPin, Key, X, Save, Trophy, Check, CalendarDays, Clock, Repeat, Users, CircleSlash, Swords, PartyPopper, Star, UsersRound, BookOpenCheck, ChevronRight, AlertCircle } from 'lucide-react';
 import { Button } from '../components/Button';
 import { Field, MatchSlot, MatchType, User, RegisteredTeam } from '../types';
 import { api } from '../services/api';
@@ -38,6 +38,8 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
   
   const [registeredTeams, setRegisteredTeams] = useState<RegisteredTeam[]>([]);
   const [newTeamName, setNewTeamName] = useState('');
+  const [newTeamDay, setNewTeamDay] = useState<number>(1);
+  const [newTeamTime, setNewTeamTime] = useState('20:00');
 
   // States for new slot
   const [selectedDay, setSelectedDay] = useState<number | null>(null);
@@ -68,16 +70,45 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
     setRegisteredTeams(teams);
   };
 
+  const getNextOccurrence = (dayOfWeek: number, weeksAhead: number = 0) => {
+    const d = new Date();
+    // Ajusta para o próximo dia da semana
+    d.setDate(d.getDate() + (dayOfWeek + 7 - d.getDay()) % 7 + (weeksAhead * 7));
+    return d.toISOString().split('T')[0];
+  };
+
   const handleAddRegisteredTeam = async () => {
     if (newTeamName.trim()) {
-      await api.addRegisteredTeam(field.id, newTeamName.trim());
+      // 1. Cadastra o time como mensalista nos registros
+      const newTeam = await api.addRegisteredTeam(field.id, newTeamName.trim(), newTeamDay, newTeamTime);
+      
+      // 2. Gera automaticamente os horários "vitalícios" (52 semanas = 1 ano)
+      const lifetimeSlots: Omit<MatchSlot, 'id'>[] = [];
+      for (let i = 0; i < 52; i++) {
+          lifetimeSlots.push({
+              fieldId: field.id,
+              date: getNextOccurrence(newTeamDay, i),
+              time: newTeamTime,
+              price: field.hourlyRate,
+              matchType: 'FIXO',
+              durationMinutes: 60,
+              isBooked: true,
+              hasLocalTeam: true,
+              localTeamName: newTeamName.trim(),
+              allowedCategories: ['Livre'],
+              bookedByTeamName: newTeamName.trim(),
+              status: 'confirmed'
+          });
+      }
+      
+      onAddSlot(lifetimeSlots);
       setNewTeamName('');
       loadTeams();
     }
   };
 
   const handleDeleteRegisteredTeam = async (id: string) => {
-    if (confirm("Deseja remover esta equipe dos seus registros?")) {
+    if (confirm("Deseja remover esta equipe? Isso removerá o registro mas os horários já gerados permanecerão.")) {
       await api.deleteRegisteredTeam(field.id, id);
       loadTeams();
     }
@@ -110,12 +141,6 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
     if (success) setShowSettingsModal(false);
   };
 
-  const getNextOccurrence = (dayOfWeek: number, weeksAhead: number = 0) => {
-    const d = new Date();
-    d.setDate(d.getDate() + (dayOfWeek + 7 - d.getDay()) % 7 + (weeksAhead * 7));
-    return d.toISOString().split('T')[0];
-  };
-
   const handlePublishSlots = () => {
     if (selectedDay === null || !newTime) return alert("Selecione o dia e a hora");
 
@@ -139,13 +164,9 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
 
     onAddSlot(newSlots);
     setShowAddModal(false);
-    // Reset fields
     setSelectedDay(null);
     setRepeatWeeks(1);
     setHostType('NONE');
-    setMatchType('AMISTOSO');
-    setSelectedHostTeamName('');
-    setSelectedHostCategory('');
   };
 
   const StarRating = ({ rating, onRate, readonly = false }: { rating: number, onRate?: (r: number) => void, readonly?: boolean }) => {
@@ -170,7 +191,10 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
             <p className="text-gray-500 text-xs font-bold uppercase tracking-tighter">{field.name}</p>
         </div>
         <div className="flex gap-2">
-            <button onClick={() => setShowTeamsModal(true)} className="p-2.5 bg-gray-50 rounded-xl text-gray-500 active:scale-95 transition-transform"><UsersRound className="w-5 h-5" /></button>
+            <button onClick={() => setShowTeamsModal(true)} className="p-2.5 bg-gray-50 rounded-xl text-gray-500 active:scale-95 transition-transform flex items-center gap-2">
+                <UsersRound className="w-5 h-5" />
+                <span className="text-[10px] font-black uppercase hidden sm:block">Mensalistas</span>
+            </button>
             <button onClick={() => setShowSettingsModal(true)} className="p-2.5 bg-gray-50 rounded-xl text-gray-500 active:scale-95 transition-transform"><Settings className="w-5 h-5" /></button>
         </div>
       </div>
@@ -202,9 +226,9 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                                 <span className="text-[8px] font-black text-gray-400 uppercase">{slot.time}</span>
                             </div>
                             <div>
-                                <h4 className="font-bold text-pitch text-sm">{slot.allowedCategories[0]}</h4>
+                                <h4 className="font-bold text-pitch text-sm">{slot.isBooked ? slot.bookedByTeamName : slot.allowedCategories[0]}</h4>
                                 <div className="flex gap-1 mt-1">
-                                  <span className="text-[8px] bg-indigo-50 text-indigo-600 px-1.5 py-0.5 rounded-md font-black uppercase">{slot.matchType}</span>
+                                  <span className={`text-[8px] px-1.5 py-0.5 rounded-md font-black uppercase ${slot.matchType === 'FIXO' ? 'bg-orange-100 text-orange-700' : 'bg-indigo-50 text-indigo-600'}`}>{slot.matchType}</span>
                                   <span className="text-[8px] bg-grass-50 text-grass-700 px-1.5 py-0.5 rounded-md font-black uppercase">R$ {slot.price}</span>
                                 </div>
                             </div>
@@ -241,25 +265,11 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                                     </div>
                                 )}
                                 {slot.status === 'confirmed' && (
-                                    <span className="text-[9px] font-black uppercase bg-grass-100 text-grass-700 px-2 py-1 rounded-md">Confirmado</span>
+                                    <span className={`text-[9px] font-black uppercase px-2 py-1 rounded-md ${slot.matchType === 'FIXO' ? 'bg-orange-500 text-white' : 'bg-grass-100 text-grass-700'}`}>
+                                        {slot.matchType === 'FIXO' ? 'MENSALISTA' : 'Confirmado'}
+                                    </span>
                                 )}
                             </div>
-                            
-                            {slot.status === 'confirmed' && slot.bookedByUserId && (
-                                <div className="pt-2 border-t border-gray-200/50 flex flex-col gap-2">
-                                    <p className="text-[9px] font-black text-gray-400 uppercase tracking-tighter">Avaliar comportamento do time:</p>
-                                    <StarRating 
-                                        rating={slot.ratingGiven || 0} 
-                                        readonly={!!slot.ratingGiven}
-                                        onRate={(r) => onRateTeam(slot.bookedByUserId!, slot.id, r)} 
-                                    />
-                                    {slot.ratingGiven ? (
-                                        <p className="text-[8px] font-bold text-grass-600 uppercase">Avaliação enviada!</p>
-                                    ) : (
-                                        <p className="text-[8px] font-bold text-gray-300 uppercase italic">Toque nas estrelas para avaliar</p>
-                                    )}
-                                </div>
-                            )}
                         </div>
                     )}
                 </div>
@@ -267,37 +277,72 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
         </div>
       </div>
 
-      {/* MODAL GESTÃO DE EQUIPES */}
+      {/* MODAL GESTÃO DE MENSALISTAS */}
       {showTeamsModal && (
           <div className="fixed inset-0 bg-pitch/90 backdrop-blur-md z-[150] flex items-center justify-center p-4">
-              <div className="bg-white w-full max-w-lg rounded-[2.5rem] p-8 animate-in zoom-in-95 duration-200 flex flex-col max-h-[85vh]">
+              <div className="bg-white w-full max-w-2xl rounded-[3rem] p-10 animate-in zoom-in-95 duration-200 flex flex-col max-h-[85vh]">
                 <div className="flex justify-between items-center mb-6">
-                    <h2 className="text-2xl font-black text-pitch flex items-center gap-3">
-                        <UsersRound className="w-7 h-7 text-grass-500" /> Equipes da Casa
-                    </h2>
+                    <div>
+                        <h2 className="text-2xl font-black text-pitch flex items-center gap-3">
+                            <UsersRound className="w-7 h-7 text-grass-500" /> Mensalistas Vitalícios
+                        </h2>
+                        <p className="text-xs font-bold text-gray-400 uppercase mt-1">Times com horários fixos toda semana</p>
+                    </div>
                     <button onClick={() => setShowTeamsModal(false)} className="p-2 bg-gray-100 rounded-full"><X className="w-6 h-6"/></button>
                 </div>
                 
-                <div className="flex gap-2 mb-6">
-                    <input 
-                        type="text" 
-                        placeholder="Nome do time que joga aqui..." 
-                        value={newTeamName}
-                        onChange={e => setNewTeamName(e.target.value)}
-                        onKeyDown={e => e.key === 'Enter' && handleAddRegisteredTeam()}
-                        className="flex-grow p-4 bg-gray-50 border rounded-2xl font-bold outline-none focus:ring-2 focus:ring-grass-500"
-                    />
-                    <button onClick={handleAddRegisteredTeam} className="bg-pitch text-white px-6 rounded-2xl active:scale-95 transition-transform">
-                        <Plus className="w-6 h-6" />
-                    </button>
+                <div className="bg-gray-50 p-6 rounded-[2rem] border-2 border-dashed border-gray-200 mb-8 space-y-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="col-span-2">
+                            <label className="text-[10px] font-black text-gray-400 uppercase mb-2 block">Nome da Equipe</label>
+                            <input 
+                                type="text" 
+                                placeholder="Ex: Amigos da Segunda FC" 
+                                value={newTeamName}
+                                onChange={e => setNewTeamName(e.target.value)}
+                                className="w-full p-4 bg-white border rounded-2xl font-bold outline-none focus:ring-2 focus:ring-grass-500"
+                            />
+                        </div>
+                        <div>
+                            <label className="text-[10px] font-black text-gray-400 uppercase mb-2 block">Dia da Semana</label>
+                            <select 
+                                value={newTeamDay} 
+                                onChange={e => setNewTeamDay(Number(e.target.value))}
+                                className="w-full p-4 bg-white border rounded-2xl font-bold outline-none"
+                            >
+                                {DAYS_OF_WEEK.map(d => <option key={d.value} value={d.value}>{d.label}</option>)}
+                            </select>
+                        </div>
+                        <div>
+                            <label className="text-[10px] font-black text-gray-400 uppercase mb-2 block">Horário Fixo</label>
+                            <input 
+                                type="time" 
+                                value={newTeamTime}
+                                onChange={e => setNewTeamTime(e.target.value)}
+                                className="w-full p-4 bg-white border rounded-2xl font-bold outline-none"
+                            />
+                        </div>
+                    </div>
+                    <Button onClick={handleAddRegisteredTeam} className="w-full py-4 rounded-2xl font-black text-sm uppercase shadow-lg">
+                        <Plus className="w-5 h-5" /> Cadastrar e Gerar Agenda Vitalícia
+                    </Button>
                 </div>
 
-                <div className="overflow-y-auto space-y-2 flex-grow">
-                    {registeredTeams.length === 0 && <p className="text-center text-gray-400 font-bold py-10 uppercase text-xs">Nenhuma equipe cadastrada.</p>}
+                <div className="overflow-y-auto space-y-3 flex-grow pr-2">
+                    <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">Equipes Ativas</h4>
+                    {registeredTeams.length === 0 && <p className="text-center text-gray-300 font-bold py-10 uppercase text-xs">Nenhuma equipe fixa.</p>}
                     {registeredTeams.map(team => (
-                        <div key={team.id} className="flex justify-between items-center p-4 bg-gray-50 rounded-2xl border group hover:border-grass-200 transition-colors">
-                            <span className="font-black text-pitch">{team.name}</span>
-                            <button onClick={() => handleDeleteRegisteredTeam(team.id)} className="p-2 text-gray-300 hover:text-red-500 transition-colors"><Trash2 className="w-4 h-4"/></button>
+                        <div key={team.id} className="flex justify-between items-center p-5 bg-white rounded-2xl border-2 border-gray-50 group hover:border-grass-200 transition-all shadow-sm">
+                            <div className="flex items-center gap-4">
+                                <div className="w-10 h-10 bg-pitch text-grass-500 rounded-xl flex items-center justify-center font-black text-xs">
+                                    {DAYS_OF_WEEK.find(d => d.value === team.fixedDay)?.label}
+                                </div>
+                                <div>
+                                    <p className="font-black text-pitch text-sm">{team.name}</p>
+                                    <p className="text-[10px] font-bold text-gray-400 uppercase">Toda {DAYS_OF_WEEK.find(d => d.value === team.fixedDay)?.label} às {team.fixedTime}</p>
+                                </div>
+                            </div>
+                            <button onClick={() => handleDeleteRegisteredTeam(team.id)} className="p-2 text-gray-200 hover:text-red-500 transition-colors"><Trash2 className="w-4 h-4"/></button>
                         </div>
                     ))}
                 </div>
@@ -502,28 +547,15 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                         </div>
                     </div>
 
-                    {hostType === 'NONE' && (
-                        <div className="space-y-2">
-                            <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block">Categoria Recomendada</label>
-                            <select 
-                                value={selectedCategory} 
-                                onChange={e => setSelectedCategory(e.target.value)} 
-                                className="w-full p-4 bg-gray-50 rounded-2xl font-black border border-gray-100 appearance-none text-pitch text-sm"
-                            >
-                                {categories.map(c => <option key={c} value={c}>{c}</option>)}
-                            </select>
-                        </div>
-                    )}
-
                     <div className="space-y-2">
-                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block">Recorrência (Mensalistas?)</label>
+                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block">Recorrência Extra (Semanal)</label>
                         <select 
                           value={repeatWeeks} 
                           onChange={e => setRepeatWeeks(Number(e.target.value))} 
                           className="w-full p-4 bg-gray-50 rounded-2xl font-black border border-gray-100 appearance-none text-pitch text-sm"
                         >
                             <option value={1}>Horário Único (Apenas esta semana)</option>
-                            <option value={4}>Repetir por 4 Semanas (Mensalista)</option>
+                            <option value={4}>Repetir por 4 Semanas</option>
                             <option value={8}>Repetir por 8 Semanas</option>
                             <option value={12}>Repetir por 12 Semanas</option>
                         </select>
