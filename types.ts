@@ -22,6 +22,15 @@ export interface SubTeam {
   logoUrl?: string;
 }
 
+export interface Notification {
+  id: string;
+  title: string;
+  description: string;
+  timestamp: string;
+  type: 'success' | 'warning' | 'info';
+  read: boolean;
+}
+
 export interface User {
   id: string;
   name: string;
