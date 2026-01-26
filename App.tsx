@@ -72,8 +72,8 @@ const App: React.FC = () => {
       } catch { return false; }
   };
 
-  const addSlot = async (slot: any) => {
-      try { await api.createSlots([slot]); refreshData(); } catch (e: any) { alert(e.message); }
+  const addSlots = async (newSlots: any[]) => {
+      try { await api.createSlots(newSlots); refreshData(); } catch (e: any) { alert(e.message); }
   };
 
   if (view === 'LANDING') return <Landing onStart={() => setView('AUTH')} />;
@@ -115,7 +115,7 @@ const App: React.FC = () => {
         {activeTab === 'ADMIN' && myField && user && (
             <FieldDashboard 
                 field={myField} slots={mySlots} currentUser={user}
-                onAddSlot={addSlot} 
+                onAddSlot={addSlots} 
                 onDeleteSlot={async id => { 
                     const slot = slots.find(s => s.id === id);
                     if (slot?.isBooked) {
