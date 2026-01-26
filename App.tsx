@@ -6,9 +6,10 @@ import { Auth } from './views/Auth';
 import { Subscription } from './views/Subscription';
 import { FieldDashboard } from './views/FieldDashboard';
 import { TeamDashboard } from './views/TeamDashboard';
+import { AdminDashboard } from './views/AdminDashboard';
 import { EditProfileModal } from './components/EditProfileModal';
 import { api } from './services/api';
-import { Search, Trophy, User as UserIcon, RefreshCw } from 'lucide-react';
+import { Search, Trophy, User as UserIcon, RefreshCw, Settings } from 'lucide-react';
 
 const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
@@ -17,15 +18,27 @@ const App: React.FC = () => {
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [fields, setFields] = useState<Field[]>([]);
   const [slots, setSlots] = useState<MatchSlot[]>([]);
+  const [categories, setCategories] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+
+  useEffect(() => {
+    loadInitialData();
+  }, []);
+
+  const loadInitialData = async () => {
+    const cats = await api.getCategories();
+    setCategories(cats);
+  };
 
   const handleAuthSuccess = (loggedUser: User) => {
     setUser(loggedUser);
-    if (loggedUser.subscription === SubscriptionPlan.NONE) {
+    if (loggedUser.subscription === SubscriptionPlan.NONE && loggedUser.role !== UserRole.ADMIN) {
         setView('SUBSCRIPTION');
     } else {
         setView('APP');
-        setActiveTab(loggedUser.role === UserRole.FIELD_OWNER ? 'ADMIN' : 'EXPLORE');
+        if (loggedUser.role === UserRole.ADMIN) setActiveTab('ADMIN');
+        else if (loggedUser.role === UserRole.FIELD_OWNER) setActiveTab('ADMIN');
+        else setActiveTab('EXPLORE');
         refreshData();
     }
   };
@@ -33,9 +46,10 @@ const App: React.FC = () => {
   const refreshData = async () => {
     setIsLoading(true);
     try {
-      const [f, s] = await Promise.all([api.getFields(), api.getSlots()]);
+      const [f, s, cats] = await Promise.all([api.getFields(), api.getSlots(), api.getCategories()]);
       setFields(f);
       setSlots(s);
+      setCategories(cats);
     } catch (e) { console.error(e); } finally { setIsLoading(false); }
   };
 
@@ -86,8 +100,13 @@ const App: React.FC = () => {
       }
   };
 
+  const handleUpdateGlobalCategories = async (newCats: string[]) => {
+      const updated = await api.updateCategories(newCats);
+      setCategories(updated);
+  };
+
   if (view === 'LANDING') return <Landing onStart={() => setView('AUTH')} />;
-  if (view === 'AUTH') return <Auth onLogin={handleAuthSuccess} onCancel={() => setView('LANDING')} />;
+  if (view === 'AUTH') return <Auth categories={categories} onLogin={handleAuthSuccess} onCancel={() => setView('LANDING')} />;
   if (view === 'SUBSCRIPTION' && user) return <Subscription userRole={user.role} onSubscribe={handleSubscribe} onBack={() => setView('LANDING')} />;
 
   const myField = user?.role === UserRole.FIELD_OWNER ? fields.find(f => f.ownerId === user.id) : null;
@@ -107,6 +126,7 @@ const App: React.FC = () => {
       <main className="flex-grow overflow-y-auto pb-24">
         {activeTab === 'EXPLORE' && user && (
             <TeamDashboard 
+                categories={categories}
                 viewMode="EXPLORE" currentUser={user} fields={fields} slots={slots}
                 onBookSlot={async (id, bookingData) => {
                     await api.updateSlot(id, { 
@@ -122,28 +142,33 @@ const App: React.FC = () => {
             />
         )}
         
-        {activeTab === 'ADMIN' && myField && user && (
-            <FieldDashboard 
-                field={myField} slots={mySlots} currentUser={user}
-                onAddSlot={addSlots} 
-                onDeleteSlot={async id => { 
-                    const slot = slots.find(s => s.id === id);
-                    if (slot?.isBooked) {
-                        if (confirm("Deseja CANCELAR A RESERVA deste horário?")) {
-                            await resetSlot(id);
-                        }
-                    } else {
-                        if (confirm("Deseja EXCLUIR este horário da agenda?")) {
-                            await api.deleteSlot(id);
-                            refreshData();
-                        }
-                    }
-                }}
-                onConfirmBooking={async id => { await api.updateSlot(id, { status: 'confirmed' }); refreshData(); }}
-                onRejectBooking={resetSlot}
-                onUpdateField={handleUpdateField}
-                onRateTeam={handleRateTeam}
-            />
+        {activeTab === 'ADMIN' && user && (
+            user.role === UserRole.ADMIN ? (
+              <AdminDashboard categories={categories} onUpdateCategories={handleUpdateGlobalCategories} />
+            ) : myField ? (
+              <FieldDashboard 
+                  categories={categories}
+                  field={myField} slots={mySlots} currentUser={user}
+                  onAddSlot={addSlots} 
+                  onDeleteSlot={async id => { 
+                      const slot = slots.find(s => s.id === id);
+                      if (slot?.isBooked) {
+                          if (confirm("Deseja CANCELAR A RESERVA deste horário?")) {
+                              await resetSlot(id);
+                          }
+                      } else {
+                          if (confirm("Deseja EXCLUIR este horário da agenda?")) {
+                              await api.deleteSlot(id);
+                              refreshData();
+                          }
+                      }
+                  }}
+                  onConfirmBooking={async id => { await api.updateSlot(id, { status: 'confirmed' }); refreshData(); }}
+                  onRejectBooking={resetSlot}
+                  onUpdateField={handleUpdateField}
+                  onRateTeam={handleRateTeam}
+              />
+            ) : <div className="p-10 text-center text-gray-400 font-bold uppercase">Acesso Não Autorizado</div>
         )}
 
         {activeTab === 'PROFILE' && user && (
@@ -154,6 +179,9 @@ const App: React.FC = () => {
                     </div>
                     <h2 className="text-2xl font-black text-pitch">{user.name}</h2>
                     <p className="text-gray-400 mb-6 font-medium">{user.email}</p>
+                    <div className="bg-pitch/5 px-4 py-1.5 rounded-full mb-6">
+                        <span className="text-[10px] font-black text-pitch uppercase tracking-widest">{user.role}</span>
+                    </div>
                     
                     <div className="grid grid-cols-2 gap-3 w-full mb-8">
                         <div className="bg-gray-50 p-4 rounded-3xl border border-gray-100 text-center">
@@ -186,13 +214,13 @@ const App: React.FC = () => {
               <span className="text-[9px] font-black uppercase tracking-tight">Buscar</span>
           </button>
           
-          {user?.role === UserRole.FIELD_OWNER && (
+          {(user?.role === UserRole.FIELD_OWNER || user?.role === UserRole.ADMIN) && (
               <button 
                 onClick={() => setActiveTab('ADMIN')} 
                 className={`flex-1 py-3 flex flex-col items-center gap-1 transition-all rounded-[1.5rem] ${activeTab === 'ADMIN' ? 'bg-grass-500 text-pitch scale-105 shadow-lg shadow-grass-500/20' : 'text-gray-400'}`}
               >
-                  <Trophy className={`w-5 h-5 ${activeTab === 'ADMIN' ? 'text-pitch' : 'text-gray-300'}`} />
-                  <span className="text-[9px] font-black uppercase tracking-tight">Arena</span>
+                  {user.role === UserRole.ADMIN ? <Settings className={`w-5 h-5 ${activeTab === 'ADMIN' ? 'text-pitch' : 'text-gray-300'}`} /> : <Trophy className={`w-5 h-5 ${activeTab === 'ADMIN' ? 'text-pitch' : 'text-gray-300'}`} />}
+                  <span className="text-[9px] font-black uppercase tracking-tight">{user.role === UserRole.ADMIN ? 'Sistema' : 'Arena'}</span>
               </button>
           )}
 
@@ -205,7 +233,7 @@ const App: React.FC = () => {
           </button>
       </nav>
 
-      {showProfileModal && user && <EditProfileModal user={user} onUpdate={async u => { const res = await api.updateUser(u); setUser(res); }} onClose={() => setShowProfileModal(false)} />}
+      {showProfileModal && user && <EditProfileModal categories={categories} user={user} onUpdate={async u => { const res = await api.updateUser(u); setUser(res); }} onClose={() => setShowProfileModal(false)} />}
     </div>
   );
 };

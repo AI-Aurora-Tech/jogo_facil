@@ -2,9 +2,10 @@
 import React, { useState } from 'react';
 import { Plus, Calendar, Settings, Trash2, Shield, MapPin, Key, X, Save, Trophy, Check, CalendarDays, Clock, Repeat, Users, CircleSlash, Swords, PartyPopper, Star } from 'lucide-react';
 import { Button } from '../components/Button';
-import { Field, MatchSlot, COMMON_CATEGORIES, MatchType, User } from '../types';
+import { Field, MatchSlot, MatchType, User } from '../types';
 
 interface FieldDashboardProps {
+  categories: string[];
   field: Field;
   slots: MatchSlot[];
   currentUser: User;
@@ -27,7 +28,7 @@ const DAYS_OF_WEEK = [
 ];
 
 export const FieldDashboard: React.FC<FieldDashboardProps> = ({ 
-  field, slots, currentUser, onAddSlot, onDeleteSlot, onConfirmBooking, onRejectBooking, onUpdateField, onRateTeam
+  categories, field, slots, currentUser, onAddSlot, onDeleteSlot, onConfirmBooking, onRejectBooking, onUpdateField, onRateTeam
 }) => {
   const [showAddModal, setShowAddModal] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
@@ -36,7 +37,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
   const [selectedDay, setSelectedDay] = useState<number | null>(null);
   const [newTime, setNewTime] = useState('19:00');
   const [matchType, setMatchType] = useState<MatchType>('AMISTOSO');
-  const [selectedCategory, setSelectedCategory] = useState(COMMON_CATEGORIES[7]); // Principal
+  const [selectedCategory, setSelectedCategory] = useState(categories[0] || "Principal");
   const [price, setPrice] = useState(field.hourlyRate.toString());
   const [hostType, setHostType] = useState<'NONE' | 'OWNER'>('NONE');
   const [selectedHostCategory, setSelectedHostCategory] = useState<string>('');
@@ -342,7 +343,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                                 onChange={e => setSelectedCategory(e.target.value)} 
                                 className="w-full p-4 bg-gray-50 rounded-2xl font-black border border-gray-100 appearance-none text-pitch text-sm"
                             >
-                                {COMMON_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                                {categories.map(c => <option key={c} value={c}>{c}</option>)}
                             </select>
                         </div>
                     )}

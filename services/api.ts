@@ -20,7 +20,23 @@ const saveLocalSlotData = (slotId: string, data: any) => {
     localStorage.setItem(`jf_slot_extra_${slotId}`, JSON.stringify(data));
 };
 
+// Gerenciamento de categorias globais
+const DEFAULT_CATEGORIES = [
+  "Livre", "Sub-09", "Sub-11", "Sub-13", "Sub-15", "Sub-17", "Sub-20", 
+  "Principal", "Veteranos (35+)", "Cinquentão (50+)", "Feminino"
+];
+
 export const api = {
+  getCategories: async (): Promise<string[]> => {
+    const data = localStorage.getItem('jf_global_categories');
+    return data ? JSON.parse(data) : DEFAULT_CATEGORIES;
+  },
+
+  updateCategories: async (categories: string[]): Promise<string[]> => {
+    localStorage.setItem('jf_global_categories', JSON.stringify(categories));
+    return categories;
+  },
+
   login: async (email: string, password: string): Promise<User> => {
     const { data: user, error } = await supabase
       .from('User')
@@ -172,11 +188,9 @@ export const api = {
   },
 
   rateTeam: async (userId: string, slotId: string, rating: number): Promise<void> => {
-    // Atualiza o slot para marcar que foi avaliado
     const slotExtra = getLocalSlotData(slotId);
     saveLocalSlotData(slotId, { ...slotExtra, ratingGiven: rating });
 
-    // Atualiza a média do time do usuário
     const userExtra = getLocalUserData(userId);
     const currentRating = userExtra.teamRating || 0;
     const currentCount = userExtra.teamRatingCount || 0;

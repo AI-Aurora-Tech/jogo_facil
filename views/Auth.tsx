@@ -1,17 +1,18 @@
 
 import React, { useState } from 'react';
-import { UserRole, COMMON_CATEGORIES, SubscriptionPlan } from '../types';
+import { UserRole, SubscriptionPlan } from '../types';
 import { Button } from '../components/Button';
 import { Mail, Lock, User as UserIcon, ArrowRight, Phone, MapPin, DollarSign, Key, AlertCircle, Image as ImageIcon, Upload, X } from 'lucide-react';
 import { api } from '../services/api';
 import { convertFileToBase64 } from '../utils';
 
 interface AuthProps {
+  categories: string[];
   onLogin: (user: any) => void;
   onCancel: () => void;
 }
 
-export const Auth: React.FC<AuthProps> = ({ onLogin, onCancel }) => {
+export const Auth: React.FC<AuthProps> = ({ categories, onLogin, onCancel }) => {
   const [isRegistering, setIsRegistering] = useState(false);
   const [role, setRole] = useState<UserRole>(UserRole.TEAM_CAPTAIN);
   const [error, setError] = useState('');
@@ -29,7 +30,7 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, onCancel }) => {
 
   // Team Specific
   const [teamName, setTeamName] = useState('');
-  const [teamCategory, setTeamCategory] = useState(COMMON_CATEGORIES[6]);
+  const [teamCategory, setTeamCategory] = useState(categories[0] || "Principal");
   const [teamLogo, setTeamLogo] = useState('');
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -51,39 +52,38 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, onCancel }) => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    setIsLoading(false);
+    setIsLoading(true);
 
     try {
       if (isRegistering) {
-        
-        // Define initial subscription based on role
         let initialSubscription = SubscriptionPlan.NONE;
         
         if (role === UserRole.TEAM_CAPTAIN) {
-            // Times precisam pagar, então começam com NONE
             initialSubscription = SubscriptionPlan.NONE;
         } else if (role === UserRole.FIELD_OWNER) {
-            // Donos de campo agora são gratuitos
             initialSubscription = SubscriptionPlan.FREE;
         }
 
         const payload: any = {
           email,
           password,
-          role: email.includes('admin') ? UserRole.ADMIN : role,
+          role: email.toLowerCase().includes('admin') ? UserRole.ADMIN : role,
           name,
           phoneNumber: phone,
           subscription: initialSubscription,
           subscriptionExpiry: null,
           latitude: -23.6337,
           longitude: -46.7905,
-          subTeams: role === UserRole.TEAM_CAPTAIN ? [{ name: teamName, category: teamCategory, logoUrl: teamLogo }] : [],
+          teamName: role === UserRole.TEAM_CAPTAIN ? teamName : undefined,
+          teamCategories: role === UserRole.TEAM_CAPTAIN ? [teamCategory] : [],
+          teamLogoUrl: role === UserRole.TEAM_CAPTAIN ? teamLogo : undefined,
+          subTeams: [],
           fieldData: role === UserRole.FIELD_OWNER ? {
             name: arenaName,
             location: address,
-            hourlyRate: 0, // Default zero, owner sets later
-            cancellationFeePercent: 0, // Default zero
-            pixConfig: { key: '', name: '' }, // Empty config, owner sets later
+            hourlyRate: 0,
+            cancellationFeePercent: 0,
+            pixConfig: { key: '', name: '' },
             contactPhone: phone
           } : undefined
         };
@@ -211,7 +211,7 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, onCancel }) => {
                         value={teamCategory}
                         onChange={e => setTeamCategory(e.target.value)}
                       >
-                        {COMMON_CATEGORIES.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+                        {categories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
                       </select>
                     </div>
                     <div className="col-span-2">
@@ -247,7 +247,6 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, onCancel }) => {
                 </div>
               )}
 
-              {/* Field Owner Specific - Simplified */}
               {role === UserRole.FIELD_OWNER && (
                 <div className="bg-gray-700 p-4 rounded-xl border border-gray-600 space-y-4">
                   <h3 className="font-bold text-white flex items-center gap-2">🏟️ Informações da Arena</h3>
@@ -263,7 +262,6 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, onCancel }) => {
                          <input type="text" required className={inputClass} placeholder="Rua, Número, Bairro, Cidade" value={address} onChange={e => setAddress(e.target.value)} />
                        </div>
                      </div>
-                     <p className="text-xs text-gray-400 italic">Você poderá configurar valores e dados de recebimento (PIX) no painel de controle após o acesso.</p>
                   </div>
                 </div>
               )}

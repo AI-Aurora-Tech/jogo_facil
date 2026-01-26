@@ -2,10 +2,11 @@
 import React, { useState } from 'react';
 import { Search, MapPin, Clock, MessageCircle, Filter, Trophy, Calendar, Navigation, CalendarDays, ChevronRight, AlertCircle, Tag, XCircle, CalendarCheck } from 'lucide-react';
 import { Button } from '../components/Button';
-import { Field, MatchSlot, User, COMMON_CATEGORIES } from '../types';
+import { Field, MatchSlot, User } from '../types';
 import { calculateDistance } from '../utils';
 
 interface TeamDashboardProps {
+  categories: string[];
   currentUser: User;
   fields: Field[];
   slots: MatchSlot[];
@@ -15,7 +16,7 @@ interface TeamDashboardProps {
   viewMode: 'EXPLORE' | 'MY_BOOKINGS';
 }
 
-export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, fields, slots, onBookSlot, onCancelBooking, userLocation, viewMode }) => {
+export const TeamDashboard: React.FC<TeamDashboardProps> = ({ categories, currentUser, fields, slots, onBookSlot, onCancelBooking, userLocation, viewMode }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [radiusFilter, setRadiusFilter] = useState<number>(30);
   const [categoryFilter, setCategoryFilter] = useState<string>('');
@@ -33,26 +34,16 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
     if (viewMode === 'EXPLORE') {
       if (slot.date < todayStr) return false;
       if (slot.status !== 'available') return false;
-
-      // Filtro de Texto (Arena)
       if (searchTerm && !field.name.toLowerCase().includes(searchTerm.toLowerCase())) return false;
-      
-      // Filtro de Distância
       if (userLocation) {
         const dist = calculateDistance(userLocation.lat, userLocation.lng, field.latitude, field.longitude);
         if (dist > radiusFilter) return false;
       }
-
-      // Filtro de Categoria
       const slotCat = slot.allowedCategories[0];
       if (categoryFilter && slotCat !== categoryFilter && slotCat !== 'Livre') return false;
-
-      // Filtro de Data
       if (dateFilter && slot.date !== dateFilter) return false;
-
       return true;
     } else {
-      // Meus Agendamentos
       return slot.bookedByUserId === currentUser.id && slot.date >= todayStr;
     }
   }).sort((a, b) => new Date(`${a.date}T${a.time}`).getTime() - new Date(`${b.date}T${b.time}`).getTime());
@@ -65,15 +56,8 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
 
   const handleConfirmBooking = () => {
     if (!selectedSlot || !currentUser.teamName) return;
-    
-    // Se o time só tem uma categoria, usa ela. Se tem várias, usa a selecionada.
     const finalCategory = selectedBookingCategory || currentUser.teamCategories[0] || "Principal";
-    
-    onBookSlot(selectedSlot.id, { 
-      teamName: currentUser.teamName, 
-      category: finalCategory 
-    });
-
+    onBookSlot(selectedSlot.id, { teamName: currentUser.teamName, category: finalCategory });
     const field = fields.find(f => f.id === selectedSlot.fieldId);
     if (field) handleWhatsApp(field, selectedSlot);
     setSelectedSlot(null);
@@ -124,7 +108,7 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
                         <label className="text-[9px] font-black text-gray-400 uppercase mb-1 block">Categoria</label>
                         <select className="w-full p-3 bg-gray-50 border rounded-xl text-xs font-bold outline-none appearance-none" value={categoryFilter} onChange={e => setCategoryFilter(e.target.value)}>
                             <option value="">Todas</option>
-                            {COMMON_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                            {categories.map(c => <option key={c} value={c}>{c}</option>)}
                         </select>
                       </div>
                       <div className="col-span-2">
@@ -213,7 +197,6 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
                                     alert("Por favor, cadastre o nome do seu time no Perfil antes de agendar!");
                                 } else {
                                     setSelectedSlot(slot);
-                                    // Pré-selecionar primeira categoria compatível
                                     const userMatch = currentUser.teamCategories.find(c => c === slotCategory);
                                     setSelectedBookingCategory(userMatch || currentUser.teamCategories[0] || '');
                                 }
@@ -229,12 +212,10 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
         )}
       </div>
 
-      {/* NOVO MODAL DE AGENDAMENTO (FIXED TEAM NAME) */}
       {selectedSlot && (
         <div className="fixed inset-0 bg-pitch/95 backdrop-blur-xl z-[200] flex items-end">
             <div className="bg-white w-full rounded-t-[3rem] p-10 animate-in slide-in-from-bottom duration-500 shadow-2xl">
                 <div className="w-16 h-1.5 bg-gray-100 rounded-full mx-auto mb-8"></div>
-                
                 <div className="flex items-center gap-4 mb-8">
                     <div className="w-16 h-16 bg-grass-500 rounded-3xl flex items-center justify-center text-pitch shadow-lg">
                         <CalendarCheck className="w-8 h-8" />

@@ -1,29 +1,28 @@
 
 import React, { useState } from 'react';
-import { User, COMMON_CATEGORIES } from '../types';
+import { User } from '../types';
 import { Button } from './Button';
 import { X, User as UserIcon, Shield, Upload, Check, Plus } from 'lucide-react';
 import { convertFileToBase64 } from '../utils';
 
 interface EditProfileModalProps {
+  categories: string[];
   user: User;
   onUpdate: (updatedUser: User) => void;
   onClose: () => void;
 }
 
-export const EditProfileModal: React.FC<EditProfileModalProps> = ({ user, onUpdate, onClose }) => {
+export const EditProfileModal: React.FC<EditProfileModalProps> = ({ categories, user, onUpdate, onClose }) => {
   const [name, setName] = useState(user.name);
   const [phone, setPhone] = useState(user.phoneNumber);
   const [teamName, setTeamName] = useState(user.teamName || '');
   const [teamCategories, setTeamCategories] = useState<string[]>(user.teamCategories || []);
   const [teamLogo, setTeamLogo] = useState(user.teamLogoUrl || '');
-  const [newCat, setNewCat] = useState('');
+  const [selectedNewCat, setSelectedNewCat] = useState(categories[0] || '');
 
   const addCategory = () => {
-    const trimmed = newCat.trim();
-    if (trimmed && !teamCategories.includes(trimmed)) {
-      setTeamCategories([...teamCategories, trimmed]);
-      setNewCat('');
+    if (selectedNewCat && !teamCategories.includes(selectedNewCat)) {
+      setTeamCategories([...teamCategories, selectedNewCat]);
     }
   };
 
@@ -87,31 +86,26 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({ user, onUpda
                     </div>
                 </div>
                 <div className="flex-grow bg-gray-50 p-4 rounded-2xl border">
-                    <label className="text-[10px] font-bold text-gray-400">Nome do Time Único</label>
+                    <label className="text-[10px] font-bold text-gray-400">Nome do Time</label>
                     <input type="text" className="w-full bg-transparent text-xl font-black outline-none" placeholder="Ex: Galácticos FC" value={teamName} onChange={e => setTeamName(e.target.value)} />
                 </div>
             </div>
 
             <div className="space-y-3">
-                <label className="text-[10px] font-bold text-gray-400">Adicionar Categorias (Digite ou selecione):</label>
+                <label className="text-[10px] font-bold text-gray-400">Vincular CategoriasOficiais:</label>
                 <div className="flex gap-2">
-                    <input 
-                        list="category-suggestions"
-                        type="text" 
-                        value={newCat}
-                        onChange={e => setNewCat(e.target.value)}
-                        onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), addCategory())}
-                        placeholder="Ex: Sub-40..."
+                    <select 
+                        value={selectedNewCat}
+                        onChange={e => setSelectedNewCat(e.target.value)}
                         className="flex-grow p-4 bg-gray-50 border rounded-2xl font-bold outline-none focus:ring-2 focus:ring-grass-500"
-                    />
-                    <datalist id="category-suggestions">
-                        {COMMON_CATEGORIES.map(c => <option key={c} value={c} />)}
-                    </datalist>
-                    <button type="button" onClick={addCategory} className="bg-pitch text-white px-6 rounded-2xl"><Plus className="w-6 h-6"/></button>
+                    >
+                        {categories.map(c => <option key={c} value={c}>{c}</option>)}
+                    </select>
+                    <button type="button" onClick={addCategory} className="bg-pitch text-white px-6 rounded-2xl active:scale-95 transition-transform"><Plus className="w-6 h-6"/></button>
                 </div>
 
                 <div className="flex flex-wrap gap-2 pt-2">
-                    {teamCategories.length === 0 && <p className="text-xs text-gray-400 italic">Nenhuma categoria adicionada.</p>}
+                    {teamCategories.length === 0 && <p className="text-xs text-gray-400 italic">Nenhuma categoria vinculada.</p>}
                     {teamCategories.map(cat => (
                         <div key={cat} className="bg-grass-100 text-grass-800 px-4 py-2 rounded-xl text-xs font-black border border-grass-200 flex items-center gap-2">
                             {cat}
