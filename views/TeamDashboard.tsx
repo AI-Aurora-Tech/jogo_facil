@@ -19,8 +19,8 @@ interface TeamDashboardProps {
 export const TeamDashboard: React.FC<TeamDashboardProps> = ({ categories, currentUser, fields, slots, onBookSlot, onCancelBooking, userLocation, viewMode }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [radiusFilter, setRadiusFilter] = useState<number>(30);
-  // Inicializa o filtro com a primeira categoria do time do usuário para conveniência
-  const [categoryFilter, setCategoryFilter] = useState<string>(currentUser.teamCategories?.[0] || '');
+  // Inicializa o filtro vazio para mostrar tudo que é compatível por padrão
+  const [categoryFilter, setCategoryFilter] = useState<string>('');
   const [dateFilter, setDateFilter] = useState<string>('');
   const [showFilters, setShowFilters] = useState(false);
   const [selectedSlot, setSelectedSlot] = useState<MatchSlot | null>(null);
@@ -42,15 +42,16 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ categories, curren
         if (dist > radiusFilter) return false;
       }
 
-      const slotCat = slot.allowedCategories[0];
+      // Lógica de Categoria Corrigida:
+      const slotAllowedCats = slot.allowedCategories || [];
+      const userTeamCats = currentUser.teamCategories || [];
 
-      // Lógica de Categoria:
-      // 1. Se o usuário escolheu um filtro específico, usa ele.
-      // 2. Se não escolheu, mostra apenas o que for compatível com as categorias do time dele ou "Livre".
       if (categoryFilter) {
-        if (slotCat !== categoryFilter && slotCat !== 'Livre') return false;
+        // Se houver um filtro manual, o slot deve permitir essa categoria específica ou ser Livre
+        if (!slotAllowedCats.includes(categoryFilter) && !slotAllowedCats.includes('Livre')) return false;
       } else {
-        const isCompatible = currentUser.teamCategories.includes(slotCat) || slotCat === 'Livre';
+        // Se não houver filtro, mostra slots que permitem QUALQUER uma das categorias do time do usuário ou sejam Livre
+        const isCompatible = slotAllowedCats.some(cat => userTeamCats.includes(cat)) || slotAllowedCats.includes('Livre');
         if (!isCompatible) return false;
       }
 
@@ -63,7 +64,8 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ categories, curren
 
   const handleWhatsApp = (field: Field, slot: MatchSlot) => {
     const cleanPhone = field.contactPhone.replace(/\D/g, '');
-    const text = `Olá, vi o horário em ${field.name} (${slot.allowedCategories[0]}) para o dia ${slot.date.split('-').reverse().join('/')} às ${slot.time} no Jogo Fácil.`;
+    const allowedText = (slot.allowedCategories || []).join(' ou ');
+    const text = `Olá, vi o horário em ${field.name} (${allowedText}) para o dia ${slot.date.split('-').reverse().join('/')} às ${slot.time} no Jogo Fácil.`;
     window.open(`https://wa.me/${cleanPhone}?text=${encodeURIComponent(text)}`, '_blank');
   };
 
@@ -108,6 +110,11 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ categories, curren
                         {dateFilter.split('-').reverse().join('/')} <XCircle className="w-3 h-3 opacity-50" />
                     </button>
                 )}
+                {!categoryFilter && !dateFilter && currentUser.teamCategories.length > 0 && (
+                  <div className="px-3 py-2 rounded-xl text-[10px] font-black text-gray-400 uppercase bg-gray-50 border border-gray-100 shrink-0">
+                    Filtro Automático: {currentUser.teamCategories.join(' / ')}
+                  </div>
+                )}
             </div>
 
             {showFilters && (
@@ -141,9 +148,9 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ categories, curren
                 <Trophy className="text-gray-200 w-10 h-10" />
              </div>
              <p className="text-gray-400 font-black text-sm px-10 uppercase tracking-tight">
-                Nenhum horário encontrado para a categoria {categoryFilter || currentUser.teamCategories.join(', ')}
+                Nenhum horário disponível para {categoryFilter || currentUser.teamCategories.join(' ou ')}
              </p>
-             <button onClick={() => { setCategoryFilter(''); setDateFilter(''); setSearchTerm(''); }} className="mt-4 text-grass-600 font-bold text-xs underline">Ver todas as categorias</button>
+             <button onClick={() => { setCategoryFilter(''); setDateFilter(''); setSearchTerm(''); }} className="mt-4 text-grass-600 font-bold text-xs underline">Limpar todos os filtros</button>
           </div>
         ) : (
           filteredSlots.map(slot => {
@@ -151,7 +158,7 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ categories, curren
             if (!field) return null;
             const distance = userLocation ? calculateDistance(userLocation.lat, userLocation.lng, field.latitude, field.longitude) : null;
             const isOwner = field.ownerId === currentUser.id;
-            const slotCategory = slot.allowedCategories[0];
+            const slotCats = slot.allowedCategories || [];
 
             return (
               <div key={slot.id} className="bg-white rounded-[2.5rem] p-5 shadow-sm border border-gray-100 flex flex-col gap-4 relative overflow-hidden group">
@@ -163,11 +170,13 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ categories, curren
                         </div>
                     </div>
                     <div className="flex-1 min-w-0 py-1">
-                        <div className="flex items-center gap-1.5 mb-1">
-                             <div className={`text-pitch text-[8px] font-black px-2 py-0.5 rounded-full uppercase tracking-tighter ${slotCategory === 'Livre' ? 'bg-gray-200' : 'bg-grass-500'}`}>
-                                {slotCategory}
-                             </div>
-                             {distance !== null && <span className="text-[9px] font-black text-grass-600">{distance}km</span>}
+                        <div className="flex items-center gap-1.5 mb-1 flex-wrap">
+                             {slotCats.map(cat => (
+                               <div key={cat} className={`text-pitch text-[8px] font-black px-2 py-0.5 rounded-full uppercase tracking-tighter ${cat === 'Livre' ? 'bg-gray-200' : 'bg-grass-500'}`}>
+                                  {cat}
+                               </div>
+                             ))}
+                             {distance !== null && <span className="text-[9px] font-black text-grass-600 ml-auto">{distance}km</span>}
                         </div>
                         <h3 className="font-black text-pitch text-lg truncate leading-none mb-2">{field.name}</h3>
                         <div className="flex items-center gap-1 text-gray-400 text-[10px] font-bold mb-3 truncate">
@@ -212,7 +221,8 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ categories, curren
                                     alert("Por favor, cadastre o nome do seu time no Perfil antes de agendar!");
                                 } else {
                                     setSelectedSlot(slot);
-                                    const userMatch = currentUser.teamCategories.find(c => c === slotCategory);
+                                    // Tenta encontrar uma categoria compatível entre o time e o slot
+                                    const userMatch = currentUser.teamCategories.find(c => slotCats.includes(c));
                                     setSelectedBookingCategory(userMatch || currentUser.teamCategories[0] || '');
                                 }
                             }}
@@ -258,15 +268,19 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ categories, curren
                         <div className="space-y-3">
                             <label className="text-[10px] font-black text-gray-400 uppercase block tracking-tighter">Representando qual categoria?</label>
                             <div className="flex flex-wrap gap-2">
-                                {currentUser.teamCategories.map(cat => (
-                                    <button 
-                                        key={cat}
-                                        onClick={() => setSelectedBookingCategory(cat)}
-                                        className={`px-4 py-2 rounded-xl text-xs font-black border transition-all ${selectedBookingCategory === cat ? 'bg-grass-500 border-grass-500 text-pitch' : 'bg-white text-gray-400 border-gray-200'}`}
-                                    >
-                                        {cat}
-                                    </button>
-                                ))}
+                                {currentUser.teamCategories.map(cat => {
+                                    const isAllowedInSlot = selectedSlot.allowedCategories.includes(cat) || selectedSlot.allowedCategories.includes('Livre');
+                                    return (
+                                        <button 
+                                            key={cat}
+                                            disabled={!isAllowedInSlot}
+                                            onClick={() => setSelectedBookingCategory(cat)}
+                                            className={`px-4 py-2 rounded-xl text-xs font-black border transition-all ${selectedBookingCategory === cat ? 'bg-grass-500 border-grass-500 text-pitch' : isAllowedInSlot ? 'bg-white text-gray-400 border-gray-200' : 'bg-gray-50 text-gray-200 border-gray-100 opacity-50 cursor-not-allowed'}`}
+                                        >
+                                            {cat}
+                                        </button>
+                                    );
+                                })}
                             </div>
                         </div>
                     )}
