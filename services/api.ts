@@ -59,6 +59,12 @@ export const api = {
     return newTeam;
   },
 
+  updateRegisteredTeam: async (fieldId: string, teamId: string, updates: Partial<RegisteredTeam>): Promise<void> => {
+    const teams = await api.getRegisteredTeams(fieldId);
+    const updated = teams.map(t => t.id === teamId ? { ...t, ...updates } : t);
+    localStorage.setItem(`jf_registered_teams_${fieldId}`, JSON.stringify(updated));
+  },
+
   deleteRegisteredTeam: async (fieldId: string, teamId: string): Promise<void> => {
     const teams = await api.getRegisteredTeams(fieldId);
     localStorage.setItem(`jf_registered_teams_${fieldId}`, JSON.stringify(teams.filter(t => t.id !== teamId)));

@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { Plus, Calendar, Settings, Trash2, Shield, MapPin, Key, X, Save, Trophy, Check, CalendarDays, Clock, Repeat, Users, CircleSlash, Swords, PartyPopper, Star, UsersRound, BookOpenCheck, ChevronRight, AlertCircle, Tag, Upload, ImageIcon } from 'lucide-react';
+import { Plus, Calendar, Settings, Trash2, Shield, MapPin, Key, X, Save, Trophy, Check, CalendarDays, Clock, Repeat, Users, CircleSlash, Swords, PartyPopper, Star, UsersRound, BookOpenCheck, ChevronRight, AlertCircle, Tag, Upload, ImageIcon, Edit2 } from 'lucide-react';
 import { Button } from '../components/Button';
 import { Field, MatchSlot, MatchType, User, RegisteredTeam } from '../types';
 import { api } from '../services/api';
@@ -38,6 +38,9 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
   const [showManualBookingModal, setShowManualBookingModal] = useState<MatchSlot | null>(null);
   
   const [registeredTeams, setRegisteredTeams] = useState<RegisteredTeam[]>([]);
+  const [editingTeam, setEditingTeam] = useState<RegisteredTeam | null>(null);
+
+  // Form states for adding/editing teams
   const [newTeamName, setNewTeamName] = useState('');
   const [newTeamDay, setNewTeamDay] = useState<number>(1);
   const [newTeamTime, setNewTeamTime] = useState('20:00');
@@ -45,7 +48,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
   const [newTeamLogo, setNewTeamLogo] = useState('');
   const [teamError, setTeamError] = useState('');
 
-  // States for new slot
+  // States for new single slot
   const [selectedDay, setSelectedDay] = useState<number | null>(null);
   const [newTime, setNewTime] = useState('19:00');
   const [matchType, setMatchType] = useState<MatchType>('AMISTOSO');
@@ -115,30 +118,38 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
       return;
     }
 
-    // 1. Cadastra o time como mensalista nos registros com as 2 categorias e o brasão
-    const newTeam = await api.addRegisteredTeam(field.id, newTeamName.trim(), newTeamDay, newTeamTime, newTeamSelectedCategories, newTeamLogo);
-    
-    // 2. Gera automaticamente os horários "vitalícios" (52 semanas)
-    const lifetimeSlots: Omit<MatchSlot, 'id'>[] = [];
-    for (let i = 0; i < 52; i++) {
-        lifetimeSlots.push({
-            fieldId: field.id,
-            date: getNextOccurrence(newTeamDay, i),
-            time: newTeamTime,
-            price: field.hourlyRate,
-            matchType: 'FIXO',
-            durationMinutes: 60,
-            isBooked: true,
-            hasLocalTeam: true,
-            localTeamName: newTeamName.trim(),
-            allowedCategories: newTeamSelectedCategories,
-            bookedByTeamName: newTeamName.trim(),
-            status: 'confirmed',
-            customImageUrl: newTeamLogo || undefined
+    if (editingTeam) {
+        await api.updateRegisteredTeam(field.id, editingTeam.id, {
+            name: newTeamName.trim(),
+            fixedDay: newTeamDay,
+            fixedTime: newTeamTime,
+            categories: newTeamSelectedCategories,
+            logoUrl: newTeamLogo
         });
+        setEditingTeam(null);
+    } else {
+        const newTeam = await api.addRegisteredTeam(field.id, newTeamName.trim(), newTeamDay, newTeamTime, newTeamSelectedCategories, newTeamLogo);
+        const lifetimeSlots: Omit<MatchSlot, 'id'>[] = [];
+        for (let i = 0; i < 52; i++) {
+            lifetimeSlots.push({
+                fieldId: field.id,
+                date: getNextOccurrence(newTeamDay, i),
+                time: newTeamTime,
+                price: field.hourlyRate,
+                matchType: 'FIXO',
+                durationMinutes: 60,
+                isBooked: true,
+                hasLocalTeam: true,
+                localTeamName: newTeamName.trim(),
+                allowedCategories: newTeamSelectedCategories,
+                bookedByTeamName: newTeamName.trim(),
+                status: 'confirmed',
+                customImageUrl: newTeamLogo || undefined
+            });
+        }
+        onAddSlot(lifetimeSlots);
     }
     
-    onAddSlot(lifetimeSlots);
     setNewTeamName('');
     setNewTeamSelectedCategories([]);
     setNewTeamLogo('');
@@ -146,10 +157,31 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
     loadTeams();
   };
 
-  const handleDeleteRegisteredTeam = async (id: string) => {
-    if (confirm("Deseja remover esta equipe? Isso removerá o registro mas os horários já gerados permanecerão.")) {
-      await api.deleteRegisteredTeam(field.id, id);
+  const handleEditTeam = (team: RegisteredTeam) => {
+    setEditingTeam(team);
+    setNewTeamName(team.name);
+    setNewTeamDay(team.fixedDay);
+    setNewTeamTime(team.fixedTime);
+    setNewTeamSelectedCategories(team.categories || []);
+    setNewTeamLogo(team.logoUrl || '');
+    setTeamError('');
+  };
+
+  const handleDeleteRegisteredTeam = async (team: RegisteredTeam) => {
+    if (confirm(`AVISO CRÍTICO: Deseja excluir a equipe "${team.name}"? Isso removerá permanentemente TODA A AGENDA (todos os horários futuros) vinculada a este time.`)) {
+      // 1. Remove dos registros locais
+      await api.deleteRegisteredTeam(field.id, team.id);
+      
+      // 2. Busca e remove todos os slots futuros vinculados a este nome de equipe
+      const today = new Date().toISOString().split('T')[0];
+      const slotsToDelete = slots.filter(s => s.bookedByTeamName === team.name && s.date >= today);
+      
+      for (const slot of slotsToDelete) {
+          await api.deleteSlot(slot.id);
+      }
+      
       loadTeams();
+      window.location.reload(); // Recarrega para limpar a agenda visualmente
     }
   };
 
@@ -335,6 +367,11 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                 </div>
                 
                 <div className="bg-gray-50 p-6 rounded-[2rem] border-2 border-dashed border-gray-200 mb-8 space-y-4">
+                    <div className="flex justify-between items-center mb-2 px-1">
+                        <h4 className="text-[11px] font-black text-pitch uppercase tracking-widest">{editingTeam ? 'Editando Equipe' : 'Cadastrar Novo Mensalista'}</h4>
+                        {editingTeam && <button onClick={() => { setEditingTeam(null); setNewTeamName(''); setNewTeamLogo(''); setNewTeamSelectedCategories([]); }} className="text-[9px] font-black text-red-500 uppercase underline">Cancelar Edição</button>}
+                    </div>
+
                     {teamError && (
                       <div className="flex items-center gap-2 p-3 bg-red-50 text-red-600 rounded-xl text-[10px] font-black uppercase border border-red-100 animate-in shake duration-300">
                           <AlertCircle className="w-4 h-4" /> {teamError}
@@ -382,7 +419,6 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                             />
                         </div>
 
-                        {/* SELEÇÃO DE 2 CATEGORIAS */}
                         <div className="col-span-2">
                             <label className="text-[10px] font-black text-gray-400 uppercase mb-3 block tracking-widest">Informar 2 Categorias Elegíveis:</label>
                             <div className="flex flex-wrap gap-2 p-4 bg-white rounded-2xl border">
@@ -402,7 +438,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                         </div>
                     </div>
                     <Button onClick={handleAddRegisteredTeam} className="w-full py-4 rounded-2xl font-black text-sm uppercase shadow-lg">
-                        <Plus className="w-5 h-5" /> Salvar Mensalista e Gerar Cronograma
+                        {editingTeam ? 'Atualizar Dados' : <><Plus className="w-5 h-5" /> Salvar Mensalista e Gerar Cronograma</>}
                     </Button>
                 </div>
 
@@ -427,7 +463,10 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                                     </div>
                                 </div>
                             </div>
-                            <button onClick={() => handleDeleteRegisteredTeam(team.id)} className="p-2 text-gray-200 hover:text-red-500 transition-colors"><Trash2 className="w-4 h-4"/></button>
+                            <div className="flex gap-2">
+                                <button onClick={() => handleEditTeam(team)} className="p-2 text-gray-300 hover:text-pitch transition-colors"><Edit2 className="w-4 h-4"/></button>
+                                <button onClick={() => handleDeleteRegisteredTeam(team)} className="p-2 text-gray-200 hover:text-red-500 transition-colors"><Trash2 className="w-4 h-4"/></button>
+                            </div>
                         </div>
                     ))}
                 </div>
