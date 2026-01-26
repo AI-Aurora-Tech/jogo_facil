@@ -11,7 +11,7 @@ interface FieldDashboardProps {
   field: Field;
   slots: MatchSlot[];
   currentUser: User;
-  onAddSlot: (slots: Omit<MatchSlot, 'id'>[]) => void;
+  onAddSlot: (slots: Omit<MatchSlot, 'id'>[]) => Promise<void>;
   onRefreshData: () => void;
   onDeleteSlot: (slotId: string) => void;
   onConfirmBooking: (slotId: string) => void;
@@ -155,7 +155,10 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                 });
             }
         } else {
-            const newTeam = await api.addRegisteredTeam(field.id, newTeamName.trim(), newTeamDay, newTeamTime, newTeamSelectedCategories, newTeamLogo);
+            // 1. Registrar a equipe
+            await api.addRegisteredTeam(field.id, newTeamName.trim(), newTeamDay, newTeamTime, newTeamSelectedCategories, newTeamLogo);
+            
+            // 2. Gerar agenda de 52 semanas
             const lifetimeSlots: Omit<MatchSlot, 'id'>[] = [];
             for (let i = 0; i < 52; i++) {
                 lifetimeSlots.push({
@@ -174,14 +177,17 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                     customImageUrl: newTeamLogo || undefined
                 });
             }
-            onAddSlot(lifetimeSlots);
+            // 3. Aguardar a inserção no banco
+            await onAddSlot(lifetimeSlots);
         }
         
+        // 4. Limpar e atualizar
         resetTeamForm();
         await loadTeams();
-        onRefreshData();
+        // A função addSlots em App.tsx já chama refreshData(), então não precisamos chamar aqui de novo.
     } catch (err) {
-        setTeamError('Erro ao salvar equipe mensalista.');
+        console.error("Erro ao processar mensalista:", err);
+        setTeamError('Erro técnico ao salvar. Verifique sua conexão.');
     } finally {
         setIsProcessing(false);
     }
@@ -247,26 +253,31 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
     if (success) setShowSettingsModal(false);
   };
 
-  const handlePublishSlots = () => {
+  const handlePublishSlots = async () => {
     if (selectedDay === null || !newTime) return alert("Selecione o dia e a hora");
-    const newSlots: Omit<MatchSlot, 'id'>[] = [];
-    const weeksToPublish = 4; // Padrão 4 semanas para agendamentos avulsos
-    for (let i = 0; i < weeksToPublish; i++) {
-      newSlots.push({
-        fieldId: field.id,
-        date: getNextOccurrence(selectedDay, i),
-        time: newTime,
-        price: Number(price) || field.hourlyRate,
-        matchType,
-        durationMinutes: 60,
-        isBooked: false,
-        hasLocalTeam: false,
-        allowedCategories: [selectedCategory],
-        status: 'available'
-      });
+    setIsProcessing(true);
+    try {
+      const newSlots: Omit<MatchSlot, 'id'>[] = [];
+      const weeksToPublish = 4;
+      for (let i = 0; i < weeksToPublish; i++) {
+        newSlots.push({
+          fieldId: field.id,
+          date: getNextOccurrence(selectedDay, i),
+          time: newTime,
+          price: Number(price) || field.hourlyRate,
+          matchType,
+          durationMinutes: 60,
+          isBooked: false,
+          hasLocalTeam: false,
+          allowedCategories: [selectedCategory],
+          status: 'available'
+        });
+      }
+      await onAddSlot(newSlots);
+      setShowAddModal(false);
+    } finally {
+      setIsProcessing(false);
     }
-    onAddSlot(newSlots);
-    setShowAddModal(false);
   };
 
   return (
@@ -346,9 +357,9 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
           <div className="fixed inset-0 bg-pitch/90 backdrop-blur-md z-[150] flex items-center justify-center p-4">
               <div className="bg-white w-full max-w-2xl rounded-[3rem] p-10 animate-in zoom-in-95 duration-200 flex flex-col max-h-[95vh] relative overflow-hidden">
                 {isProcessing && (
-                  <div className="absolute inset-0 bg-white/60 backdrop-blur-sm z-50 flex flex-col items-center justify-center">
+                  <div className="absolute inset-0 bg-white/60 backdrop-blur-sm z-[160] flex flex-col items-center justify-center">
                       <Loader2 className="w-10 h-10 text-pitch animate-spin mb-2" />
-                      <p className="text-xs font-black uppercase text-pitch">Processando Alterações...</p>
+                      <p className="text-xs font-black uppercase text-pitch">Salvando Dados e Gerando Agenda...</p>
                   </div>
                 )}
                 
@@ -366,6 +377,12 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                     <h4 className="text-[11px] font-black text-pitch uppercase tracking-widest px-1">
                         {editingTeam ? '📝 Editando Dados da Equipe' : '✨ Novo Mensalista Vitalício'}
                     </h4>
+
+                    {teamError && (
+                      <div className="bg-red-50 p-3 rounded-xl border border-red-100 flex items-center gap-2 text-red-600 text-[10px] font-bold uppercase">
+                        <AlertCircle className="w-4 h-4" /> {teamError}
+                      </div>
+                    )}
                     
                     <div className="flex gap-4">
                         <div className="w-20 h-20 bg-white rounded-[1.5rem] border-2 border-dashed border-gray-300 flex items-center justify-center overflow-hidden shrink-0 relative group">
