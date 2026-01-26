@@ -39,8 +39,15 @@ export const api = {
 
   // Equipes registradas pela arena (Mensalistas)
   getRegisteredTeams: async (fieldId: string): Promise<RegisteredTeam[]> => {
-    const data = localStorage.getItem(`jf_registered_teams_${fieldId}`);
-    return data ? JSON.parse(data) : [];
+    try {
+        const data = localStorage.getItem(`jf_registered_teams_${fieldId}`);
+        if (!data) return [];
+        const parsed = JSON.parse(data);
+        return Array.isArray(parsed) ? parsed : [];
+    } catch (e) {
+        console.error("Erro ao carregar mensalistas:", e);
+        return [];
+    }
   },
 
   addRegisteredTeam: async (fieldId: string, teamName: string, fixedDay: number, fixedTime: string, categories: string[], logoUrl?: string): Promise<RegisteredTeam> => {
@@ -51,7 +58,7 @@ export const api = {
       fieldId,
       fixedDay,
       fixedTime,
-      categories,
+      categories: categories || [],
       logoUrl,
       createdAt: new Date().toISOString()
     };

@@ -30,7 +30,7 @@ const DAYS_OF_WEEK = [
 ];
 
 export const FieldDashboard: React.FC<FieldDashboardProps> = ({ 
-  categories, field, slots, currentUser, onAddSlot, onDeleteSlot, onConfirmBooking, onRejectBooking, onUpdateField, onRateTeam
+  categories = [], field, slots = [], currentUser, onAddSlot, onDeleteSlot, onConfirmBooking, onRejectBooking, onUpdateField, onRateTeam
 }) => {
   const [showAddModal, setShowAddModal] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
@@ -54,7 +54,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
   const [newTime, setNewTime] = useState('19:00');
   const [matchType, setMatchType] = useState<MatchType>('AMISTOSO');
   const [selectedCategory, setSelectedCategory] = useState(categories[0] || "Principal");
-  const [price, setPrice] = useState(field.hourlyRate.toString());
+  const [price, setPrice] = useState(field?.hourlyRate?.toString() || "0");
   
   // Host selection states
   const [hostType, setHostType] = useState<'NONE' | 'OWNER' | 'REGISTERED'>('NONE');
@@ -63,19 +63,23 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
   const [repeatWeeks, setRepeatWeeks] = useState(1);
 
   // Settings states
-  const [editName, setEditName] = useState(field.name);
-  const [editLoc, setEditLoc] = useState(field.location);
-  const [editRate, setEditRate] = useState(field.hourlyRate.toString());
-  const [editPixKey, setEditPixKey] = useState(field.pixConfig.key || '');
-  const [editPixName, setEditPixName] = useState(field.pixConfig.name || '');
+  const [editName, setEditName] = useState(field?.name || '');
+  const [editLoc, setEditLoc] = useState(field?.location || '');
+  const [editRate, setEditRate] = useState(field?.hourlyRate?.toString() || "0");
+  const [editPixKey, setEditPixKey] = useState(field?.pixConfig?.key || '');
+  const [editPixName, setEditPixName] = useState(field?.pixConfig?.name || '');
 
   useEffect(() => {
-    loadTeams();
-  }, [field.id]);
+    if (field?.id) loadTeams();
+  }, [field?.id]);
 
   const loadTeams = async () => {
-    const teams = await api.getRegisteredTeams(field.id);
-    setRegisteredTeams(teams);
+    try {
+        const teams = await api.getRegisteredTeams(field.id);
+        setRegisteredTeams(teams || []);
+    } catch (e) {
+        setRegisteredTeams([]);
+    }
   };
 
   const getNextOccurrence = (dayOfWeek: number, weeksAhead: number = 0) => {
@@ -135,7 +139,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
 
             // Sincronizar slots futuros
             const today = new Date().toISOString().split('T')[0];
-            const futureSlots = slots.filter(s => s.bookedByTeamName === oldName && s.date >= today);
+            const futureSlots = (slots || []).filter(s => s.bookedByTeamName === oldName && s.date >= today);
             
             for (const slot of futureSlots) {
                 await api.updateSlot(slot.id, {
@@ -199,7 +203,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
       try {
           await api.deleteRegisteredTeam(field.id, team.id);
           const today = new Date().toISOString().split('T')[0];
-          const slotsToDelete = slots.filter(s => s.bookedByTeamName === team.name && s.date >= today);
+          const slotsToDelete = (slots || []).filter(s => s.bookedByTeamName === team.name && s.date >= today);
           
           for (const slot of slotsToDelete) {
               await api.deleteSlot(slot.id);
@@ -228,7 +232,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
   };
 
   const todayStr = new Date().toISOString().split('T')[0];
-  const sortedSlots = slots
+  const sortedSlots = (slots || [])
     .filter(s => s.date >= todayStr)
     .sort((a, b) => new Date(`${a.date}T${a.time}`).getTime() - new Date(`${b.date}T${b.time}`).getTime());
 
@@ -269,7 +273,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
       <div className="p-5 bg-white border-b sticky top-0 z-10 flex justify-between items-center">
         <div>
             <h1 className="text-2xl font-black text-pitch">Minha Arena</h1>
-            <p className="text-gray-500 text-xs font-bold uppercase tracking-tighter">{field.name}</p>
+            <p className="text-gray-500 text-xs font-bold uppercase tracking-tighter">{field?.name || 'Carregando...'}</p>
         </div>
         <div className="flex gap-2">
             <button onClick={() => setShowTeamsModal(true)} className="p-2.5 bg-gray-50 rounded-xl text-gray-500 active:scale-95 transition-transform flex items-center gap-2">
@@ -281,14 +285,13 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
       </div>
 
       <div className="p-5 space-y-6">
-        {/* Card de Atalho para Mensalistas */}
         <div className="grid grid-cols-2 gap-4">
             <div onClick={() => setShowTeamsModal(true)} className="bg-white p-5 rounded-[2rem] shadow-sm border border-gray-100 flex flex-col items-center justify-center cursor-pointer active:scale-95 transition-transform group">
                 <div className="bg-grass-100 p-3 rounded-2xl text-grass-600 mb-2 group-hover:scale-110 transition-transform">
                     <UsersRound className="w-6 h-6" />
                 </div>
                 <p className="text-[10px] font-black text-gray-400 uppercase">Mensalistas</p>
-                <p className="text-xl font-black text-pitch">{registeredTeams.length}</p>
+                <p className="text-xl font-black text-pitch">{(registeredTeams || []).length}</p>
             </div>
             <div onClick={() => setShowAddModal(true)} className="bg-pitch p-5 rounded-[2rem] shadow-lg flex flex-col items-center justify-center cursor-pointer active:scale-95 transition-transform group">
                 <div className="bg-grass-500 p-3 rounded-2xl text-pitch mb-2 group-hover:rotate-90 transition-transform">
@@ -303,18 +306,18 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
             <div className="flex justify-between items-center mb-6">
                 <div>
                     <p className="text-gray-400 text-[10px] font-black uppercase tracking-widest mb-1">Agenda Próximos Dias</p>
-                    <h2 className="text-2xl font-black text-pitch">{sortedSlots.length} Slots Criados</h2>
+                    <h2 className="text-2xl font-black text-pitch">{(sortedSlots || []).length} Slots Criados</h2>
                 </div>
                 <Calendar className="w-8 h-8 text-gray-100" />
             </div>
 
             <div className="space-y-3">
-                {sortedSlots.length === 0 && (
+                {(!sortedSlots || sortedSlots.length === 0) && (
                   <div className="text-center py-10 bg-gray-50 rounded-3xl border border-dashed border-gray-200">
                     <p className="text-gray-400 font-bold text-xs uppercase">Agenda Vazia</p>
                   </div>
                 )}
-                {sortedSlots.slice(0, 10).map(slot => (
+                {(sortedSlots || []).slice(0, 10).map(slot => (
                     <div key={slot.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-2xl border border-gray-100 group">
                         <div className="flex items-center gap-3">
                             <div className="text-center bg-white w-10 h-10 rounded-xl flex flex-col items-center justify-center border shadow-sm">
@@ -334,14 +337,10 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                         </div>
                     </div>
                 ))}
-                {sortedSlots.length > 10 && (
-                    <p className="text-center text-[10px] font-black text-gray-400 uppercase py-2">+ {sortedSlots.length - 10} outros horários</p>
-                )}
             </div>
         </div>
       </div>
 
-      {/* MODAL GESTÃO DE MENSALISTAS - COMPLETO */}
       {showTeamsModal && (
           <div className="fixed inset-0 bg-pitch/90 backdrop-blur-md z-[150] flex items-center justify-center p-4">
               <div className="bg-white w-full max-w-2xl rounded-[3rem] p-10 animate-in zoom-in-95 duration-200 flex flex-col max-h-[95vh] relative overflow-hidden">
@@ -382,7 +381,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                             />
                             <div className="grid grid-cols-2 gap-2">
                                 <select value={newTeamDay} onChange={e => setNewTeamDay(Number(e.target.value))} className="p-3 bg-white border rounded-xl font-bold text-xs outline-none">
-                                    {DAYS_OF_WEEK.map(d => <option key={d.value} value={d.value}>{d.label}</option>)}
+                                    {(DAYS_OF_WEEK || []).map(d => <option key={d.value} value={d.value}>{d.label}</option>)}
                                 </select>
                                 <input type="time" value={newTeamTime} onChange={e => setNewTeamTime(e.target.value)} className="p-3 bg-white border rounded-xl font-bold text-xs outline-none" />
                             </div>
@@ -392,7 +391,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                     <div className="space-y-2">
                         <p className="text-[9px] font-black text-gray-400 uppercase pl-1">Categorias Elegíveis (Selecione 2):</p>
                         <div className="flex flex-wrap gap-2">
-                            {categories.map(cat => (
+                            {(categories || []).map(cat => (
                                 <button
                                     key={cat}
                                     onClick={() => handleToggleCategory(cat)}
@@ -410,24 +409,24 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                 </div>
 
                 <div className="overflow-y-auto space-y-3 flex-grow pr-2 custom-scrollbar">
-                    <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-1 mb-2">Equipes Registradas ({registeredTeams.length})</h4>
-                    {registeredTeams.length === 0 && (
+                    <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-1 mb-2">Equipes Registradas {(registeredTeams || []).length}</h4>
+                    {(!registeredTeams || registeredTeams.length === 0) && (
                         <div className="text-center py-12">
                             <Users className="w-12 h-12 text-gray-100 mx-auto mb-3" />
                             <p className="text-gray-300 font-bold text-xs uppercase italic">Nenhum mensalista ainda.</p>
                         </div>
                     )}
-                    {registeredTeams.map(team => (
+                    {(registeredTeams || []).map(team => (
                         <div key={team.id} className="p-5 bg-white rounded-2xl border border-gray-100 flex justify-between items-center group hover:border-grass-200 transition-all">
                             <div className="flex items-center gap-4">
                                 <div className="w-12 h-12 bg-pitch rounded-2xl overflow-hidden flex items-center justify-center text-grass-500 font-black text-xs">
-                                    {team.logoUrl ? <img src={team.logoUrl} className="w-full h-full object-cover" /> : team.name.charAt(0)}
+                                    {team.logoUrl ? <img src={team.logoUrl} className="w-full h-full object-cover" /> : team?.name?.charAt(0)}
                                 </div>
                                 <div>
                                     <p className="font-black text-pitch text-sm">{team.name}</p>
-                                    <p className="text-[9px] font-bold text-gray-400 uppercase">Toda {DAYS_OF_WEEK.find(d => d.value === team.fixedDay)?.label} • {team.fixedTime}</p>
+                                    <p className="text-[9px] font-bold text-gray-400 uppercase">Toda {(DAYS_OF_WEEK || []).find(d => d.value === team.fixedDay)?.label} • {team.fixedTime}</p>
                                     <div className="flex gap-1 mt-1">
-                                        {team.categories.map(c => <span key={c} className="text-[7px] bg-gray-50 px-1 py-0.5 rounded font-black text-gray-400 border border-gray-100 uppercase">{c}</span>)}
+                                        {(team.categories || []).map(c => <span key={c} className="text-[7px] bg-gray-50 px-1 py-0.5 rounded font-black text-gray-400 border border-gray-100 uppercase">{c}</span>)}
                                     </div>
                                 </div>
                             </div>
@@ -439,128 +438,6 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                     ))}
                 </div>
               </div>
-          </div>
-      )}
-
-      {/* MODAL RESERVA MANUAL */}
-      {showManualBookingModal && (
-          <div className="fixed inset-0 bg-pitch/90 backdrop-blur-xl z-[200] flex items-center justify-center p-4">
-              <div className="bg-white w-full max-w-lg rounded-[2.5rem] p-8 animate-in zoom-in-95 duration-200">
-                  <h2 className="text-2xl font-black text-pitch mb-2">Reserva Manual</h2>
-                  <p className="text-xs font-bold text-gray-400 uppercase mb-8">Dia {showManualBookingModal.date.split('-').reverse().join('/')} às {showManualBookingModal.time}</p>
-                  
-                  <div className="space-y-4">
-                      <label className="text-[10px] font-black text-gray-400 uppercase block tracking-widest">Selecione o Time:</label>
-                      <div className="grid grid-cols-1 gap-2 max-h-[300px] overflow-y-auto pr-2">
-                          {registeredTeams.map(team => (
-                              <button 
-                                key={team.id}
-                                onClick={() => handleManualBooking(showManualBookingModal.id, team.name)}
-                                className="p-4 bg-gray-50 rounded-2xl border font-black text-pitch text-left hover:bg-grass-500 hover:border-grass-600 transition-all flex items-center justify-between group"
-                              >
-                                  <div className="flex items-center gap-3">
-                                      <div className="w-8 h-8 bg-pitch rounded-lg overflow-hidden flex items-center justify-center">
-                                          {team.logoUrl ? <img src={team.logoUrl} className="w-full h-full object-cover"/> : <span className="text-[10px] text-white">{team.name.charAt(0)}</span>}
-                                      </div>
-                                      {team.name}
-                                  </div>
-                                  <ChevronRight className="w-4 h-4" />
-                              </button>
-                          ))}
-                      </div>
-                      <button onClick={() => setShowManualBookingModal(null)} className="w-full py-4 font-black text-gray-400 uppercase text-xs">Cancelar</button>
-                  </div>
-              </div>
-          </div>
-      )}
-
-      {/* MODAL CONFIGURAÇÕES */}
-      {showSettingsModal && (
-        <div className="fixed inset-0 bg-pitch/95 backdrop-blur-md z-[150] flex items-end">
-            <div className="bg-white w-full rounded-t-[3rem] p-8 animate-in slide-in-from-bottom duration-300 overflow-y-auto max-h-[85vh]">
-                <div className="flex justify-between items-center mb-8">
-                    <h2 className="text-2xl font-black text-pitch">Ajustes da Arena</h2>
-                    <button onClick={() => setShowSettingsModal(false)} className="p-2 bg-gray-100 rounded-full"><X className="w-6 h-6"/></button>
-                </div>
-                <div className="space-y-6">
-                    <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100">
-                        <label className="text-[10px] font-black text-gray-400 uppercase mb-1 block">Nome Comercial</label>
-                        <input type="text" value={editName} onChange={e => setEditName(e.target.value)} className="w-full bg-transparent font-bold outline-none text-lg text-pitch" />
-                    </div>
-                    <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100">
-                        <label className="text-[10px] font-black text-gray-400 uppercase mb-1 block">Endereço Público</label>
-                        <input type="text" value={editLoc} onChange={e => setEditLoc(e.target.value)} className="w-full bg-transparent font-bold outline-none text-pitch" />
-                    </div>
-                    <div className="grid grid-cols-2 gap-4">
-                        <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100">
-                            <label className="text-[10px] font-black text-gray-400 uppercase mb-1 block">Preço Padrão (R$)</label>
-                            <input type="number" value={editRate} onChange={e => setEditRate(e.target.value)} className="w-full bg-transparent font-bold outline-none text-pitch" />
-                        </div>
-                        <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100">
-                            <label className="text-[10px] font-black text-gray-400 uppercase mb-1 block">Chave PIX</label>
-                            <input type="text" value={editPixKey} onChange={e => setEditPixKey(e.target.value)} className="w-full bg-transparent font-bold outline-none text-pitch" />
-                        </div>
-                    </div>
-                    <Button className="w-full py-5 rounded-[2rem] text-sm font-black uppercase tracking-widest" onClick={handleSaveSettings}>Atualizar Arena</Button>
-                </div>
-            </div>
-        </div>
-      )}
-
-      {/* MODAL ADICIONAR SLOTS */}
-      {showAddModal && (
-          <div className="fixed inset-0 bg-pitch/95 backdrop-blur-md z-[150] flex items-end">
-            <div className="bg-white w-full rounded-t-[3.5rem] p-10 animate-in slide-in-from-bottom duration-500 shadow-2xl overflow-y-auto max-h-[90vh]">
-                <div className="w-12 h-1.5 bg-gray-100 rounded-full mx-auto mb-8"></div>
-                <h2 className="text-3xl font-black text-pitch mb-8 flex items-center gap-3">
-                  <CalendarDays className="w-8 h-8 text-grass-500" /> Novo Horário
-                </h2>
-                
-                <div className="space-y-8 pb-10">
-                    <div className="space-y-3">
-                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block">Qual dia da semana?</label>
-                        <div className="grid grid-cols-7 gap-1.5">
-                            {DAYS_OF_WEEK.map((day) => (
-                                <button 
-                                  key={day.value}
-                                  onClick={() => setSelectedDay(day.value)}
-                                  className={`py-3 rounded-xl text-[10px] font-black transition-all border ${selectedDay === day.value ? 'bg-pitch border-pitch text-white scale-110' : 'bg-gray-50 text-gray-400 border-gray-100'}`}
-                                >
-                                    {day.label}
-                                </button>
-                            ))}
-                        </div>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-4">
-                        <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100">
-                            <label className="text-[10px] font-black text-gray-400 uppercase mb-1 block">Horário de Início</label>
-                            <div className="flex items-center gap-2">
-                              <Clock className="w-4 h-4 text-gray-300" />
-                              <input type="time" value={newTime} onChange={e => setNewTime(e.target.value)} className="bg-transparent font-black outline-none text-pitch w-full" />
-                            </div>
-                        </div>
-                        <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100">
-                            <label className="text-[10px] font-black text-gray-400 uppercase mb-1 block">Valor Deste Horário (R$)</label>
-                            <input type="number" value={price} onChange={e => setPrice(e.target.value)} className="bg-transparent font-black outline-none text-pitch w-full" />
-                        </div>
-                    </div>
-
-                    <div className="space-y-2">
-                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block">Recorrência Extra (Semanal)</label>
-                        <select value={repeatWeeks} onChange={e => setRepeatWeeks(Number(e.target.value))} className="w-full p-4 bg-gray-50 rounded-2xl font-black border border-gray-100 appearance-none text-pitch text-sm">
-                            <option value={1}>Horário Único</option>
-                            <option value={4}>4 Semanas</option>
-                            <option value={8}>8 Semanas</option>
-                        </select>
-                    </div>
-
-                    <div className="flex gap-4 pt-6">
-                        <button onClick={() => setShowAddModal(false)} className="flex-1 py-5 font-black text-gray-400 uppercase text-xs tracking-widest">Cancelar</button>
-                        <Button className="flex-[2] py-5 rounded-[2rem] text-sm font-black shadow-xl uppercase tracking-widest" onClick={handlePublishSlots}>Publicar Agenda</Button>
-                    </div>
-                </div>
-            </div>
           </div>
       )}
     </div>
