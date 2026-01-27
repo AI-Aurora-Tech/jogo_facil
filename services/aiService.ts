@@ -11,7 +11,6 @@ export const fileToGenerativePart = async (file: File): Promise<string> => {
       resolve(base64Data);
     };
     reader.onerror = reject;
-    // Fix: Corrected typo from readAsAsDataURL to readAsDataURL
     reader.readAsDataURL(file);
   });
 };
@@ -33,8 +32,19 @@ export const verifyPixReceipt = async (
   expectedReceiverName: string
 ): Promise<VerificationResult> => {
   try {
-    // Fix: Initialized GoogleGenAI using process.env.API_KEY directly as per guidelines
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    // Acesso seguro à API_KEY para evitar ReferenceError
+    const apiKey = (typeof process !== 'undefined' && process.env?.API_KEY) || "";
+    
+    if (!apiKey) {
+      return { 
+        isValid: false, 
+        amountFound: null, 
+        dateFound: null, 
+        reason: "IA indisponível no momento (Erro de Configuração)." 
+      };
+    }
+
+    const ai = new GoogleGenAI({ apiKey });
     const base64Data = await fileToGenerativePart(file);
 
     const prompt = `Analise este comprovante PIX. Valor esperado: R$ ${expectedAmount}. Destinatário: "${expectedReceiverName}". Responda em JSON.`;
@@ -52,6 +62,6 @@ export const verifyPixReceipt = async (
     throw new Error("No response");
   } catch (error) {
     console.error("AI Verification failed:", error);
-    return { isValid: false, amountFound: null, dateFound: null, reason: "Erro técnico na verificação." };
+    return { isValid: false, amountFound: null, dateFound: null, reason: "Erro técnico na verificação com IA." };
   }
 };

@@ -3,25 +3,26 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
 
-// Registro do Service Worker para PWA
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js').then(registration => {
-      console.log('SW registrado com sucesso:', registration.scope);
-    }, err => {
-      console.log('Falha ao registrar SW:', err);
-    });
-  });
-}
-
 const rootElement = document.getElementById('root');
-if (!rootElement) {
-  throw new Error("Could not find root element to mount to");
-}
 
-const root = ReactDOM.createRoot(rootElement);
-root.render(
-  <React.StrictMode>
-    <App />
-  </React.StrictMode>
-);
+if (!rootElement) {
+  console.error("Não foi possível encontrar o elemento root para montar a aplicação.");
+} else {
+  try {
+    const root = ReactDOM.createRoot(rootElement);
+    root.render(
+      <React.StrictMode>
+        <App />
+      </React.StrictMode>
+    );
+  } catch (error) {
+    console.error("Erro crítico ao inicializar a aplicação:", error);
+    rootElement.innerHTML = `
+      <div style="padding: 20px; font-family: sans-serif; text-align: center;">
+        <h2>Erro ao carregar o Jogo Fácil</h2>
+        <p>Por favor, recarregue a página ou contate o suporte.</p>
+        <pre style="text-align: left; background: #f4f4f4; padding: 10px; font-size: 12px; margin-top: 20px;">${String(error)}</pre>
+      </div>
+    `;
+  }
+}
