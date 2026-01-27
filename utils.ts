@@ -1,3 +1,4 @@
+
 export const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
   const R = 6371; // Radius of the earth in km
   const dLat = deg2rad(lat2 - lat1);
@@ -22,4 +23,27 @@ export const convertFileToBase64 = (file: File): Promise<string> => {
     reader.onload = () => resolve(reader.result as string);
     reader.onerror = (error) => reject(error);
   });
+};
+
+/**
+ * Formata categorias para um padrão profissional.
+ * Ex: "subi9" -> "Sub-9", "sub 20" -> "Sub-20", "veteranos" -> "Veteranos"
+ */
+export const formatCategory = (input: string): string => {
+  let cleaned = input.trim().toLowerCase();
+  if (!cleaned) return '';
+
+  // Captura padrões como "subi9", "sub 9", "sub9", "s9"
+  const subMatch = cleaned.match(/^(?:sub\s*i?|s)(\d+)$/i);
+  if (subMatch) {
+    return `Sub-${subMatch[1]}`;
+  }
+
+  // Se for apenas número, assume Sub
+  if (/^\d+$/.test(cleaned)) {
+    return `Sub-${cleaned}`;
+  }
+
+  // Capitaliza a primeira letra para outros casos (Principal, Veteranos, etc)
+  return cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
 };
