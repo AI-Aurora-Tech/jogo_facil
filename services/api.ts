@@ -36,18 +36,10 @@ export const api = {
     return data as RegisteredTeam[];
   },
 
-  addRegisteredTeam: async (fieldId: string, teamName: string, fixedDay: number, fixedTime: string, categories: string[], logoUrl?: string): Promise<RegisteredTeam> => {
+  addRegisteredTeam: async (team: Partial<RegisteredTeam>): Promise<RegisteredTeam> => {
     const { data, error } = await supabase
       .from('RegisteredTeam')
-      .insert([{
-        fieldId,
-        name: teamName,
-        fixedDay,
-        fixedTime,
-        categories,
-        logoUrl,
-        createdAt: new Date().toISOString()
-      }])
+      .insert([team])
       .select()
       .single();
 
@@ -55,11 +47,8 @@ export const api = {
     return data as RegisteredTeam;
   },
 
-  deleteRegisteredTeam: async (fieldId: string, teamId: string): Promise<void> => {
-    const { error } = await supabase
-      .from('RegisteredTeam')
-      .delete()
-      .eq('id', teamId);
+  deleteRegisteredTeam: async (teamId: string): Promise<void> => {
+    const { error } = await supabase.from('RegisteredTeam').delete().eq('id', teamId);
     if (error) throw error;
   },
 
@@ -98,14 +87,13 @@ export const api = {
         latitude: userData.latitude || -23.6337,
         longitude: userData.longitude || -46.7905
       }]);
-      if (fieldError) console.error("Erro ao criar arena:", fieldError);
     }
 
     return newUser as User;
   },
 
   updateUser: async (user: User): Promise<User> => {
-    const { id, email, role, ...updates } = user; // Removemos ID, Email e Role do corpo do update
+    const { id, email, role, ...updates } = user;
     const { data, error } = await supabase
       .from('User')
       .update(updates)
@@ -113,10 +101,7 @@ export const api = {
       .select()
       .single();
 
-    if (error) {
-      console.error("Supabase User Update Error:", error);
-      throw error;
-    }
+    if (error) throw error;
     return data as User;
   },
 
@@ -130,14 +115,12 @@ export const api = {
   },
   
   updateField: async (fieldId: string, updates: Partial<Field>): Promise<Field> => {
-    const { id, ownerId, ...cleanUpdates } = updates as any; // Removemos IDs
-    
+    const { id, ownerId, ...cleanUpdates } = updates as any;
     if (cleanUpdates.pixConfig) {
         cleanUpdates.pixKey = cleanUpdates.pixConfig.key;
         cleanUpdates.pixName = cleanUpdates.pixConfig.name;
         delete cleanUpdates.pixConfig;
     }
-    
     const { data, error } = await supabase
       .from('Field')
       .update(cleanUpdates)
@@ -145,10 +128,7 @@ export const api = {
       .select()
       .single();
 
-    if (error) {
-      console.error("Supabase Field Update Error:", error);
-      throw error;
-    }
+    if (error) throw error;
     return { ...data, pixConfig: { key: data.pixKey, name: data.pixName } } as Field;
   },
 
@@ -158,7 +138,6 @@ export const api = {
       .select('*')
       .order('date', { ascending: true })
       .order('time', { ascending: true });
-
     if (error) throw error;
     return data as MatchSlot[];
   },
@@ -170,13 +149,13 @@ export const api = {
   },
 
   updateSlot: async (slotId: string, data: Partial<MatchSlot>): Promise<MatchSlot> => {
+    const { id, ...updates } = data as any;
     const { data: updated, error } = await supabase
       .from('MatchSlot')
-      .update(data)
+      .update(updates)
       .eq('id', slotId)
       .select()
       .single();
-
     if (error) throw error;
     return updated as MatchSlot;
   },
@@ -188,17 +167,10 @@ export const api = {
 
   rateTeam: async (userId: string, slotId: string, rating: number): Promise<void> => {
     await supabase.from('MatchSlot').update({ ratingGiven: rating }).eq('id', slotId);
-    const { data: user, error: userError } = await supabase.from('User').select('teamRating, teamRatingCount').eq('id', userId).single();
-    if (userError || !user) return;
-
-    const currentRating = user.teamRating || 0;
-    const currentCount = user.teamRatingCount || 0;
-    const newCount = currentCount + 1;
-    const newRating = (currentRating * currentCount + rating) / newCount;
-
-    await supabase.from('User').update({
-        teamRating: newRating,
-        teamRatingCount: newCount
-    }).eq('id', userId);
+    const { data: user } = await supabase.from('User').select('teamRating, teamRatingCount').eq('id', userId).single();
+    if (!user) return;
+    const newCount = (user.teamRatingCount || 0) + 1;
+    const newRating = ((user.teamRating || 0) * (user.teamRatingCount || 0) + rating) / newCount;
+    await supabase.from('User').update({ teamRating: newRating, teamRatingCount: newCount }).eq('id', userId);
   }
 };

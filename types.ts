@@ -59,7 +59,7 @@ export interface RegisteredTeam {
   id: string;
   name: string;
   fieldId: string;
-  fixedDay: number; // 0-6 (Sun-Sat)
+  fixedDay: number; // 0-6 (Dom-Sab)
   fixedTime: string;
   categories: string[];
   logoUrl?: string;
@@ -88,23 +88,20 @@ export interface MatchSlot {
   time: string;
   durationMinutes: number;
   matchType: MatchType;
-  customImageUrl?: string;
-  isBooked: boolean;
-  hasLocalTeam: boolean;
-  localTeamName?: string; 
-  allowedCategories: string[]; 
-  bookedByTeamName?: string; 
-  bookedByUserId?: string;
-  bookedByPhone?: string;
-  bookedByCategory?: string; 
-  opponentTeamName?: string;
+  isBooked: boolean; // Indica se o horário está TOTALMENTE preenchido (2 times ou alugado)
+  hasLocalTeam: boolean; // Tem mandante?
+  localTeamName?: string; // Nome do mandante
+  bookedByUserId?: string; // ID do mandante (quem reservou primeiro)
+  bookedByTeamName?: string; // Nome do mandante
+  bookedByCategory?: string; // Categoria do jogo definida pelo mandante
+  opponentTeamName?: string; // Nome do visitante/desafiante
   opponentTeamPhone?: string;
   status: 'available' | 'pending_verification' | 'confirmed';
-  statusUpdatedAt?: string;
   price: number;
+  allowedCategories: string[]; 
+  receiptUrl?: string;
+  aiVerificationResult?: string;
   ratingGiven?: number;
-  receiptUrl?: string; // URL ou Base64 do comprovante
-  aiVerificationResult?: string; // Resultado da análise da Gemini
 }
 
 export interface VerificationResult {

@@ -122,12 +122,13 @@ const App: React.FC = () => {
   };
 
   const resetSlot = async (id: string) => {
+    // Reset slot information to available status and clear booking data
     await api.updateSlot(id, {
         isBooked: false,
         status: 'available',
         bookedByTeamName: null as any,
         bookedByUserId: null as any,
-        bookedByPhone: null as any,
+        opponentTeamPhone: null as any, // Fixed: changed from bookedByPhone to opponentTeamPhone
         bookedByCategory: null as any,
         opponentTeamName: null as any,
         receiptUrl: null as any,
