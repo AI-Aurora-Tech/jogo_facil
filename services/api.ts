@@ -1,8 +1,7 @@
 
 import { supabase } from '../supabaseClient';
-import { User, Field, MatchSlot, RegisteredTeam } from '../types';
+import { User, Field, MatchSlot, RegisteredTeam, PendingUpdate } from '../types';
 
-// Helper centralizado para mapear o usuário vindo do banco (snake_case) para o tipo TS (camelCase)
 const mapUserFromDb = (u: any): User => ({
   id: u.id,
   name: u.name,
@@ -18,80 +17,12 @@ const mapUserFromDb = (u: any): User => ({
   latitude: u.latitude,
   longitude: u.longitude,
   teamRating: u.team_rating,
-  teamRatingCount: u.team_rating_count
+  teamRatingCount: u.team_rating_count,
+  password: u.password // Necessário para verificação interna se desejado
 });
 
 export const api = {
-  getCategories: async (): Promise<string[]> => {
-    const { data, error } = await supabase
-      .from('category')
-      .select('name')
-      .order('name', { ascending: true });
-    
-    if (error || !data || data.length === 0) {
-      return ["Livre", "Principal", "Veteranos", "Feminino", "Sub-20"];
-    }
-    return data.map(c => c.name);
-  },
-
-  updateCategories: async (categories: string[]): Promise<string[]> => {
-    await supabase.from('category').delete().neq('name', ''); 
-    const { error } = await supabase
-      .from('category')
-      .insert(categories.map(name => ({ name })));
-    
-    if (error) throw error;
-    return categories;
-  },
-
-  getRegisteredTeams: async (fieldId: string): Promise<RegisteredTeam[]> => {
-    const { data, error } = await supabase
-      .from('registered_team')
-      .select('*')
-      .eq('field_id', fieldId);
-    
-    if (error) {
-      console.error("Erro ao buscar mensalistas:", error);
-      return [];
-    }
-    
-    return (data || []).map(t => ({
-      id: t.id,
-      name: t.name,
-      fieldId: t.field_id,
-      fixedDay: t.fixed_day,
-      fixedTime: t.fixed_time,
-      categories: t.categories,
-      logoUrl: t.logo_url,
-      createdAt: t.created_at
-    })) as RegisteredTeam[];
-  },
-
-  addRegisteredTeam: async (team: Partial<RegisteredTeam>): Promise<RegisteredTeam> => {
-    const payload = {
-      field_id: team.fieldId,
-      name: team.name,
-      fixed_day: team.fixed_day,
-      fixed_time: team.fixed_time,
-      categories: team.categories,
-      logo_url: team.logoUrl
-    };
-
-    const { data, error } = await supabase
-      .from('registered_team')
-      .insert([payload])
-      .select()
-      .single();
-
-    if (error) throw error;
-    return data as any;
-  },
-
-  deleteRegisteredTeam: async (teamId: string): Promise<void> => {
-    const { error } = await supabase.from('registered_team').delete().eq('id', teamId);
-    if (error) throw error;
-  },
-
+  // --- AUTH & USER ---
   login: async (email: string, password: string): Promise<User> => {
     const { data: user, error } = await supabase
       .from('user')
@@ -106,26 +37,20 @@ export const api = {
 
   register: async (userData: any): Promise<User> => {
     const { fieldData, ...userFields } = userData;
-    
-    const userPayload = {
-      email: userFields.email,
-      password: userFields.password,
-      name: userFields.name,
-      phone_number: userFields.phoneNumber,
-      role: userFields.role,
-      subscription: userFields.subscription,
-      team_name: userFields.teamName,
-      team_categories: userFields.teamCategories,
-      team_logo_url: userFields.teamLogoUrl,
-      latitude: userFields.latitude,
-      longitude: userFields.longitude
-    };
-
     const { data: newUser, error: userError } = await supabase
       .from('user')
-      .insert([userPayload])
-      .select()
-      .single();
+      .insert([{
+        email: userFields.email,
+        password: userFields.password,
+        name: userFields.name,
+        phone_number: userFields.phoneNumber,
+        role: userFields.role,
+        subscription: userFields.subscription,
+        team_name: userFields.teamName,
+        team_categories: userFields.teamCategories,
+        team_logo_url: userFields.teamLogoUrl
+      }])
+      .select().single();
 
     if (userError) throw userError;
 
@@ -135,20 +60,15 @@ export const api = {
         name: fieldData.name,
         location: fieldData.location,
         hourly_rate: fieldData.hourlyRate || 0,
-        pix_key: '',
-        pix_name: '',
-        image_url: 'https://images.unsplash.com/photo-1529900748604-07564a03e7a6?auto=format&fit=crop&q=80&w=1000',
         contact_phone: fieldData.contactPhone,
-        latitude: userData.latitude || -23.6337,
-        longitude: userData.longitude || -46.7905
+        image_url: 'https://images.unsplash.com/photo-1529900748604-07564a03e7a6?auto=format&fit=crop&q=80&w=1000'
       }]);
     }
-
     return mapUserFromDb(newUser);
   },
 
   updateUser: async (user: User): Promise<User> => {
-    const payload = {
+    const payload: any = {
       name: user.name,
       phone_number: user.phoneNumber,
       team_name: user.teamName,
@@ -156,18 +76,67 @@ export const api = {
       team_logo_url: user.teamLogoUrl,
       sub_teams: user.subTeams
     };
+    if (user.password) payload.password = user.password;
 
-    const { data, error } = await supabase
-      .from('user')
-      .update(payload)
-      .eq('id', user.id)
-      .select()
-      .single();
-
+    const { data, error } = await supabase.from('user').update(payload).eq('id', user.id).select().single();
     if (error) throw error;
     return mapUserFromDb(data);
   },
 
+  getAllUsers: async (): Promise<User[]> => {
+    const { data, error } = await supabase.from('user').select('*').order('name');
+    if (error) throw error;
+    return (data || []).map(mapUserFromDb);
+  },
+
+  // --- SUPER ADMIN PENDING UPDATES ---
+  requestUpdate: async (req: Omit<PendingUpdate, 'id' | 'createdAt' | 'status'>): Promise<void> => {
+    const { error } = await supabase.from('pending_update').insert([{
+      requester_id: req.requesterId,
+      target_id: req.targetId,
+      entity_type: req.entityType,
+      json_data: req.jsonData,
+      status: 'pending'
+    }]);
+    if (error) throw error;
+  },
+
+  getPendingUpdatesForTarget: async (targetId: string): Promise<PendingUpdate[]> => {
+    const { data, error } = await supabase
+      .from('pending_update')
+      .select('*')
+      .eq('target_id', targetId)
+      .eq('status', 'pending');
+    
+    if (error) return [];
+    return data.map(d => ({
+      id: d.id,
+      requesterId: d.requester_id,
+      targetId: d.target_id,
+      entity_type: d.entity_type,
+      jsonData: d.json_data,
+      status: d.status,
+      createdAt: d.created_at
+    }));
+  },
+
+  resolveUpdate: async (updateId: string, status: 'approved' | 'rejected'): Promise<void> => {
+    const { error } = await supabase.from('pending_update').update({ status }).eq('id', updateId);
+    if (error) throw error;
+  },
+
+  // --- CATEGORIES ---
+  getCategories: async (): Promise<string[]> => {
+    const { data, error } = await supabase.from('category').select('name').order('name');
+    return (error || !data) ? ["Livre", "Principal", "Veteranos"] : data.map(c => c.name);
+  },
+
+  updateCategories: async (categories: string[]): Promise<void> => {
+    await supabase.from('category').delete().neq('name', '');
+    await supabase.from('category').insert(categories.map(name => ({ name })));
+  },
+
+  // --- FIELDS & SLOTS ---
   getFields: async (): Promise<Field[]> => {
     const { data, error } = await supabase.from('field').select('*');
     if (error) throw error;
@@ -185,7 +154,7 @@ export const api = {
         longitude: f.longitude
     }));
   },
-  
+
   updateField: async (fieldId: string, updates: Partial<Field>): Promise<Field> => {
     const payload: any = {
       name: updates.name,
@@ -194,32 +163,18 @@ export const api = {
       image_url: updates.imageUrl,
       contact_phone: updates.contactPhone
     };
-    
     if (updates.pixConfig) {
       payload.pix_key = updates.pixConfig.key;
       payload.pix_name = updates.pixConfig.name;
     }
-
-    const { data, error } = await supabase
-      .from('field')
-      .update(payload)
-      .eq('id', fieldId)
-      .select()
-      .single();
-
+    const { data, error } = await supabase.from('field').update(payload).eq('id', fieldId).select().single();
     if (error) throw error;
     return data as any;
   },
 
   getSlots: async (): Promise<MatchSlot[]> => {
-    const { data, error } = await supabase
-      .from('match_slot')
-      .select('*')
-      .order('date', { ascending: true })
-      .order('time', { ascending: true });
-    
+    const { data, error } = await supabase.from('match_slot').select('*').order('date').order('time');
     if (error) throw error;
-    
     return (data || []).map(s => ({
       id: s.id,
       fieldId: s.field_id,
@@ -239,59 +194,67 @@ export const api = {
       price: s.price,
       allowedCategories: s.allowed_categories || [],
       receiptUrl: s.receipt_url,
-      aiVerificationResult: s.ai_verification_result,
-      ratingGiven: s.rating_given
+      aiVerificationResult: s.ai_verification_result
     })) as MatchSlot[];
   },
 
-  createSlots: async (slots: Partial<MatchSlot>[]): Promise<MatchSlot[]> => {
+  createSlots: async (slots: Partial<MatchSlot>[]): Promise<void> => {
     const payload = slots.map(s => ({
       field_id: s.fieldId,
       date: s.date,
       time: s.time,
-      duration_minutes: s.durationMinutes,
       match_type: s.matchType,
       is_booked: s.isBooked,
       has_local_team: s.hasLocalTeam,
       local_team_name: s.localTeamName,
       price: s.price,
       status: s.status,
-      // Fixed: Use camelCase allowedCategories from MatchSlot interface instead of snake_case allowed_categories
-      allowed_categories: s.allowedCategories,
-      booked_by_team_name: s.bookedByTeamName,
-      booked_by_category: s.bookedByCategory
+      allowed_categories: s.allowedCategories
     }));
-
-    const { error } = await supabase.from('match_slot').insert(payload);
-    if (error) throw error;
-    return api.getSlots();
+    await supabase.from('match_slot').insert(payload);
   },
 
-  updateSlot: async (slotId: string, data: Partial<MatchSlot>): Promise<MatchSlot> => {
+  updateSlot: async (slotId: string, data: Partial<MatchSlot>): Promise<void> => {
     const payload: any = {};
     if (data.status) payload.status = data.status;
     if (data.isBooked !== undefined) payload.is_booked = data.isBooked;
-    if (data.receiptUrl !== undefined) payload.receipt_url = data.receiptUrl;
-    if (data.aiVerificationResult) payload.ai_verification_result = data.aiVerificationResult;
-    if (data.bookedByUserId) payload.booked_by_user_id = data.bookedByUserId;
+    if (data.receiptUrl) payload.receipt_url = data.receiptUrl;
     if (data.bookedByTeamName !== undefined) payload.booked_by_team_name = data.bookedByTeamName;
-    if (data.bookedByCategory !== undefined) payload.booked_by_category = data.bookedByCategory;
     if (data.opponentTeamName !== undefined) payload.opponent_team_name = data.opponentTeamName;
-    if (data.opponentTeamPhone !== undefined) payload.opponent_team_phone = data.opponentTeamPhone;
-
-    const { data: updated, error } = await supabase
-      .from('match_slot')
-      .update(payload)
-      .eq('id', slotId)
-      .select()
-      .single();
-      
-    if (error) throw error;
-    return updated as any;
+    await supabase.from('match_slot').update(payload).eq('id', slotId);
   },
 
   deleteSlot: async (slotId: string): Promise<void> => {
-    const { error } = await supabase.from('match_slot').delete().eq('id', slotId);
+    await supabase.from('match_slot').delete().eq('id', slotId);
+  },
+
+  getRegisteredTeams: async (fieldId: string): Promise<RegisteredTeam[]> => {
+    const { data, error } = await supabase.from('registered_team').select('*').eq('field_id', fieldId);
+    return (data || []).map(t => ({
+      id: t.id,
+      name: t.name,
+      fieldId: t.field_id,
+      fixedDay: t.fixed_day,
+      fixedTime: t.fixed_time,
+      categories: t.categories,
+      logoUrl: t.logo_url,
+      createdAt: t.created_at
+    }));
+  },
+
+  addRegisteredTeam: async (team: Partial<RegisteredTeam>): Promise<void> => {
+    await supabase.from('registered_team').insert([{
+      field_id: team.fieldId,
+      name: team.name,
+      fixed_day: team.fixedDay,
+      fixed_time: team.fixedTime,
+      categories: team.categories
+    }]);
+  },
+
+  // Fixed: Added missing deleteRegisteredTeam method to support views/FieldDashboard.tsx
+  deleteRegisteredTeam: async (teamId: string): Promise<void> => {
+    const { error } = await supabase.from('registered_team').delete().eq('id', teamId);
     if (error) throw error;
   }
 };

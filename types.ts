@@ -2,6 +2,7 @@
 export enum UserRole {
   GUEST = 'GUEST',
   ADMIN = 'ADMIN',
+  SUPER_ADMIN = 'SUPER_ADMIN',
   FIELD_OWNER = 'FIELD_OWNER',
   TEAM_CAPTAIN = 'TEAM_CAPTAIN'
 }
@@ -14,6 +15,16 @@ export enum SubscriptionPlan {
 }
 
 export type MatchType = 'AMISTOSO' | 'FESTIVAL' | 'ALUGUEL' | 'FIXO';
+
+export interface PendingUpdate {
+  id: string;
+  requesterId: string;
+  targetId: string;
+  entityType: 'USER' | 'FIELD';
+  jsonData: any;
+  status: 'pending' | 'approved' | 'rejected';
+  createdAt: string;
+}
 
 export interface SubTeam {
   id: string;
@@ -88,13 +99,13 @@ export interface MatchSlot {
   time: string;
   durationMinutes: number;
   matchType: MatchType;
-  isBooked: boolean; // Indica se o horário está TOTALMENTE preenchido (2 times ou alugado)
-  hasLocalTeam: boolean; // Tem mandante?
-  localTeamName?: string; // Nome do mandante
-  bookedByUserId?: string; // ID do mandante (quem reservou primeiro)
-  bookedByTeamName?: string; // Nome do mandante
-  bookedByCategory?: string; // Categoria do jogo definida pelo mandante
-  opponentTeamName?: string; // Nome do visitante/desafiante
+  isBooked: boolean;
+  hasLocalTeam: boolean;
+  localTeamName?: string;
+  bookedByUserId?: string;
+  bookedByTeamName?: string;
+  bookedByCategory?: string;
+  opponentTeamName?: string;
   opponentTeamPhone?: string;
   status: 'available' | 'pending_verification' | 'confirmed';
   price: number;
