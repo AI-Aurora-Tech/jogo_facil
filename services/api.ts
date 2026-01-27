@@ -22,11 +22,10 @@ const mapUserFromDb = (u: any): User => ({
 });
 
 export const api = {
-  // --- AUTH & USER ---
   login: async (email: string, password: string): Promise<User> => {
-    // Normaliza o email para minúsculas
     const normalizedEmail = email.toLowerCase().trim();
     
+    // Tentativa de login
     const { data: user, error } = await supabase
       .from('user')
       .select('*')
@@ -35,9 +34,10 @@ export const api = {
       .single();
 
     if (error || !user) {
-      console.error("Erro login:", error);
-      throw new Error('Credenciais inválidas. Verifique seu email e senha.');
+      console.error("Login fail:", error);
+      throw new Error('E-mail ou senha incorretos.');
     }
+
     return mapUserFromDb(user);
   },
 
@@ -45,7 +45,7 @@ export const api = {
     const { fieldData, ...userFields } = userData;
     const normalizedEmail = userFields.email.toLowerCase().trim();
 
-    // Lógica especial para o Super Admin Pedro
+    // Promoção automática para Super Admin via código se for o e-mail do Pedro
     let finalRole = userFields.role;
     if (normalizedEmail === 'pedro@auroratech.com') {
       finalRole = UserRole.SUPER_ADMIN;
@@ -90,19 +90,11 @@ export const api = {
       team_logo_url: user.teamLogoUrl,
       sub_teams: user.subTeams
     };
-    
-    // Se a senha foi preenchida no modal, envia para o banco
     if (user.password && user.password.trim() !== '') {
       payload.password = user.password;
     }
 
-    const { data, error } = await supabase
-      .from('user')
-      .update(payload)
-      .eq('id', user.id)
-      .select()
-      .single();
-
+    const { data, error } = await supabase.from('user').update(payload).eq('id', user.id).select().single();
     if (error) throw error;
     return mapUserFromDb(data);
   },
@@ -227,6 +219,7 @@ export const api = {
       match_type: s.matchType,
       is_booked: s.isBooked,
       has_local_team: s.hasLocalTeam,
+      // Fix: Changed s.local_team_name to s.localTeamName as per MatchSlot interface
       local_team_name: s.localTeamName,
       price: s.price,
       status: s.status,
