@@ -88,9 +88,9 @@ export const Auth: React.FC<AuthProps> = ({ categories, onLogin, onCancel }) => 
         }
 
         const payload: any = {
-          email,
+          email: email.toLowerCase().trim(),
           password,
-          role: email.toLowerCase().includes('admin') ? UserRole.ADMIN : role,
+          role: role,
           name,
           phoneNumber: phone,
           subscription: initialSubscription,
@@ -113,11 +113,11 @@ export const Auth: React.FC<AuthProps> = ({ categories, onLogin, onCancel }) => 
         const newUser = await api.register(payload);
         onLogin(newUser);
       } else {
-        const user = await api.login(email, password);
+        const user = await api.login(email.toLowerCase().trim(), password);
         onLogin(user);
       }
     } catch (err: any) {
-      setError(err.message || 'Erro na autenticação');
+      setError(err.message || 'Erro na autenticação. Verifique os dados e tente novamente.');
     } finally {
       setIsLoading(false);
     }
@@ -192,7 +192,7 @@ export const Auth: React.FC<AuthProps> = ({ categories, onLogin, onCancel }) => 
                     <label className="block text-sm font-medium text-gray-300 mb-1">Seu Nome Completo</label>
                     <div className="relative">
                       <UserIcon className="absolute left-3 top-3 text-gray-400 w-5 h-5" />
-                      <input type="text" required className={inputClass} placeholder="Nome" value={name} onChange={setName ? (e => setName(e.target.value)) : undefined} />
+                      <input type="text" required className={inputClass} placeholder="Nome" value={name} onChange={e => setName(e.target.value)} />
                     </div>
                  </div>
                  <div>

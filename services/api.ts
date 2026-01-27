@@ -1,6 +1,6 @@
 
 import { supabase } from '../supabaseClient';
-import { User, Field, MatchSlot, RegisteredTeam, PendingUpdate } from '../types';
+import { User, Field, MatchSlot, RegisteredTeam, PendingUpdate, UserRole } from '../types';
 
 const mapUserFromDb = (u: any): User => ({
   id: u.id,
@@ -18,33 +18,47 @@ const mapUserFromDb = (u: any): User => ({
   longitude: u.longitude,
   teamRating: u.team_rating,
   teamRatingCount: u.team_rating_count,
-  password: u.password // Necessário para verificação interna se desejado
+  password: u.password
 });
 
 export const api = {
   // --- AUTH & USER ---
   login: async (email: string, password: string): Promise<User> => {
+    // Normaliza o email para minúsculas
+    const normalizedEmail = email.toLowerCase().trim();
+    
     const { data: user, error } = await supabase
       .from('user')
       .select('*')
-      .eq('email', email)
+      .eq('email', normalizedEmail)
       .eq('password', password)
       .single();
 
-    if (error || !user) throw new Error('Credenciais inválidas.');
+    if (error || !user) {
+      console.error("Erro login:", error);
+      throw new Error('Credenciais inválidas. Verifique seu email e senha.');
+    }
     return mapUserFromDb(user);
   },
 
   register: async (userData: any): Promise<User> => {
     const { fieldData, ...userFields } = userData;
+    const normalizedEmail = userFields.email.toLowerCase().trim();
+
+    // Lógica especial para o Super Admin Pedro
+    let finalRole = userFields.role;
+    if (normalizedEmail === 'pedro@auroratech.com') {
+      finalRole = UserRole.SUPER_ADMIN;
+    }
+
     const { data: newUser, error: userError } = await supabase
       .from('user')
       .insert([{
-        email: userFields.email,
+        email: normalizedEmail,
         password: userFields.password,
         name: userFields.name,
         phone_number: userFields.phoneNumber,
-        role: userFields.role,
+        role: finalRole,
         subscription: userFields.subscription,
         team_name: userFields.teamName,
         team_categories: userFields.teamCategories,
@@ -76,9 +90,19 @@ export const api = {
       team_logo_url: user.teamLogoUrl,
       sub_teams: user.subTeams
     };
-    if (user.password) payload.password = user.password;
+    
+    // Se a senha foi preenchida no modal, envia para o banco
+    if (user.password && user.password.trim() !== '') {
+      payload.password = user.password;
+    }
 
-    const { data, error } = await supabase.from('user').update(payload).eq('id', user.id).select().single();
+    const { data, error } = await supabase
+      .from('user')
+      .update(payload)
+      .eq('id', user.id)
+      .select()
+      .single();
+
     if (error) throw error;
     return mapUserFromDb(data);
   },
@@ -89,7 +113,6 @@ export const api = {
     return (data || []).map(mapUserFromDb);
   },
 
-  // --- SUPER ADMIN PENDING UPDATES ---
   requestUpdate: async (req: Omit<PendingUpdate, 'id' | 'createdAt' | 'status'>): Promise<void> => {
     const { error } = await supabase.from('pending_update').insert([{
       requester_id: req.requesterId,
@@ -125,7 +148,6 @@ export const api = {
     if (error) throw error;
   },
 
-  // --- CATEGORIES ---
   getCategories: async (): Promise<string[]> => {
     const { data, error } = await supabase.from('category').select('name').order('name');
     return (error || !data) ? ["Livre", "Principal", "Veteranos"] : data.map(c => c.name);
@@ -136,7 +158,6 @@ export const api = {
     await supabase.from('category').insert(categories.map(name => ({ name })));
   },
 
-  // --- FIELDS & SLOTS ---
   getFields: async (): Promise<Field[]> => {
     const { data, error } = await supabase.from('field').select('*');
     if (error) throw error;
@@ -252,7 +273,6 @@ export const api = {
     }]);
   },
 
-  // Fixed: Added missing deleteRegisteredTeam method to support views/FieldDashboard.tsx
   deleteRegisteredTeam: async (teamId: string): Promise<void> => {
     const { error } = await supabase.from('registered_team').delete().eq('id', teamId);
     if (error) throw error;
