@@ -96,6 +96,16 @@ export const api = {
     }));
   },
 
+  createNotification: async (n: Omit<Notification, 'id' | 'timestamp' | 'read'>): Promise<void> => {
+    await supabase.from('notification').insert([{
+      user_id: n.userId,
+      title: n.title,
+      description: n.description,
+      type: n.type,
+      read: false
+    }]);
+  },
+
   markNotificationAsRead: async (id: string): Promise<void> => {
     await supabase.from('notification').update({ read: true }).eq('id', id);
   },
@@ -160,6 +170,7 @@ export const api = {
   },
 
   createSlots: async (slots: Partial<MatchSlot>[]): Promise<void> => {
+    // Fix: Using camelCase property names from the MatchSlot interface for object access.
     const payload = slots.map(s => ({
       field_id: s.fieldId,
       date: s.date,
@@ -171,8 +182,6 @@ export const api = {
       local_team_phone: s.localTeamPhone || null,
       price: s.price,
       status: s.status || 'available',
-      // Note: If columns like duration_minutes fail, they might be missing in DB.
-      // We assume basic columns exist.
       booked_by_user_id: s.bookedByUserId || null,
       booked_by_team_name: s.bookedByTeamName || null
     }));
@@ -184,7 +193,7 @@ export const api = {
     const payload: any = {};
     if (data.status) payload.status = data.status;
     if (data.isBooked !== undefined) payload.is_booked = data.isBooked;
-    if (data.receiptUrl) payload.receipt_url = data.receiptUrl;
+    if (data.receiptUrl !== undefined) payload.receipt_url = data.receiptUrl;
     if (data.bookedByTeamName !== undefined) payload.booked_by_team_name = data.bookedByTeamName;
     if (data.bookedByUserId !== undefined) payload.booked_by_user_id = data.bookedByUserId;
     if (data.bookedByUserPhone !== undefined) payload.booked_by_user_phone = data.bookedByUserPhone;
@@ -209,8 +218,8 @@ export const api = {
       id: t.id,
       name: t.name,
       fieldId: t.field_id,
-      fixedDay: t.fixed_day,
-      fixedTime: t.fixed_time,
+      fixed_day: t.fixed_day,
+      fixed_time: t.fixed_time,
       categories: t.categories,
       logoUrl: t.logo_url,
       createdAt: t.created_at

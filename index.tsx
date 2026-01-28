@@ -1,5 +1,5 @@
 
-import React, { ErrorInfo, ReactNode } from 'react';
+import React, { Component, ErrorInfo, ReactNode } from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
 
@@ -14,14 +14,13 @@ interface ErrorBoundaryState {
 
 /**
  * ErrorBoundary class to catch rendering errors in the component tree.
- * Fix: Explicitly using React.Component and initializing state in the constructor
- * ensures that 'this.props' and 'this.state' are correctly inherited and recognized
- * by the TypeScript compiler, resolving the issue on line 77.
+ * Fix: Explicitly importing and using Component from react to ensure
+ * this.props and this.state are correctly recognized as inherited properties.
  */
-class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
+class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
   constructor(props: ErrorBoundaryProps) {
     super(props);
-    // Standard state initialization within the constructor to avoid shadowing issues
+    // Standard state initialization within the constructor
     this.state = {
       hasError: false,
       error: null

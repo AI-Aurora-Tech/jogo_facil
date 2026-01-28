@@ -20,7 +20,6 @@ const App: React.FC = () => {
   const [slots, setSlots] = useState<MatchSlot[]>([]);
   const [categories, setCategories] = useState<string[]>([]);
   const [allUsers, setAllUsers] = useState<User[]>([]);
-  const [pendingUpdates, setPendingUpdates] = useState<PendingUpdate[]>([]);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   
   const [isLoading, setIsLoading] = useState(false);
@@ -44,9 +43,7 @@ const App: React.FC = () => {
       if (saved) {
         try {
           const u = JSON.parse(saved);
-          const [notifs] = await Promise.all([
-            api.getNotifications(u.id).catch(() => [])
-          ]);
+          const notifs = await api.getNotifications(u.id).catch(() => []);
           setNotifications(notifs);
 
           if (u?.role === UserRole.SUPER_ADMIN) {
@@ -118,6 +115,37 @@ const App: React.FC = () => {
   const handleLogout = () => {
     localStorage.removeItem('jf_session_user');
     window.location.href = '/';
+  };
+
+  const handleCancelBooking = async (slotId: string) => {
+    const slot = slots.find(s => s.id === slotId);
+    if (!slot) return;
+    const field = fields.find(f => f.id === slot.fieldId);
+
+    if (confirm("Deseja realmente cancelar este agendamento?")) {
+      await api.updateSlot(slotId, { 
+        status: 'available', 
+        isBooked: false, 
+        bookedByTeamName: null as any, 
+        bookedByUserId: null as any, 
+        bookedByUserPhone: null as any, 
+        opponentTeamName: null as any, 
+        opponentTeamPhone: null as any, 
+        receiptUrl: null as any 
+      });
+
+      if (field) {
+        await api.createNotification({
+          userId: field.ownerId,
+          title: "Agendamento Cancelado",
+          description: `O time ${user?.teamName} cancelou o horário de ${slot.time} no dia ${slot.date}.`,
+          type: 'warning'
+        });
+      }
+      
+      refreshData();
+      alert("Cancelado com sucesso. O dono da arena foi notificado.");
+    }
   };
 
   if (isInitialLoading) {
@@ -255,10 +283,7 @@ const App: React.FC = () => {
                    await api.updateSlot(id, { bookedByUserId: currentUserContext.id, bookedByTeamName: data.teamName, status: 'pending_verification' });
                    refreshData();
                 }}
-                onCancelBooking={async id => { 
-                  await api.updateSlot(id, { status: 'available', isBooked: false, bookedByTeamName: null as any, bookedByUserId: null as any, bookedByUserPhone: null as any, opponentTeamName: null as any, opponentTeamPhone: null as any, receiptUrl: null as any }); 
-                  refreshData(); 
-                }}
+                onCancelBooking={handleCancelBooking}
             />
         )}
 
