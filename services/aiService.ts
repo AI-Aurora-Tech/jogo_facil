@@ -32,36 +32,42 @@ export const verifyPixReceipt = async (
   expectedReceiverName: string
 ): Promise<VerificationResult> => {
   try {
-    // Acesso seguro à API_KEY para evitar ReferenceError
-    const apiKey = (typeof process !== 'undefined' && process.env?.API_KEY) || "";
-    
-    if (!apiKey) {
-      return { 
-        isValid: false, 
-        amountFound: null, 
-        dateFound: null, 
-        reason: "IA indisponível no momento (Erro de Configuração)." 
-      };
-    }
-
-    const ai = new GoogleGenAI({ apiKey });
+    // ALWAYS initialize GoogleGenAI using process.env.API_KEY directly as per guidelines.
+    // We assume process.env.API_KEY is pre-configured and valid.
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     const base64Data = await fileToGenerativePart(file);
 
     const prompt = `Analise este comprovante PIX. Valor esperado: R$ ${expectedAmount}. Destinatário: "${expectedReceiverName}". Responda em JSON.`;
 
+    // Use gemini-3-flash-preview for structured JSON extraction tasks.
     const response = await ai.models.generateContent({
       model: "gemini-3-flash-preview",
       contents: {
-        parts: [{ inlineData: { mimeType: file.type, data: base64Data } }, { text: prompt }],
+        parts: [
+          { inlineData: { mimeType: file.type, data: base64Data } }, 
+          { text: prompt }
+        ],
       },
-      config: { responseMimeType: "application/json", responseSchema: verificationSchema },
+      config: { 
+        responseMimeType: "application/json", 
+        responseSchema: verificationSchema 
+      },
     });
 
+    // Access .text property directly (not a method) to extract the generated string output.
     const textOutput = response.text;
-    if (textOutput) return JSON.parse(textOutput.trim()) as VerificationResult;
-    throw new Error("No response");
+    if (!textOutput) {
+      throw new Error("No text output received from the model.");
+    }
+
+    return JSON.parse(textOutput.trim()) as VerificationResult;
   } catch (error) {
     console.error("AI Verification failed:", error);
-    return { isValid: false, amountFound: null, dateFound: null, reason: "Erro técnico na verificação com IA." };
+    return { 
+      isValid: false, 
+      amountFound: null, 
+      dateFound: null, 
+      reason: "Erro técnico na verificação com IA." 
+    };
   }
 };
