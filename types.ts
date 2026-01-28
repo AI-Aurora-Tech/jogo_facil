@@ -103,12 +103,15 @@ export interface MatchSlot {
   isBooked: boolean;
   hasLocalTeam: boolean;
   localTeamName?: string;
+  localTeamPhone?: string; // Para notificação WhatsApp
   bookedByUserId?: string;
   bookedByTeamName?: string;
+  bookedByUserPhone?: string; // Para o oponente notificar o primeiro locatário
   bookedByCategory?: string;
   opponentTeamName?: string;
   opponentTeamCategory?: string;
   opponentTeamPhone?: string;
+  rewardDescription?: string; // Ex: "Vale Troféu"
   status: 'available' | 'pending_verification' | 'confirmed';
   price: number;
   allowedCategories: string[]; 

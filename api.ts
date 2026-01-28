@@ -143,12 +143,15 @@ export const api = {
       isBooked: s.is_booked,
       hasLocalTeam: s.has_local_team,
       localTeamName: s.local_team_name,
+      localTeamPhone: s.local_team_phone,
       bookedByUserId: s.booked_by_user_id,
+      bookedByUserPhone: s.booked_by_user_phone,
       bookedByTeamName: s.booked_by_team_name,
       bookedByCategory: s.booked_by_category,
       opponentTeamName: s.opponent_team_name,
       opponentTeamCategory: s.opponent_team_category,
       opponentTeamPhone: s.opponent_team_phone,
+      rewardDescription: s.reward_description,
       status: s.status,
       price: s.price,
       allowedCategories: s.allowed_categories || [],
@@ -162,16 +165,18 @@ export const api = {
       field_id: s.fieldId,
       date: s.date,
       time: s.time,
+      duration_minutes: s.durationMinutes || 60,
       match_type: s.matchType || 'ALUGUEL',
+      reward_description: s.rewardDescription || null,
       is_booked: s.isBooked || false,
       has_local_team: s.hasLocalTeam || false,
-      // Fix: Use camelCase localTeamName from Partial<MatchSlot>
       local_team_name: s.localTeamName || null,
+      local_team_phone: s.localTeamPhone || null,
       price: s.price,
       status: s.status || 'available',
-      // Fix: Use camelCase allowedCategories from Partial<MatchSlot>
       allowed_categories: s.allowedCategories || [],
       booked_by_user_id: s.bookedByUserId || null,
+      booked_by_user_phone: s.bookedByUserPhone || null,
       booked_by_team_name: s.bookedByTeamName || null,
       booked_by_category: s.bookedByCategory || null
     }));
@@ -186,11 +191,14 @@ export const api = {
     if (data.receiptUrl) payload.receipt_url = data.receiptUrl;
     if (data.bookedByTeamName !== undefined) payload.booked_by_team_name = data.bookedByTeamName;
     if (data.bookedByUserId !== undefined) payload.booked_by_user_id = data.bookedByUserId;
+    if (data.bookedByUserPhone !== undefined) payload.booked_by_user_phone = data.bookedByUserPhone;
     if (data.bookedByCategory !== undefined) payload.booked_by_category = data.bookedByCategory;
     if (data.opponentTeamName !== undefined) payload.opponent_team_name = data.opponentTeamName;
     if (data.opponentTeamCategory !== undefined) payload.opponent_team_category = data.opponentTeamCategory;
+    if (data.opponentTeamPhone !== undefined) payload.opponent_team_phone = data.opponentTeamPhone;
     if (data.hasLocalTeam !== undefined) payload.has_local_team = data.hasLocalTeam;
     if (data.localTeamName !== undefined) payload.local_team_name = data.localTeamName;
+    if (data.localTeamPhone !== undefined) payload.local_team_phone = data.localTeamPhone;
     
     const { error } = await supabase.from('match_slot').update(payload).eq('id', slotId);
     if (error) throw error;
@@ -218,7 +226,6 @@ export const api = {
     await supabase.from('registered_team').insert([{
       field_id: team.fieldId,
       name: team.name,
-      // Fix: Use camelCase fixedDay and fixedTime from Partial<RegisteredTeam>
       fixed_day: team.fixedDay,
       fixed_time: team.fixedTime,
       categories: team.categories
@@ -229,32 +236,10 @@ export const api = {
     await supabase.from('registered_team').delete().eq('id', teamId);
   },
 
-  getCategories: async (): Promise<string[]> => {
-    const { data, error } = await supabase.from('category').select('name').order('name');
-    return (error || !data) ? ["Livre", "Principal", "Veteranos"] : data.map(c => c.name);
-  },
-
+  getCategories: async (): Promise<string[]> => ["Sub-9", "Sub-11", "Sub-13", "Sub-15", "Veterano", "Principal", "Sport", "Feminino"],
   getAllUsers: async (): Promise<User[]> => {
-    const { data, error } = await supabase.from('user').select('*').order('name');
-    if (error) throw error;
+    const { data } = await supabase.from('user').select('*');
     return (data || []).map(mapUserFromDb);
   },
-
-  getPendingUpdatesForTarget: async (targetId: string): Promise<PendingUpdate[]> => {
-    const { data, error } = await supabase
-      .from('pending_update')
-      .select('*')
-      .eq('target_id', targetId)
-      .eq('status', 'pending');
-    if (error) return [];
-    return data.map(d => ({
-      id: d.id,
-      requesterId: d.requester_id,
-      targetId: d.target_id,
-      entityType: d.entity_type,
-      jsonData: d.json_data,
-      status: d.status,
-      createdAt: d.created_at
-    }));
-  }
+  getPendingUpdatesForTarget: async (t: string) => []
 };

@@ -1,5 +1,5 @@
 
-import React, { Component, ErrorInfo, ReactNode } from 'react';
+import React, { ErrorInfo, ReactNode } from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
 
@@ -14,9 +14,10 @@ interface ErrorBoundaryState {
 
 /**
  * ErrorBoundary class to catch rendering errors in the component tree.
- * Fix: Importing Component directly and extending it to ensure 'this.props' is correctly typed.
+ * Fix: Explicitly extending React.Component and ensuring the generic types are correctly applied
+ * to resolve the issue where 'this.props' was not recognized by the TypeScript compiler.
  */
-class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
+class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
   // Standard state initialization
   public state: ErrorBoundaryState = {
     hasError: false,
@@ -41,7 +42,7 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
   };
 
   public render(): ReactNode {
-    // Accessing state property inherited from Component
+    // Correctly accessing state inherited from React.Component
     if (this.state.hasError) {
       return (
         <div className="min-h-screen bg-[#022c22] flex items-center justify-center p-6 text-center font-sans">
