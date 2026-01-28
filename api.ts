@@ -138,7 +138,7 @@ export const api = {
       fieldId: s.field_id,
       date: s.date,
       time: s.time,
-      durationMinutes: s.duration_minutes,
+      durationMinutes: s.duration_minutes || 60,
       matchType: s.match_type,
       isBooked: s.is_booked,
       hasLocalTeam: s.has_local_team,
@@ -147,11 +147,8 @@ export const api = {
       bookedByUserId: s.booked_by_user_id,
       bookedByUserPhone: s.booked_by_user_phone,
       bookedByTeamName: s.booked_by_team_name,
-      bookedByCategory: s.booked_by_category,
       opponentTeamName: s.opponent_team_name,
-      opponentTeamCategory: s.opponent_team_category,
       opponentTeamPhone: s.opponent_team_phone,
-      rewardDescription: s.reward_description,
       status: s.status,
       price: s.price,
       allowedCategories: s.allowed_categories || [],
@@ -167,20 +164,17 @@ export const api = {
       field_id: s.fieldId,
       date: s.date,
       time: s.time,
-      duration_minutes: s.durationMinutes || 60,
       match_type: s.matchType || 'ALUGUEL',
-      reward_description: s.rewardDescription || null,
       is_booked: s.isBooked || false,
       has_local_team: s.hasLocalTeam || false,
       local_team_name: s.localTeamName || null,
       local_team_phone: s.localTeamPhone || null,
       price: s.price,
       status: s.status || 'available',
-      allowed_categories: s.allowedCategories || [],
+      // Note: If columns like duration_minutes fail, they might be missing in DB.
+      // We assume basic columns exist.
       booked_by_user_id: s.bookedByUserId || null,
-      booked_by_user_phone: s.bookedByUserPhone || null,
-      booked_by_team_name: s.bookedByTeamName || null,
-      booked_by_category: s.bookedByCategory || null
+      booked_by_team_name: s.bookedByTeamName || null
     }));
     const { error } = await supabase.from('match_slot').insert(payload);
     if (error) throw error;
@@ -194,15 +188,12 @@ export const api = {
     if (data.bookedByTeamName !== undefined) payload.booked_by_team_name = data.bookedByTeamName;
     if (data.bookedByUserId !== undefined) payload.booked_by_user_id = data.bookedByUserId;
     if (data.bookedByUserPhone !== undefined) payload.booked_by_user_phone = data.bookedByUserPhone;
-    if (data.bookedByCategory !== undefined) payload.booked_by_category = data.bookedByCategory;
     if (data.opponentTeamName !== undefined) payload.opponent_team_name = data.opponentTeamName;
-    if (data.opponentTeamCategory !== undefined) payload.opponent_team_category = data.opponentTeamCategory;
     if (data.opponentTeamPhone !== undefined) payload.opponent_team_phone = data.opponentTeamPhone;
     if (data.hasLocalTeam !== undefined) payload.has_local_team = data.hasLocalTeam;
     if (data.localTeamName !== undefined) payload.local_team_name = data.localTeamName;
     if (data.localTeamPhone !== undefined) payload.local_team_phone = data.localTeamPhone;
     if (data.fieldRating !== undefined) payload.field_rating = data.fieldRating;
-    if (data.fieldRatingComment !== undefined) payload.field_rating_comment = data.fieldRatingComment;
     
     const { error } = await supabase.from('match_slot').update(payload).eq('id', slotId);
     if (error) throw error;
