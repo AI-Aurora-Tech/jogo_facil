@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { Search, MapPin, Clock, Filter, Tag, Swords, CalendarCheck, CheckCircle2, XCircle, Upload, Loader2, Sparkles, ChevronRight } from 'lucide-react';
+import { Search, MapPin, Clock, Tag, Swords, CalendarCheck, CheckCircle2, XCircle, Upload, Loader2 } from 'lucide-react';
 import { Button } from '../components/Button';
 import { Field, MatchSlot, User } from '../types';
 import { verifyPixReceipt } from '../services/aiService';
@@ -18,9 +18,8 @@ interface TeamDashboardProps {
   onRefresh: () => void;
 }
 
-export const TeamDashboard: React.FC<TeamDashboardProps> = ({ categories, currentUser, fields, slots, onBookSlot, onCancelBooking, viewMode, onRefresh }) => {
+export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, fields, slots, onCancelBooking, viewMode, onRefresh }) => {
   const [searchTerm, setSearchTerm] = useState('');
-  const [categoryFilter, setCategoryFilter] = useState('');
   const [selectedSlot, setSelectedSlot] = useState<MatchSlot | null>(null);
   const [verifyingSlot, setVerifyingSlot] = useState<MatchSlot | null>(null);
   const [isAiLoading, setIsAiLoading] = useState(false);
@@ -32,16 +31,15 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ categories, curren
     const field = fields.find(f => f.id === slot.fieldId);
     if (!field) return false;
 
-    if (viewMode === 'EXPLORE') {
-      if (slot.date < todayStr || (slot.hasLocalTeam && slot.opponentTeamName)) return false;
-      if (searchTerm && !field.name.toLowerCase().includes(searchTerm.toLowerCase())) return false;
-      
-      const userTeamCats = currentUser.teamCategories || [];
-      const gameCategory = slot.bookedByCategory;
+    // Não pode desafiar se você é o dono da arena
+    if (field.ownerId === currentUser.id) return false;
 
-      if (gameCategory && gameCategory !== 'Livre') {
-        if (!userTeamCats.includes(gameCategory)) return false;
-      }
+    if (viewMode === 'EXPLORE') {
+      if (slot.date < todayStr || slot.status === 'confirmed') return false;
+      // Se já tem oponente, não aparece na busca
+      if (slot.opponentTeamName) return false;
+      
+      if (searchTerm && !field.name.toLowerCase().includes(searchTerm.toLowerCase())) return false;
       return true;
     } else {
       return (slot.bookedByUserId === currentUser.id || slot.opponentTeamName === currentUser.teamName) && slot.date >= todayStr;
@@ -51,8 +49,10 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ categories, curren
   const handleBookingConfirm = async () => {
     if (!selectedSlot) return;
     
-    // Se o slot estiver vazio, o time que reserva vira MANDANTE
-    if (!selectedSlot.hasLocalTeam && !selectedSlot.bookedByTeamName) {
+    const isSlotEmpty = !selectedSlot.hasLocalTeam && !selectedSlot.bookedByTeamName;
+
+    if (isSlotEmpty) {
+      // Primeiro a entrar vira Mandante
       await api.updateSlot(selectedSlot.id, {
         bookedByUserId: currentUser.id,
         bookedByTeamName: currentUser.teamName,
@@ -60,7 +60,7 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ categories, curren
         status: 'pending_verification'
       });
     } else {
-      // Se já tem Mandante, entra como OPONENTE
+      // Já tem alguém, entra como Oponente
       await api.updateSlot(selectedSlot.id, {
         opponentTeamName: currentUser.teamName,
         status: 'pending_verification'
@@ -69,7 +69,7 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ categories, curren
     
     setSelectedSlot(null);
     onRefresh();
-    alert("Solicitação de reserva enviada! Agora envie o comprovante PIX.");
+    alert("Reserva solicitada! Envie o comprovante na aba 'Meus Jogos'.");
   };
 
   const handleReceiptUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -83,7 +83,6 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ categories, curren
       const base64 = await convertFileToBase64(file);
       await api.updateSlot(verifyingSlot.id, {
         receiptUrl: base64,
-        aiVerificationResult: JSON.stringify(result),
         status: 'pending_verification'
       });
       onRefresh();
@@ -108,53 +107,31 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ categories, curren
           const isChallenge = slot.hasLocalTeam || slot.bookedByTeamName;
 
           return (
-            <div key={slot.id} className="bg-white rounded-[2.5rem] overflow-hidden border shadow-sm relative transition-all active:scale-[0.98] hover:border-grass-500">
-              {isChallenge && (
-                <div className="absolute top-0 right-0 bg-orange-500 text-white text-[8px] font-black px-4 py-1.5 rounded-bl-2xl uppercase tracking-widest flex items-center gap-1.5 z-10">
-                    <Swords className="w-3.5 h-3.5 animate-bounce" /> Desafio Aberto
-                </div>
-              )}
-              
+            <div key={slot.id} className="bg-white rounded-[2.5rem] overflow-hidden border shadow-sm transition-all hover:border-grass-500">
               <div className="p-6 flex gap-5">
-                  <div className="relative">
-                    <img src={field.imageUrl} className="w-24 h-24 rounded-3xl object-cover shadow-inner border" />
-                  </div>
+                  <img src={field.imageUrl} className="w-20 h-20 rounded-3xl object-cover border" />
                   <div className="flex-1">
-                      <h3 className="font-black text-pitch text-xl italic uppercase tracking-tighter leading-none mb-1">{field.name}</h3>
-                      <p className="text-[10px] font-bold text-gray-400 mb-3 flex items-center"><MapPin className="w-3 h-3 mr-1 text-grass-600" /> {field.location}</p>
-                      
-                      <div className="flex flex-wrap gap-2">
-                           <div className="bg-gray-100 px-3 py-1.5 rounded-xl flex items-center gap-1.5">
-                              <Clock className="w-3 h-3 text-gray-400" />
-                              <span className="text-[10px] font-black">{slot.time} • {slot.date.split('-').reverse().slice(0,2).join('/')}</span>
+                      <h3 className="font-black text-pitch text-lg uppercase leading-none">{field.name}</h3>
+                      <p className="text-[10px] font-bold text-gray-400 mt-1 flex items-center"><MapPin className="w-3 h-3 mr-1" /> {field.location}</p>
+                      <div className="flex gap-2 mt-3">
+                           <div className="bg-gray-100 px-3 py-1 rounded-xl text-[9px] font-black uppercase flex items-center gap-1">
+                              <Clock className="w-3 h-3" /> {slot.time} • {slot.date.split('-').reverse().slice(0,2).join('/')}
                            </div>
-                           <div className="bg-grass-50 px-3 py-1.5 rounded-xl flex items-center gap-1.5 text-grass-600 border border-grass-100">
-                                <Tag className="w-3 h-3" />
-                                <span className="text-[9px] font-black uppercase">{slot.bookedByCategory || 'Livre'}</span>
+                           <div className="bg-grass-50 px-3 py-1 rounded-xl text-grass-600 text-[9px] font-black uppercase">
+                                {slot.bookedByCategory || 'Aberto'}
                            </div>
                       </div>
                   </div>
               </div>
-
-              <div className="bg-gray-50 p-6 flex items-center justify-between border-t border-dashed">
-                  <div>
-                      <span className="text-[8px] font-black text-gray-400 uppercase">Investimento</span>
-                      <p className="text-2xl font-black text-pitch italic leading-none mt-1">R$ {slot.price.toFixed(0)}</p>
-                  </div>
+              <div className="bg-gray-50 p-5 flex items-center justify-between border-t border-dashed">
+                  <p className="text-xl font-black text-pitch italic">R$ {slot.price.toFixed(0)}</p>
                   {viewMode === 'MY_BOOKINGS' ? (
                       <div className="flex gap-2">
-                        {slot.status !== 'confirmed' && !slot.receiptUrl ? (
-                            <button onClick={() => setVerifyingSlot(slot)} className="bg-orange-500 text-white px-5 py-3 rounded-2xl text-[10px] font-black uppercase shadow-lg">Pagar Pix</button>
-                        ) : (
-                            <div className={`px-5 py-3 rounded-2xl text-[10px] font-black uppercase flex items-center gap-2 ${slot.status === 'confirmed' ? 'bg-grass-500 text-white' : 'bg-gray-200 text-gray-400'}`}>
-                                {slot.status === 'confirmed' ? <CheckCircle2 className="w-3 h-3" /> : <Clock className="w-3 h-3" />}
-                                {slot.status === 'confirmed' ? 'Confirmado' : 'Validando...'}
-                            </div>
-                        )}
-                        <button onClick={() => onCancelBooking(slot.id)} className="p-3 text-gray-300 hover:text-red-500 transition-colors"><XCircle className="w-6 h-6"/></button>
+                        {!slot.receiptUrl && <button onClick={() => setVerifyingSlot(slot)} className="bg-orange-500 text-white px-5 py-2.5 rounded-xl text-[10px] font-black uppercase shadow-lg">Pagar Pix</button>}
+                        <button onClick={() => onCancelBooking(slot.id)} className="p-2 text-gray-300 hover:text-red-500"><XCircle className="w-6 h-6"/></button>
                       </div>
                   ) : (
-                      <Button className={`rounded-2xl px-12 py-4 text-xs font-black uppercase shadow-xl ${isChallenge ? 'bg-orange-500' : 'bg-pitch'}`} onClick={() => setSelectedSlot(slot)}>
+                      <Button className={`rounded-2xl px-8 py-3 text-[10px] font-black uppercase ${isChallenge ? 'bg-orange-500' : 'bg-pitch'}`} onClick={() => setSelectedSlot(slot)}>
                         {isChallenge ? 'Desafiar' : 'Reservar'}
                       </Button>
                   )}
@@ -166,33 +143,23 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ categories, curren
 
       {selectedSlot && (
         <div className="fixed inset-0 bg-pitch/95 backdrop-blur-xl z-[100] flex items-end">
-            <div className="bg-white w-full rounded-t-[4rem] p-12 animate-in slide-in-from-bottom duration-500">
+            <div className="bg-white w-full rounded-t-[4rem] p-12">
                 <div className="flex items-center gap-5 mb-8">
-                    <div className={`w-16 h-16 rounded-3xl flex items-center justify-center text-pitch shadow-xl ${selectedSlot.hasLocalTeam || selectedSlot.bookedByTeamName ? 'bg-orange-500' : 'bg-grass-500'}`}>
-                        {selectedSlot.hasLocalTeam || selectedSlot.bookedByTeamName ? <Swords className="w-10 h-10"/> : <CalendarCheck className="w-10 h-10"/>}
+                    <div className={`w-16 h-16 rounded-3xl flex items-center justify-center text-pitch ${selectedSlot.bookedByTeamName ? 'bg-orange-500' : 'bg-grass-500'}`}>
+                        {selectedSlot.bookedByTeamName ? <Swords className="w-10 h-10"/> : <CalendarCheck className="w-10 h-10"/>}
                     </div>
                     <div>
-                        <h2 className="text-3xl font-black text-pitch uppercase tracking-tighter italic leading-none">
-                          {selectedSlot.hasLocalTeam || selectedSlot.bookedByTeamName ? 'Desafiar Time' : 'Fazer Reserva'}
+                        <h2 className="text-2xl font-black text-pitch uppercase tracking-tighter italic">
+                          {selectedSlot.bookedByTeamName ? 'Desafiar Time' : 'Ser Mandante'}
                         </h2>
-                        <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mt-2">Você será o {selectedSlot.bookedByTeamName ? 'Desafiante' : 'Mandante'}</p>
+                        <p className="text-[10px] font-black text-gray-400 uppercase mt-1">
+                          {selectedSlot.bookedByTeamName ? `Adversário: ${selectedSlot.bookedByTeamName}` : 'Você iniciará o jogo como mandante'}
+                        </p>
                     </div>
                 </div>
-                
-                <div className="bg-gray-50 p-8 rounded-[3rem] border-2 border-gray-100 mb-10 space-y-4">
-                    <div className="flex justify-between font-black uppercase text-xs">
-                      <span className="text-gray-400">Mandante:</span>
-                      <span className="text-pitch">{selectedSlot.localTeamName || selectedSlot.bookedByTeamName || currentUser.teamName}</span>
-                    </div>
-                    <div className="flex justify-between font-black uppercase text-xs">
-                      <span className="text-gray-400">Categoria:</span>
-                      <span className="bg-pitch text-white px-3 py-1 rounded-lg text-[10px]">{selectedSlot.bookedByCategory || currentUser.teamCategories[0]}</span>
-                    </div>
-                </div>
-
                 <div className="flex gap-4">
-                    <button onClick={() => setSelectedSlot(null)} className="flex-1 py-5 font-black text-gray-300 uppercase text-[10px] tracking-widest">Voltar</button>
-                    <Button className="flex-[2] py-5 rounded-[2.5rem] font-black uppercase shadow-2xl" onClick={handleBookingConfirm}>Confirmar Agora</Button>
+                    <button onClick={() => setSelectedSlot(null)} className="flex-1 py-5 font-black text-gray-300 uppercase text-[10px]">Cancelar</button>
+                    <Button className="flex-[2] py-5 rounded-[2.5rem] font-black uppercase shadow-2xl" onClick={handleBookingConfirm}>Confirmar</Button>
                 </div>
             </div>
         </div>
@@ -200,35 +167,18 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ categories, curren
 
       {verifyingSlot && (
           <div className="fixed inset-0 bg-pitch/95 z-[200] flex items-end">
-             <div className="bg-white w-full rounded-t-[4rem] p-12 animate-in slide-in-from-bottom duration-500">
-                {isAiLoading && <div className="absolute inset-0 bg-white/90 z-50 flex flex-col items-center justify-center p-10"><Loader2 className="w-16 h-16 text-grass-500 animate-spin mb-6"/><h3 className="font-black text-xl italic uppercase">Validando com IA Jogo Fácil...</h3></div>}
+             <div className="bg-white w-full rounded-t-[4rem] p-12">
+                {isAiLoading && <div className="absolute inset-0 bg-white/90 z-50 flex flex-col items-center justify-center"><Loader2 className="w-10 h-10 text-grass-500 animate-spin mb-4"/><p className="font-black uppercase text-xs">Validando PIX...</p></div>}
                 <div className="flex justify-between items-start mb-8">
-                    <div>
-                      <h2 className="text-3xl font-black text-pitch uppercase tracking-tighter italic leading-none">Enviar PIX</h2>
-                      <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mt-2">Sua reserva será confirmada automaticamente</p>
-                    </div>
-                    <button onClick={() => setVerifyingSlot(null)} className="p-3 bg-gray-100 rounded-full"><XCircle className="w-8 h-8"/></button>
+                    <h2 className="text-2xl font-black text-pitch uppercase italic">Enviar Comprovante</h2>
+                    <button onClick={() => setVerifyingSlot(null)} className="p-2 bg-gray-100 rounded-full"><XCircle className="w-6 h-6"/></button>
                 </div>
-                
-                {aiResult ? (
-                    <div className="text-center py-10">
-                        <div className={`w-24 h-24 rounded-[3rem] flex items-center justify-center mx-auto mb-6 shadow-xl ${aiResult.isValid ? 'bg-grass-500' : 'bg-red-500'} text-white`}>
-                            {aiResult.isValid ? <CheckCircle2 className="w-12 h-12"/> : <XCircle className="w-12 h-12"/>}
-                        </div>
-                        <h4 className="font-black text-pitch text-2xl uppercase italic">{aiResult.isValid ? 'Pagamento Validado!' : 'Pagamento Inválido'}</h4>
-                        <p className="text-xs text-gray-500 mt-4 mb-10 font-bold">{aiResult.reason}</p>
-                        <Button className="w-full py-6 rounded-[2.5rem] font-black uppercase" onClick={() => { setAiResult(null); setVerifyingSlot(null); }}>Entendido</Button>
-                    </div>
-                ) : (
-                    <div className="space-y-6">
-                        <div className="bg-gray-50 p-16 rounded-[3.5rem] border-4 border-dashed border-gray-100 text-center relative hover:border-pitch transition-all cursor-pointer group">
-                            <input type="file" accept="image/*" className="absolute inset-0 opacity-0 cursor-pointer z-10" onChange={handleReceiptUpload} />
-                            <Upload className="w-12 h-12 text-gray-300 mx-auto mb-4 group-hover:scale-110 transition-transform" />
-                            <p className="text-pitch font-black uppercase tracking-tighter text-xl italic">Selecionar Comprovante</p>
-                            <p className="text-[10px] text-gray-400 font-bold mt-2 uppercase">Valor: R$ {verifyingSlot.price.toFixed(0)}</p>
-                        </div>
-                    </div>
-                )}
+                <div className="bg-gray-50 p-12 rounded-[3.5rem] border-4 border-dashed border-gray-100 text-center relative hover:border-pitch transition-all">
+                    <input type="file" accept="image/*" className="absolute inset-0 opacity-0 cursor-pointer z-10" onChange={handleReceiptUpload} />
+                    <Upload className="w-10 h-10 text-gray-300 mx-auto mb-4" />
+                    <p className="text-pitch font-black uppercase text-sm">Selecionar Imagem</p>
+                    <p className="text-[10px] text-gray-400 font-bold mt-2">Valor: R$ {verifyingSlot.price.toFixed(0)}</p>
+                </div>
              </div>
           </div>
       )}

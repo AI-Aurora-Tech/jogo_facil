@@ -1,6 +1,6 @@
 
 import { supabase } from '../supabaseClient';
-import { User, Field, MatchSlot, RegisteredTeam, PendingUpdate, UserRole } from '../types';
+import { User, Field, MatchSlot, RegisteredTeam, UserRole } from '../types';
 
 const mapUserFromDb = (u: any): User => ({
   id: u.id,
@@ -29,19 +29,16 @@ export const api = {
       .eq('email', email.toLowerCase().trim())
       .eq('password', password)
       .single();
-
     if (error || !user) throw new Error('Credenciais inválidas.');
     return mapUserFromDb(user);
   },
 
   register: async (userData: any): Promise<User> => {
     const { fieldData, ...userFields } = userData;
-    const normalizedEmail = userFields.email.toLowerCase().trim();
-
     const { data: newUser, error: userError } = await supabase
       .from('user')
       .insert([{
-        email: normalizedEmail,
+        email: userFields.email.toLowerCase().trim(),
         password: userFields.password,
         name: userFields.name,
         phone_number: userFields.phoneNumber,
@@ -55,14 +52,14 @@ export const api = {
 
     if (userError) throw userError;
 
-    if (userData.role === 'FIELD_OWNER' && fieldData) {
+    if (userData.role === UserRole.FIELD_OWNER && fieldData) {
       await supabase.from('field').insert([{
         owner_id: newUser.id,
         name: fieldData.name,
         location: fieldData.location,
         hourly_rate: fieldData.hourlyRate || 0,
         contact_phone: fieldData.contactPhone,
-        image_url: 'https://images.unsplash.com/photo-1529900748604-07564a03e7a6?auto=format&fit=crop&q=80&w=1000'
+        image_url: fieldData.imageUrl || 'https://images.unsplash.com/photo-1529900748604-07564a03e7a6?auto=format&fit=crop&q=80&w=1000'
       }]);
     }
     return mapUserFromDb(newUser);
@@ -74,7 +71,8 @@ export const api = {
       phone_number: user.phoneNumber,
       team_name: user.teamName,
       team_categories: user.teamCategories,
-      team_logo_url: user.teamLogoUrl
+      team_logo_url: user.teamLogoUrl,
+      password: user.password
     }).eq('id', user.id).select().single();
     if (error) throw error;
     return mapUserFromDb(data);
@@ -103,9 +101,11 @@ export const api = {
       name: updates.name,
       location: updates.location,
       hourly_rate: updates.hourlyRate,
-      contact_phone: updates.contactPhone
+      contact_phone: updates.contactPhone,
+      image_url: updates.imageUrl
     };
-    await supabase.from('field').update(payload).eq('id', fieldId);
+    const { error } = await supabase.from('field').update(payload).eq('id', fieldId);
+    if (error) throw error;
   },
 
   getSlots: async (): Promise<MatchSlot[]> => {
@@ -162,8 +162,14 @@ export const api = {
     if (data.bookedByUserId !== undefined) payload.booked_by_user_id = data.bookedByUserId;
     if (data.bookedByCategory !== undefined) payload.booked_by_category = data.bookedByCategory;
     if (data.opponentTeamName !== undefined) payload.opponent_team_name = data.opponentTeamName;
+    if (data.hasLocalTeam !== undefined) payload.has_local_team = data.hasLocalTeam;
+    if (data.localTeamName !== undefined) payload.local_team_name = data.localTeamName;
+    if (data.time) payload.time = data.time;
+    if (data.date) payload.date = data.date;
+    if (data.price) payload.price = data.price;
     
-    await supabase.from('match_slot').update(payload).eq('id', slotId);
+    const { error } = await supabase.from('match_slot').update(payload).eq('id', slotId);
+    if (error) throw error;
   },
 
   deleteSlot: async (slotId: string): Promise<void> => {
@@ -171,7 +177,7 @@ export const api = {
   },
 
   getRegisteredTeams: async (fieldId: string): Promise<RegisteredTeam[]> => {
-    const { data, error } = await supabase.from('registered_team').select('*').eq('field_id', fieldId);
+    const { data } = await supabase.from('registered_team').select('*').eq('field_id', fieldId);
     return (data || []).map(t => ({
       id: t.id,
       name: t.name,
@@ -199,6 +205,6 @@ export const api = {
   },
 
   getPendingUpdatesForTarget: async (t: string) => [],
-  getCategories: async () => ["Sub-9", "Sub-11", "Sub-13", "Sub-15", "Veterano", "Principal", "Feminino"],
+  getCategories: async () => ["Sub-9", "Sub-11", "Sub-13", "Sub-15", "Veterano", "Principal", "Sport", "Feminino"],
   getAllUsers: async () => []
 };
