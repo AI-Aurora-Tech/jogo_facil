@@ -50,7 +50,6 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
       return isMine;
     }
   }).sort((a, b) => {
-    // No histórico/meus jogos, ordene do mais recente para o mais antigo se já passou da data
     if (viewMode === 'MY_BOOKINGS') {
         return new Date(`${b.date}T${b.time}`).getTime() - new Date(`${a.date}T${a.time}`).getTime();
     }
@@ -74,7 +73,7 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
           bookedByUserPhone: currentUser.phoneNumber,
           bookedByCategory: selectedCategoryForBooking,
           status: 'pending_verification',
-          isBooked: false // Ainda pendente
+          isBooked: false
         });
       } else {
         await api.updateSlot(selectedSlot.id, {
@@ -126,6 +125,7 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
     } catch (e: any) {
       alert(`Erro ao salvar nota: ${e.message || 'Erro de conexão no banco'}`);
       console.error(e);
+      setRatingSlot(null); // Fecha o modal em caso de erro para não travar
     } finally {
       setIsRatingLoading(false);
     }
@@ -264,84 +264,6 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
               <button onClick={() => setRatingSlot(null)} className="text-[10px] font-black text-gray-400 uppercase tracking-widest underline decoration-2">Agora não</button>
            </div>
         </div>
-      )}
-
-      {bookingSuccessSlot && (
-        <div className="fixed inset-0 bg-pitch/95 backdrop-blur-xl z-[300] flex items-center justify-center p-6">
-           <div className="bg-white rounded-[3.5rem] w-full max-w-sm p-10 text-center animate-in zoom-in-95 duration-300">
-              <div className="w-20 h-20 bg-grass-100 text-grass-600 rounded-full flex items-center justify-center mx-auto mb-6">
-                <CheckCircle2 className="w-10 h-10" />
-              </div>
-              <h2 className="text-2xl font-black text-pitch uppercase italic leading-tight">Solicitado!</h2>
-              <p className="text-gray-500 text-xs font-medium mt-2 leading-relaxed">Sua reserva foi enviada para a arena. Avise os responsáveis para agilizar a aprovação:</p>
-              
-              <div className="mt-8 space-y-3">
-                 <a 
-                   href={getWhatsappLink(fields.find(f => f.id === bookingSuccessSlot.fieldId)?.contactPhone || '', `Olá! Acabamos de solicitar o horário de ${bookingSuccessSlot.time} no dia ${bookingSuccessSlot.date.split('-').reverse().join('/')} através do Jogo Fácil. Nosso time: ${currentUser.teamName} (${selectedCategoryForBooking}).`)}
-                   target="_blank"
-                   className="w-full bg-grass-500 text-pitch py-4 rounded-2xl font-black uppercase text-[10px] flex items-center justify-center gap-2 shadow-lg"
-                 >
-                   <MessageCircle className="w-4 h-4" /> Avisar Arena
-                 </a>
-              </div>
-
-              <button onClick={() => { setBookingSuccessSlot(null); onRefresh(); }} className="mt-6 text-[10px] font-black text-gray-400 uppercase tracking-widest underline decoration-2">Fechar</button>
-           </div>
-        </div>
-      )}
-
-      {selectedSlot && (
-        <div className="fixed inset-0 bg-pitch/95 backdrop-blur-xl z-[100] flex items-end">
-            <div className="bg-white w-full rounded-t-[4rem] p-12 animate-in slide-in-from-bottom duration-500 shadow-2xl">
-                <div className="flex items-center gap-5 mb-8">
-                    <div className={`w-16 h-16 rounded-3xl flex items-center justify-center text-pitch flex-shrink-0 ${selectedSlot.bookedByTeamName || selectedSlot.hasLocalTeam ? 'bg-orange-500 text-white' : 'bg-grass-500 text-pitch shadow-lg'}`}>
-                        {selectedSlot.bookedByTeamName || selectedSlot.hasLocalTeam ? <Swords className="w-10 h-10"/> : <CalendarCheck className="w-10 h-10"/>}
-                    </div>
-                    <div>
-                        <h2 className="text-2xl font-black text-pitch uppercase tracking-tighter italic leading-none">
-                          {selectedSlot.bookedByTeamName || selectedSlot.hasLocalTeam ? 'Desafiar Time' : 'Reservar Vaga'}
-                        </h2>
-                        <p className="text-[10px] font-black text-gray-400 uppercase mt-2">
-                          {fields.find(f => f.id === selectedSlot.fieldId)?.name} • {selectedSlot.time}
-                        </p>
-                    </div>
-                </div>
-
-                <div className="space-y-4 mb-10">
-                   <p className="text-[10px] font-black text-pitch uppercase tracking-widest flex items-center gap-2"><Info className="w-3 h-3"/> Escolha sua Categoria para este jogo:</p>
-                   <div className="flex flex-wrap gap-3">
-                      {currentUser.teamCategories.map(cat => (
-                        <button key={cat} onClick={() => setSelectedCategoryForBooking(cat)} className={`flex-1 min-w-[120px] py-5 rounded-[1.5rem] text-xs font-black uppercase transition-all ${selectedCategoryForBooking === cat ? 'bg-pitch text-white ring-4 ring-pitch/20 shadow-xl' : 'bg-gray-50 text-gray-400 border'}`}>
-                           {cat}
-                        </button>
-                      ))}
-                   </div>
-                </div>
-
-                <div className="flex gap-4">
-                    <button onClick={() => setSelectedSlot(null)} className="flex-1 py-5 font-black text-gray-300 uppercase text-[10px]">Cancelar</button>
-                    <Button className="flex-[2] py-5 rounded-[2.5rem] font-black uppercase shadow-2xl active:scale-95" onClick={handleBookingConfirm} disabled={!selectedCategoryForBooking}>Solicitar Reserva</Button>
-                </div>
-            </div>
-        </div>
-      )}
-
-      {verifyingSlot && (
-          <div className="fixed inset-0 bg-pitch/95 z-[200] flex items-end">
-             <div className="bg-white w-full rounded-t-[4rem] p-12 animate-in slide-in-from-bottom duration-500">
-                {isAiLoading && <div className="absolute inset-0 bg-white/90 z-50 flex flex-col items-center justify-center rounded-t-[4rem]"><Loader2 className="w-10 h-10 text-grass-500 animate-spin mb-4"/><p className="font-black uppercase text-xs">Validando comprovante...</p></div>}
-                <div className="flex justify-between items-start mb-8">
-                    <h2 className="text-2xl font-black text-pitch uppercase italic">Pagar via PIX</h2>
-                    <button onClick={() => setVerifyingSlot(null)} className="p-2 bg-gray-100 rounded-full"><XCircle className="w-6 h-6"/></button>
-                </div>
-                <div className="bg-gray-50 p-12 rounded-[3.5rem] border-4 border-dashed border-gray-100 text-center relative hover:border-pitch transition-all group">
-                    <input type="file" accept="image/*" className="absolute inset-0 opacity-0 cursor-pointer z-10" onChange={handleReceiptUpload} />
-                    <Upload className="w-10 h-10 text-gray-300 mx-auto mb-4 group-hover:text-pitch transition-colors" />
-                    <p className="text-pitch font-black uppercase text-sm">Anexar Comprovante</p>
-                    <p className="text-[10px] text-gray-400 font-bold mt-2 italic">Valor: R$ {verifyingSlot.price.toFixed(0)}</p>
-                </div>
-             </div>
-          </div>
       )}
     </div>
   );

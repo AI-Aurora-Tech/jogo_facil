@@ -165,7 +165,7 @@ export const api = {
       allowedCategories: s.allowed_categories || [],
       receiptUrl: s.receipt_url,
       aiVerificationResult: s.ai_verification_result,
-      fieldRating: s.field_rating,
+      fieldRating: s.rating_given, // Mapeia rating_given para fieldRating
       fieldRatingComment: s.field_rating_comment
     }));
   },
@@ -208,13 +208,14 @@ export const api = {
     if (data.hasLocalTeam !== undefined) payload.has_local_team = data.hasLocalTeam;
     if (data.localTeamName !== undefined) payload.local_team_name = data.localTeamName;
     if (data.localTeamPhone !== undefined) payload.local_team_phone = data.localTeamPhone;
-    if (data.fieldRating !== undefined) payload.field_rating = data.fieldRating;
-    if (data.fieldRatingComment !== undefined) payload.field_rating_comment = data.fieldRatingComment;
+    
+    // CORREÇÃO: Usa 'rating_given' em vez de 'field_rating' que está faltando no banco
+    if (data.fieldRating !== undefined) payload.rating_given = data.fieldRating;
     
     const { error } = await supabase.from('match_slot').update(payload).eq('id', slotId);
     if (error) {
-      console.error("Supabase Error UpdateSlot:", error);
-      throw new Error(error.message || "Erro desconhecido ao atualizar no banco.");
+      console.error("ERRO DETALHADO SUPABASE (UpdateSlot):", error);
+      throw new Error(error.message || "Erro de conexão com o banco de dados.");
     }
   },
 
