@@ -1,6 +1,6 @@
 
 import { supabase } from '../supabaseClient';
-import { User, Field, MatchSlot, RegisteredTeam, PendingUpdate, UserRole } from '../types';
+import { User, Field, MatchSlot, RegisteredTeam, PendingUpdate, UserRole, Notification } from '../types';
 
 const mapUserFromDb = (u: any): User => ({
   id: u.id,
@@ -24,8 +24,6 @@ const mapUserFromDb = (u: any): User => ({
 export const api = {
   login: async (email: string, password: string): Promise<User> => {
     const normalizedEmail = email.toLowerCase().trim();
-    
-    // Tentativa de login
     const { data: user, error } = await supabase
       .from('user')
       .select('*')
@@ -33,11 +31,7 @@ export const api = {
       .eq('password', password)
       .single();
 
-    if (error || !user) {
-      console.error("Login fail:", error);
-      throw new Error('E-mail ou senha incorretos.');
-    }
-
+    if (error || !user) throw new Error('E-mail ou senha incorretos.');
     return mapUserFromDb(user);
   },
 
@@ -45,11 +39,8 @@ export const api = {
     const { fieldData, ...userFields } = userData;
     const normalizedEmail = userFields.email.toLowerCase().trim();
 
-    // Promoção automática para Super Admin via código se for o e-mail do Pedro
     let finalRole = userFields.role;
-    if (normalizedEmail === 'pedro@auroratech.com') {
-      finalRole = UserRole.SUPER_ADMIN;
-    }
+    if (normalizedEmail === 'pedro@auroratech.com') finalRole = UserRole.SUPER_ADMIN;
 
     const { data: newUser, error: userError } = await supabase
       .from('user')
@@ -75,7 +66,7 @@ export const api = {
         location: fieldData.location,
         hourly_rate: fieldData.hourlyRate || 0,
         contact_phone: fieldData.contactPhone,
-        image_url: 'https://images.unsplash.com/photo-1529900748604-07564a03e7a6?auto=format&fit=crop&q=80&w=1000'
+        image_url: fieldData.imageUrl || 'https://images.unsplash.com/photo-1529900748604-07564a03e7a6?auto=format&fit=crop&q=80&w=1000'
       }]);
     }
     return mapUserFromDb(newUser);
@@ -87,16 +78,31 @@ export const api = {
       phone_number: user.phoneNumber,
       team_name: user.teamName,
       team_categories: user.teamCategories,
-      team_logo_url: user.teamLogoUrl,
-      sub_teams: user.subTeams
+      team_logo_url: user.teamLogoUrl
     };
-    if (user.password && user.password.trim() !== '') {
-      payload.password = user.password;
-    }
+    if (user.password && user.password.trim() !== '') payload.password = user.password;
 
     const { data, error } = await supabase.from('user').update(payload).eq('id', user.id).select().single();
     if (error) throw error;
     return mapUserFromDb(data);
+  },
+
+  getNotifications: async (userId: string): Promise<Notification[]> => {
+    const { data, error } = await supabase.from('notification').select('*').eq('user_id', userId).order('created_at', { ascending: false });
+    if (error) return [];
+    return data.map(n => ({
+      id: n.id,
+      userId: n.user_id,
+      title: n.title,
+      description: n.description,
+      timestamp: n.created_at,
+      type: n.type,
+      read: n.read
+    }));
+  },
+
+  markNotificationAsRead: async (id: string): Promise<void> => {
+    await supabase.from('notification').update({ read: true }).eq('id', id);
   },
 
   getAllUsers: async (): Promise<User[]> => {
@@ -122,7 +128,6 @@ export const api = {
       .select('*')
       .eq('target_id', targetId)
       .eq('status', 'pending');
-    
     if (error) return [];
     return data.map(d => ({
       id: d.id,
@@ -143,11 +148,6 @@ export const api = {
   getCategories: async (): Promise<string[]> => {
     const { data, error } = await supabase.from('category').select('name').order('name');
     return (error || !data) ? ["Livre", "Principal", "Veteranos"] : data.map(c => c.name);
-  },
-
-  updateCategories: async (categories: string[]): Promise<void> => {
-    await supabase.from('category').delete().neq('name', '');
-    await supabase.from('category').insert(categories.map(name => ({ name })));
   },
 
   getFields: async (): Promise<Field[]> => {
@@ -216,14 +216,13 @@ export const api = {
       field_id: s.fieldId,
       date: s.date,
       time: s.time,
-      match_type: s.matchType,
-      is_booked: s.isBooked,
-      has_local_team: s.hasLocalTeam,
-      // Fix: Changed s.local_team_name to s.localTeamName as per MatchSlot interface
-      local_team_name: s.localTeamName,
+      match_type: s.matchType || 'ALUGUEL',
+      is_booked: s.isBooked || false,
+      has_local_team: s.hasLocalTeam || false,
+      local_team_name: s.localTeamName || null,
       price: s.price,
-      status: s.status,
-      allowed_categories: s.allowedCategories
+      status: s.status || 'available',
+      allowed_categories: s.allowedCategories || []
     }));
     await supabase.from('match_slot').insert(payload);
   },
@@ -243,7 +242,7 @@ export const api = {
   },
 
   getRegisteredTeams: async (fieldId: string): Promise<RegisteredTeam[]> => {
-    const { data, error } = await supabase.from('registered_team').select('*').eq('field_id', fieldId);
+    const { data } = await supabase.from('registered_team').select('*').eq('field_id', fieldId);
     return (data || []).map(t => ({
       id: t.id,
       name: t.name,
@@ -267,7 +266,6 @@ export const api = {
   },
 
   deleteRegisteredTeam: async (teamId: string): Promise<void> => {
-    const { error } = await supabase.from('registered_team').delete().eq('id', teamId);
-    if (error) throw error;
+    await supabase.from('registered_team').delete().eq('id', teamId);
   }
 };

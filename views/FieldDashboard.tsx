@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { Plus, Trash2, Calendar, Clock, RefreshCcw, Loader2, Sparkles, X, ChevronRight, Swords, Edit3, Save } from 'lucide-react';
+import { Plus, Trash2, Calendar, Clock, RefreshCcw, Loader2, Sparkles, X, ChevronRight, Swords, Edit3, Save, Tag } from 'lucide-react';
 import { Button } from '../components/Button';
 import { Field, MatchSlot, MatchType, User, RegisteredTeam } from '../types';
 import { api } from '../services/api';
@@ -21,7 +21,7 @@ interface FieldDashboardProps {
 }
 
 export const FieldDashboard: React.FC<FieldDashboardProps> = ({ 
-  categories, field, slots, onAddSlot, onRefreshData, onDeleteSlot, onConfirmBooking, onRejectBooking
+  field, slots, onAddSlot, onRefreshData, onDeleteSlot, onConfirmBooking, onRejectBooking
 }) => {
   const [activeTab, setActiveTab] = useState<'AGENDA' | 'MENSALISTAS'>('AGENDA');
   const [registeredTeams, setRegisteredTeams] = useState<RegisteredTeam[]>([]);
@@ -32,6 +32,12 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
   const [newTeamDay, setNewTeamDay] = useState(1);
   const [newTeamTime, setNewTeamTime] = useState('19:00');
   const [newTeamCat, setNewTeamCat] = useState('');
+
+  const [showAddSlotModal, setShowAddSlotModal] = useState(false);
+  const [newSlotDate, setNewSlotDate] = useState(new Date().toISOString().split('T')[0]);
+  const [newSlotTime, setNewSlotTime] = useState('18:00');
+  const [newSlotPrice, setNewSlotPrice] = useState(field.hourlyRate || 0);
+  const [newSlotLocalTeam, setNewSlotLocalTeam] = useState('');
 
   const [editingSlot, setEditingSlot] = useState<MatchSlot | null>(null);
 
@@ -100,6 +106,30 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
     }
   };
 
+  const handleCreateSingleSlot = async () => {
+    setIsLoading(true);
+    try {
+      const payload: Omit<MatchSlot, 'id'> = {
+        fieldId: field.id,
+        date: newSlotDate,
+        time: newSlotTime,
+        durationMinutes: 60,
+        matchType: 'ALUGUEL',
+        isBooked: false,
+        hasLocalTeam: !!newSlotLocalTeam,
+        localTeamName: newSlotLocalTeam || undefined,
+        price: newSlotPrice,
+        status: 'available',
+        allowedCategories: []
+      };
+      await onAddSlot([payload]);
+      setShowAddSlotModal(false);
+      setNewSlotLocalTeam('');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const handleUpdateSlot = async () => {
     if (!editingSlot) return;
     setIsLoading(true);
@@ -136,9 +166,14 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                 <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mt-1">Gestão de Arena</p>
              </div>
           </div>
-          <button onClick={handleGenerate10Weeks} disabled={isLoading} className="bg-[#10b981] text-[#022c22] px-4 py-2.5 rounded-xl text-[10px] font-black uppercase flex items-center gap-2 shadow-lg active:scale-95 disabled:opacity-50">
-             {isLoading ? <Loader2 className="w-4 h-4 animate-spin"/> : <RefreshCcw className="w-4 h-4"/>} Gerar Agenda
-          </button>
+          <div className="flex gap-2">
+            <button onClick={() => setShowAddSlotModal(true)} className="p-2 bg-pitch text-white rounded-xl active:scale-95 shadow-md">
+               <Plus className="w-5 h-5"/>
+            </button>
+            <button onClick={handleGenerate10Weeks} disabled={isLoading} className="bg-[#10b981] text-[#022c22] px-4 py-2.5 rounded-xl text-[10px] font-black uppercase flex items-center gap-2 shadow-lg active:scale-95 disabled:opacity-50">
+               {isLoading ? <Loader2 className="w-4 h-4 animate-spin"/> : <RefreshCcw className="w-4 h-4"/>} Agenda
+            </button>
+          </div>
         </div>
         <div className="flex p-1 bg-gray-100 rounded-2xl">
           <button onClick={() => setActiveTab('AGENDA')} className={`flex-1 py-2 text-[10px] font-black uppercase rounded-xl transition-all ${activeTab === 'AGENDA' ? 'bg-white text-pitch shadow-sm' : 'text-gray-400'}`}>Agenda</button>
@@ -163,6 +198,13 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
             ))}
 
             <div className="grid gap-3">
+              {slots.length === 0 && (
+                <div className="p-20 text-center flex flex-col items-center gap-4">
+                  <Calendar className="w-12 h-12 text-gray-200" />
+                  <p className="text-gray-400 font-bold uppercase text-xs">Nenhum horário cadastrado</p>
+                  <Button size="sm" onClick={() => setShowAddSlotModal(true)}>Criar Primeiro Horário</Button>
+                </div>
+              )}
               {slots.filter(s => s.date >= new Date().toISOString().split('T')[0]).slice(0, 40).map(s => (
                 <div key={s.id} className="bg-white p-5 rounded-[2rem] border shadow-sm flex items-center justify-between group hover:border-pitch transition-all">
                   <div className="flex items-center gap-4">
@@ -213,6 +255,38 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
           </div>
         )}
       </div>
+
+      {showAddSlotModal && (
+        <div className="fixed inset-0 bg-pitch/95 backdrop-blur-md z-[100] flex items-end">
+           <div className="bg-white w-full rounded-t-[3rem] p-10 animate-in slide-in-from-bottom duration-500">
+             <div className="flex justify-between items-center mb-8">
+               <h2 className="text-2xl font-black italic uppercase tracking-tighter text-pitch">Criar Horário Avulso</h2>
+               <button onClick={() => setShowAddSlotModal(false)} className="p-2 bg-gray-100 rounded-full"><X className="w-6 h-6"/></button>
+             </div>
+             <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="bg-gray-50 p-4 rounded-2xl border">
+                    <label className="text-[9px] font-black text-gray-400 uppercase block mb-1">Data</label>
+                    <input type="date" className="w-full bg-transparent font-black outline-none text-pitch" value={newSlotDate} onChange={e => setNewSlotDate(e.target.value)} />
+                  </div>
+                  <div className="bg-gray-50 p-4 rounded-2xl border">
+                    <label className="text-[9px] font-black text-gray-400 uppercase block mb-1">Hora</label>
+                    <input type="time" className="w-full bg-transparent font-black outline-none text-pitch" value={newSlotTime} onChange={e => setNewSlotTime(e.target.value)} />
+                  </div>
+                </div>
+                <div className="bg-gray-50 p-4 rounded-2xl border">
+                  <label className="text-[9px] font-black text-gray-400 uppercase block mb-1">Preço Sugerido (R$)</label>
+                  <input type="number" className="w-full bg-transparent font-black outline-none text-pitch" value={newSlotPrice} onChange={e => setNewSlotPrice(Number(e.target.value))} />
+                </div>
+                <div className="bg-gray-50 p-4 rounded-2xl border">
+                  <label className="text-[9px] font-black text-gray-400 uppercase block mb-1">Time Local (Opcional)</label>
+                  <input type="text" className="w-full bg-transparent font-black outline-none text-pitch" placeholder="Ex: Time da Casa" value={newSlotLocalTeam} onChange={e => setNewSlotLocalTeam(e.target.value)} />
+                </div>
+                <Button onClick={handleCreateSingleSlot} isLoading={isLoading} className="w-full py-5 rounded-[2rem] font-black uppercase text-xs tracking-widest mt-4">Criar Horário</Button>
+             </div>
+           </div>
+        </div>
+      )}
 
       {editingSlot && (
         <div className="fixed inset-0 bg-pitch/95 backdrop-blur-md z-[100] flex items-end">
@@ -274,10 +348,12 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                    </select>
                    <input type="time" className="bg-gray-50 p-4 rounded-2xl border font-black text-pitch outline-none" value={newTeamTime} onChange={e => setNewTeamTime(e.target.value)} />
                 </div>
-                <div className="bg-gray-50 p-4 rounded-2xl border flex gap-2">
-                  <input className="flex-1 bg-transparent font-black outline-none text-pitch" placeholder="Digite a Categoria" value={newTeamCat} onChange={e => setNewTeamCat(e.target.value)} />
+                <div className="bg-gray-50 p-4 rounded-2xl border">
+                  <label className="text-[9px] font-black text-gray-400 uppercase block mb-1">Categoria (ex: sub 9)</label>
+                  <input className="w-full bg-transparent font-black outline-none text-pitch" placeholder="Digite a Categoria" value={newTeamCat} onChange={e => setNewTeamCat(e.target.value)} />
                 </div>
                 <Button onClick={async () => {
+                  if (!newTeamName || !newTeamCat) return alert('Preencha os dados');
                   await api.addRegisteredTeam({ fieldId: field.id, name: newTeamName, fixedDay: newTeamDay, fixedTime: newTeamTime, categories: [formatCategory(newTeamCat)] });
                   setShowAddTeamModal(false);
                   loadRegisteredTeams();

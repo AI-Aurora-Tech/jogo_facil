@@ -35,6 +35,7 @@ export interface SubTeam {
 
 export interface Notification {
   id: string;
+  userId: string;
   title: string;
   description: string;
   timestamp: string;

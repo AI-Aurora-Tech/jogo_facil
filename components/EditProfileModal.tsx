@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { User, UserRole, Field } from '../types';
 import { Button } from './Button';
-import { X, User as UserIcon, Shield, Check, Plus, AlertCircle, Building2, MapPin, Smartphone, Camera, Settings } from 'lucide-react';
+import { X, User as UserIcon, Shield, Check, Plus, AlertCircle, Building2, MapPin, Smartphone, Camera, Settings, Image as ImageIcon } from 'lucide-react';
 import { formatCategory } from '../utils';
 
 interface EditProfileModalProps {
@@ -31,11 +31,12 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({ user, field,
   const [error, setError] = useState('');
 
   const addCategory = () => {
+    const formatted = formatCategory(categoryInput);
+    if (!formatted) return;
     if (teamCategories.length >= 2) {
       setError('Máximo de 2 categorias por time.');
       return;
     }
-    const formatted = formatCategory(categoryInput);
     if (formatted && !teamCategories.includes(formatted)) {
       setTeamCategories([...teamCategories, formatted]);
       setCategoryInput('');
@@ -49,8 +50,15 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({ user, field,
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!isFieldOwner && (teamCategories.length === 0 || teamCategories.length > 2)) {
+    setError('');
+
+    if (teamCategories.length === 0 || teamCategories.length > 2) {
       setError('O time deve ter entre 1 e 2 categorias.');
+      return;
+    }
+
+    if (isFieldOwner && (!arenaName || !arenaLocation)) {
+      setError('Dados da arena são obrigatórios.');
       return;
     }
 
@@ -85,8 +93,38 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({ user, field,
           <section className="space-y-4">
             <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest border-b pb-2 flex items-center gap-2"><UserIcon className="w-3 h-3" /> Responsável</h4>
             <div className="grid grid-cols-2 gap-4">
-                <input className="w-full p-4 bg-gray-50 rounded-2xl border font-bold" placeholder="Nome" value={name} onChange={e => setName(e.target.value)} required />
-                <input className="w-full p-4 bg-gray-50 rounded-2xl border font-bold" placeholder="WhatsApp" value={phone} onChange={e => setPhone(e.target.value)} required />
+                <div className="bg-gray-50 p-4 rounded-2xl border">
+                  <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Nome</label>
+                  <input className="w-full bg-transparent font-bold outline-none" placeholder="Nome" value={name} onChange={e => setName(e.target.value)} required />
+                </div>
+                <div className="bg-gray-50 p-4 rounded-2xl border">
+                  <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">WhatsApp</label>
+                  <input className="w-full bg-transparent font-bold outline-none" placeholder="WhatsApp" value={phone} onChange={e => setPhone(e.target.value)} required />
+                </div>
+            </div>
+          </section>
+
+          <section className="space-y-4">
+            <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest border-b pb-2 flex items-center gap-2"><Shield className="w-3 h-3" /> Minha Equipe</h4>
+            <div className="bg-gray-50 p-6 rounded-[2rem] border-2 border-dashed border-gray-200">
+                <label className="text-[8px] font-black text-gray-400 uppercase block mb-2">Nome do Time</label>
+                <input className="w-full bg-transparent border-b-2 border-gray-100 p-2 font-black text-xl outline-none mb-4" placeholder="Nome do Time" value={teamName} onChange={e => setTeamName(e.target.value)} />
+                <div className="flex gap-2">
+                   <input 
+                    className="flex-1 bg-white p-3 rounded-xl border text-xs font-bold" 
+                    placeholder="Digite Categoria (ex: sub 10)" 
+                    value={categoryInput} 
+                    onChange={e => setCategoryInput(e.target.value)} 
+                   />
+                   <button type="button" onClick={addCategory} className="bg-pitch text-white p-3 rounded-xl active:scale-95 transition-all"><Plus className="w-4 h-4"/></button>
+                </div>
+                <div className="flex flex-wrap gap-2 mt-4">
+                  {teamCategories.map(c => (
+                    <div key={c} className="bg-pitch text-white px-3 py-1.5 rounded-full text-[10px] font-black uppercase flex items-center gap-2">
+                      {c} <X onClick={() => removeCategory(c)} className="w-3 h-3 cursor-pointer text-red-500" />
+                    </div>
+                  ))}
+                </div>
             </div>
           </section>
 
@@ -94,32 +132,24 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({ user, field,
             <section className="space-y-4">
               <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest border-b pb-2 flex items-center gap-2"><Building2 className="w-3 h-3" /> Minha Arena</h4>
               <div className="space-y-4">
-                  <input className="w-full p-4 bg-gray-50 rounded-2xl border font-bold" placeholder="Nome da Arena" value={arenaName} onChange={e => setArenaName(e.target.value)} />
-                  <input className="w-full p-4 bg-gray-50 rounded-2xl border font-bold" placeholder="Endereço Completo" value={arenaLocation} onChange={e => setArenaLocation(e.target.value)} />
-                  <input className="w-full p-4 bg-gray-50 rounded-2xl border font-bold" placeholder="Link da Foto da Arena (URL)" value={arenaImage} onChange={e => setArenaImage(e.target.value)} />
+                  <div className="bg-gray-50 p-4 rounded-2xl border">
+                    <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Nome da Arena</label>
+                    <input className="w-full bg-transparent font-bold outline-none" placeholder="Nome da Arena" value={arenaName} onChange={e => setArenaName(e.target.value)} />
+                  </div>
+                  <div className="bg-gray-50 p-4 rounded-2xl border">
+                    <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Endereço Completo</label>
+                    <input className="w-full bg-transparent font-bold outline-none" placeholder="Endereço Completo" value={arenaLocation} onChange={e => setArenaLocation(e.target.value)} />
+                  </div>
+                  <div className="bg-gray-50 p-4 rounded-2xl border">
+                    <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">URL da Imagem da Arena</label>
+                    <div className="flex gap-2 items-center">
+                      <ImageIcon className="w-4 h-4 text-gray-400" />
+                      <input className="w-full bg-transparent font-bold outline-none" placeholder="URL da Foto" value={arenaImage} onChange={e => setArenaImage(e.target.value)} />
+                    </div>
+                  </div>
                   <div className="bg-gray-50 p-4 rounded-2xl border flex items-center justify-between">
-                    <span className="text-xs font-black text-gray-400 uppercase">Preço Base (R$)</span>
+                    <span className="text-[8px] font-black text-gray-400 uppercase">Preço Base por Hora (R$)</span>
                     <input type="number" className="bg-transparent font-black text-right w-20 outline-none" value={arenaPrice} onChange={e => setArenaPrice(Number(e.target.value))} />
-                  </div>
-              </div>
-            </section>
-          )}
-
-          {!isFieldOwner && (
-            <section className="space-y-4">
-              <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest border-b pb-2 flex items-center gap-2"><Shield className="w-3 h-3" /> Meu Time</h4>
-              <div className="bg-gray-50 p-6 rounded-[2rem] border-2 border-dashed border-gray-200">
-                  <input className="w-full bg-transparent border-b-2 border-gray-100 p-2 font-black text-xl outline-none mb-4" placeholder="Nome do Time" value={teamName} onChange={e => setTeamName(e.target.value)} />
-                  <div className="flex gap-2">
-                     <input className="flex-1 bg-white p-3 rounded-xl border text-xs font-bold" placeholder="Digite Categoria (ex: sub 10)" value={categoryInput} onChange={e => setCategoryInput(e.target.value)} />
-                     <button type="button" onClick={addCategory} className="bg-pitch text-white p-3 rounded-xl"><Plus className="w-4 h-4"/></button>
-                  </div>
-                  <div className="flex flex-wrap gap-2 mt-4">
-                    {teamCategories.map(c => (
-                      <div key={c} className="bg-pitch text-white px-3 py-1.5 rounded-full text-[10px] font-black uppercase flex items-center gap-2">
-                        {c} <X onClick={() => removeCategory(c)} className="w-3 h-3 cursor-pointer text-red-500" />
-                      </div>
-                    ))}
                   </div>
               </div>
             </section>

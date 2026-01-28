@@ -1,6 +1,6 @@
 
-import { supabase } from '../supabaseClient';
-import { User, Field, MatchSlot, RegisteredTeam, UserRole } from '../types';
+import { supabase } from './supabaseClient';
+import { User, Field, MatchSlot, RegisteredTeam, UserRole, Notification } from './types';
 
 const mapUserFromDb = (u: any): User => ({
   id: u.id,
@@ -78,6 +78,28 @@ export const api = {
     return mapUserFromDb(data);
   },
 
+  getNotifications: async (userId: string): Promise<Notification[]> => {
+    const { data, error } = await supabase
+      .from('notification')
+      .select('*')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false });
+    if (error) return [];
+    return (data || []).map(n => ({
+      id: n.id,
+      userId: n.user_id,
+      title: n.title,
+      description: n.description,
+      timestamp: n.created_at,
+      type: n.type,
+      read: n.read
+    }));
+  },
+
+  markNotificationAsRead: async (id: string): Promise<void> => {
+    await supabase.from('notification').update({ read: true }).eq('id', id);
+  },
+
   getFields: async (): Promise<Field[]> => {
     const { data, error } = await supabase.from('field').select('*');
     if (error) throw error;
@@ -97,13 +119,13 @@ export const api = {
   },
 
   updateField: async (fieldId: string, updates: Partial<Field>): Promise<void> => {
-    const payload: any = {
-      name: updates.name,
-      location: updates.location,
-      hourly_rate: updates.hourlyRate,
-      contact_phone: updates.contactPhone,
-      image_url: updates.imageUrl
-    };
+    const payload: any = {};
+    if (updates.name) payload.name = updates.name;
+    if (updates.location) payload.location = updates.location;
+    if (updates.hourlyRate !== undefined) payload.hourly_rate = updates.hourlyRate;
+    if (updates.contactPhone) payload.contact_phone = updates.contactPhone;
+    if (updates.imageUrl) payload.image_url = updates.imageUrl;
+    
     const { error } = await supabase.from('field').update(payload).eq('id', fieldId);
     if (error) throw error;
   },
@@ -139,12 +161,10 @@ export const api = {
       field_id: s.fieldId,
       date: s.date,
       time: s.time,
-      match_type: s.matchType,
+      match_type: s.matchType || 'ALUGUEL',
       is_booked: s.isBooked || false,
       has_local_team: s.hasLocalTeam || false,
-      local_team_name: s.localTeamName,
-      booked_by_team_name: s.bookedByTeamName,
-      booked_by_category: s.bookedByCategory,
+      local_team_name: s.localTeamName || null,
       price: s.price,
       status: s.status || 'available',
       allowed_categories: s.allowedCategories || []
@@ -164,9 +184,6 @@ export const api = {
     if (data.opponentTeamName !== undefined) payload.opponent_team_name = data.opponentTeamName;
     if (data.hasLocalTeam !== undefined) payload.has_local_team = data.hasLocalTeam;
     if (data.localTeamName !== undefined) payload.local_team_name = data.localTeamName;
-    if (data.time) payload.time = data.time;
-    if (data.date) payload.date = data.date;
-    if (data.price) payload.price = data.price;
     
     const { error } = await supabase.from('match_slot').update(payload).eq('id', slotId);
     if (error) throw error;
@@ -204,7 +221,10 @@ export const api = {
     await supabase.from('registered_team').delete().eq('id', teamId);
   },
 
-  getPendingUpdatesForTarget: async (t: string) => [],
   getCategories: async () => ["Sub-9", "Sub-11", "Sub-13", "Sub-15", "Veterano", "Principal", "Sport", "Feminino"],
-  getAllUsers: async () => []
+  getAllUsers: async () => {
+    const { data } = await supabase.from('user').select('*');
+    return (data || []).map(mapUserFromDb);
+  },
+  getPendingUpdatesForTarget: async (t: string) => []
 };
