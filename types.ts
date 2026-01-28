@@ -107,6 +107,7 @@ export interface MatchSlot {
   bookedByTeamName?: string;
   bookedByCategory?: string;
   opponentTeamName?: string;
+  opponentTeamCategory?: string;
   opponentTeamPhone?: string;
   status: 'available' | 'pending_verification' | 'confirmed';
   price: number;
