@@ -157,6 +157,7 @@ export const api = {
       bookedByUserId: s.booked_by_user_id,
       bookedByUserPhone: s.booked_by_user_phone,
       bookedByTeamName: s.booked_by_team_name,
+      bookedByCategory: s.booked_by_category,
       opponentTeamName: s.opponent_team_name,
       opponentTeamPhone: s.opponent_team_phone,
       status: s.status,
@@ -182,7 +183,8 @@ export const api = {
       price: s.price,
       status: s.status || 'available',
       booked_by_user_id: s.bookedByUserId || null,
-      booked_by_team_name: s.bookedByTeamName || null
+      booked_by_team_name: s.bookedByTeamName || null,
+      booked_by_category: s.bookedByCategory || null
     }));
     const { error } = await supabase.from('match_slot').insert(payload);
     if (error) throw error;
@@ -200,6 +202,7 @@ export const api = {
     if (data.bookedByTeamName !== undefined) payload.booked_by_team_name = data.bookedByTeamName;
     if (data.bookedByUserId !== undefined) payload.booked_by_user_id = data.bookedByUserId;
     if (data.bookedByUserPhone !== undefined) payload.booked_by_user_phone = data.bookedByUserPhone;
+    if (data.bookedByCategory !== undefined) payload.booked_by_category = data.bookedByCategory;
     if (data.opponentTeamName !== undefined) payload.opponent_team_name = data.opponentTeamName;
     if (data.opponentTeamPhone !== undefined) payload.opponent_team_phone = data.opponentTeamPhone;
     if (data.hasLocalTeam !== undefined) payload.has_local_team = data.hasLocalTeam;
@@ -209,11 +212,15 @@ export const api = {
     if (data.fieldRatingComment !== undefined) payload.field_rating_comment = data.fieldRatingComment;
     
     const { error } = await supabase.from('match_slot').update(payload).eq('id', slotId);
-    if (error) throw error;
+    if (error) {
+      console.error("Supabase Error UpdateSlot:", error);
+      throw new Error(error.message || "Erro desconhecido ao atualizar no banco.");
+    }
   },
 
   deleteSlot: async (slotId: string): Promise<void> => {
-    await supabase.from('match_slot').delete().eq('id', slotId);
+    const { error } = await supabase.from('match_slot').delete().eq('id', slotId);
+    if (error) throw error;
   },
 
   getRegisteredTeams: async (fieldId: string): Promise<RegisteredTeam[]> => {

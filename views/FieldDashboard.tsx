@@ -74,6 +74,8 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
     setNewSlotTime(slot.time);
     setNewSlotPrice(slot.price);
     setNewSlotType(slot.matchType);
+    setIsLocalTeamChecked(slot.hasLocalTeam);
+    setSelectedLocalCategory(slot.bookedByCategory || currentUser.teamCategories[0] || '');
     setShowModal(true);
   };
 
@@ -159,15 +161,25 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
         };
         await onAddSlot([payload]);
       } else if (modalMode === 'EDIT' && editingSlotId) {
-        await api.updateSlot(editingSlotId, {
+        const payload: Partial<MatchSlot> = {
             date: newSlotDate,
             time: newSlotTime,
             matchType: newSlotType,
-            price: newSlotPrice
-        });
+            price: newSlotPrice,
+            hasLocalTeam: isLocalTeamChecked,
+            localTeamName: isLocalTeamChecked ? currentUser.teamName : null as any,
+            localTeamPhone: isLocalTeamChecked ? currentUser.phoneNumber : null as any,
+            bookedByTeamName: isLocalTeamChecked ? currentUser.teamName : null as any,
+            bookedByCategory: isLocalTeamChecked ? selectedLocalCategory : null as any,
+            bookedByUserPhone: isLocalTeamChecked ? currentUser.phoneNumber : null as any,
+            bookedByUserId: isLocalTeamChecked ? currentUser.id : null as any
+        };
+        await api.updateSlot(editingSlotId, payload);
         onRefreshData();
       }
       setShowModal(false);
+    } catch (err: any) {
+        alert("Erro ao salvar: " + (err.message || "Erro de conexão"));
     } finally {
       setIsLoading(false);
     }
@@ -228,12 +240,12 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
 
   const todayStr = new Date().toISOString().split('T')[0];
   
-  // Agenda: Horários futuros não confirmados (incluindo pendentes)
+  // Agenda: Exibe apenas o que não está confirmado e é futuro
   const agendaSlots = slots
     .filter(s => s.status !== 'confirmed' && s.date >= todayStr)
     .sort((a,b) => new Date(`${a.date}T${a.time}`).getTime() - new Date(`${b.date}T${b.time}`).getTime());
 
-  // Histórico: Tudo que já foi confirmado OU que já passou da data
+  // Histórico: Exibe tudo que está confirmado OU que já passou da data
   const historySlots = slots
     .filter(s => s.status === 'confirmed' || s.date < todayStr)
     .sort((a,b) => new Date(`${b.date}T${b.time}`).getTime() - new Date(`${a.date}T${a.time}`).getTime());
@@ -293,11 +305,11 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
             )}
 
             <div className="grid gap-3">
-              <h3 className="text-[10px] font-black text-gray-400 uppercase tracking-widest flex items-center gap-2 mt-4"><Calendar className="w-4 h-4" /> Agenda Próximos Dias</h3>
+              <h3 className="text-[10px] font-black text-gray-400 uppercase tracking-widest flex items-center gap-2 mt-4"><Calendar className="w-4 h-4" /> Próximas Datas</h3>
               {agendaSlots.length === 0 && (
                 <div className="p-20 text-center flex flex-col items-center gap-4">
                   <Calendar className="w-12 h-12 text-gray-200" />
-                  <p className="text-gray-400 font-bold uppercase text-xs">Nenhum horário disponível</p>
+                  <p className="text-gray-400 font-bold uppercase text-xs">Nenhum horário em aberto</p>
                 </div>
               )}
               {agendaSlots.map(s => (
@@ -449,6 +461,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                         <option value="AMISTOSO">Amistoso</option>
                         <option value="FESTIVAL">Festival</option>
                         <option value="ALUGUEL">Aluguel</option>
+                        <option value="FIXO">Fixo (Mensalista)</option>
                       </select>
                    </div>
                    <div className="bg-gray-50 p-4 rounded-2xl border">
@@ -467,12 +480,10 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                   </div>
                 </div>
                 
-                {modalMode === 'ADD' && (
-                  <div className="flex items-center gap-3 p-4 bg-gray-50 rounded-2xl border">
+                <div className="flex items-center gap-3 p-4 bg-gray-50 rounded-2xl border">
                     <input type="checkbox" id="localTeam" className="w-5 h-5 rounded-lg text-pitch" checked={isLocalTeamChecked} onChange={e => setIsLocalTeamChecked(e.target.checked)} />
                     <label htmlFor="localTeam" className="text-[10px] font-black text-pitch uppercase">Incluir meu time (Mandante)</label>
-                  </div>
-                )}
+                </div>
 
                 <Button onClick={handleSaveSlot} isLoading={isLoading} className="w-full py-5 rounded-[2rem] font-black uppercase text-xs tracking-widest mt-4 shadow-xl">
                     {modalMode === 'ADD' ? 'Publicar Horário' : 'Salvar Alterações'}
