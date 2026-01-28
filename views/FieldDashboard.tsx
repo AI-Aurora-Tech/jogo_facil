@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { Plus, Trash2, Calendar, Clock, RefreshCcw, Loader2, Sparkles, X, ChevronRight, Swords, Edit3, Save, Tag, User as UserIcon, Award, CheckCircle2, MessageCircle, TrendingUp, History as HistoryIcon, UserCheck } from 'lucide-react';
+import { Plus, Trash2, Calendar, Clock, RefreshCcw, Loader2, Sparkles, X, ChevronRight, Swords, Edit3, Save, Tag, User as UserIcon, Award, CheckCircle2, MessageCircle, TrendingUp, History as HistoryIcon, UserCheck, CalendarDays } from 'lucide-react';
 import { Button } from '../components/Button';
 import { Field, MatchSlot, MatchType, User, RegisteredTeam } from '../types';
 import { api } from '../api';
@@ -32,7 +32,10 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
   const [newTeamTime, setNewTeamTime] = useState('19:00');
   const [newTeamCat, setNewTeamCat] = useState('');
 
-  const [showAddSlotModal, setShowAddSlotModal] = useState(false);
+  const [showModal, setShowModal] = useState(false);
+  const [modalMode, setModalMode] = useState<'ADD' | 'EDIT'>('ADD');
+  const [editingSlotId, setEditingSlotId] = useState<string | null>(null);
+
   const [newSlotDate, setNewSlotDate] = useState(new Date().toISOString().split('T')[0]);
   const [newSlotTime, setNewSlotTime] = useState('18:00');
   const [newSlotDuration, setNewSlotDuration] = useState(60);
@@ -42,7 +45,6 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
   const [isLocalTeamChecked, setIsLocalTeamChecked] = useState(false);
   const [selectedLocalCategory, setSelectedLocalCategory] = useState(currentUser.teamCategories[0] || '');
 
-  const [editingSlot, setEditingSlot] = useState<MatchSlot | null>(null);
   const [confirmationSuccess, setConfirmationSuccess] = useState<MatchSlot | null>(null);
 
   useEffect(() => { loadRegisteredTeams(); }, [field.id]);
@@ -52,6 +54,27 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
       const teams = await api.getRegisteredTeams(field.id);
       setRegisteredTeams(teams);
     } catch (e) { console.error(e); }
+  };
+
+  const openAddModal = () => {
+    setModalMode('ADD');
+    setEditingSlotId(null);
+    setNewSlotDate(new Date().toISOString().split('T')[0]);
+    setNewSlotTime('18:00');
+    setNewSlotPrice(field.hourlyRate);
+    setNewSlotType('AMISTOSO');
+    setIsLocalTeamChecked(false);
+    setShowModal(true);
+  };
+
+  const openEditModal = (slot: MatchSlot) => {
+    setModalMode('EDIT');
+    setEditingSlotId(slot.id);
+    setNewSlotDate(slot.date);
+    setNewSlotTime(slot.time);
+    setNewSlotPrice(slot.price);
+    setNewSlotType(slot.matchType);
+    setShowModal(true);
   };
 
   const handleGenerate10Weeks = async () => {
@@ -111,31 +134,40 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
     }
   };
 
-  const handleCreateSingleSlot = async () => {
+  const handleSaveSlot = async () => {
     setIsLoading(true);
     try {
-      const payload: Omit<MatchSlot, 'id'> = {
-        fieldId: field.id,
-        date: newSlotDate,
-        time: newSlotTime,
-        durationMinutes: newSlotDuration,
-        matchType: newSlotType,
-        rewardDescription: newSlotReward,
-        isBooked: false,
-        hasLocalTeam: isLocalTeamChecked,
-        localTeamName: isLocalTeamChecked ? currentUser.teamName : undefined,
-        localTeamPhone: isLocalTeamChecked ? currentUser.phoneNumber : undefined,
-        bookedByTeamName: isLocalTeamChecked ? currentUser.teamName : undefined,
-        bookedByCategory: isLocalTeamChecked ? selectedLocalCategory : undefined,
-        bookedByUserId: isLocalTeamChecked ? currentUser.id : undefined,
-        bookedByUserPhone: isLocalTeamChecked ? currentUser.phoneNumber : undefined,
-        price: newSlotPrice,
-        status: 'available',
-        allowedCategories: []
-      };
-      await onAddSlot([payload]);
-      setShowAddSlotModal(false);
-      setIsLocalTeamChecked(false);
+      if (modalMode === 'ADD') {
+        const payload: Omit<MatchSlot, 'id'> = {
+          fieldId: field.id,
+          date: newSlotDate,
+          time: newSlotTime,
+          durationMinutes: newSlotDuration,
+          matchType: newSlotType,
+          rewardDescription: newSlotReward,
+          isBooked: false,
+          hasLocalTeam: isLocalTeamChecked,
+          localTeamName: isLocalTeamChecked ? currentUser.teamName : undefined,
+          localTeamPhone: isLocalTeamChecked ? currentUser.phoneNumber : undefined,
+          bookedByTeamName: isLocalTeamChecked ? currentUser.teamName : undefined,
+          bookedByCategory: isLocalTeamChecked ? selectedLocalCategory : undefined,
+          bookedByUserId: isLocalTeamChecked ? currentUser.id : undefined,
+          bookedByUserPhone: isLocalTeamChecked ? currentUser.phoneNumber : undefined,
+          price: newSlotPrice,
+          status: 'available',
+          allowedCategories: []
+        };
+        await onAddSlot([payload]);
+      } else if (modalMode === 'EDIT' && editingSlotId) {
+        await api.updateSlot(editingSlotId, {
+            date: newSlotDate,
+            time: newSlotTime,
+            matchType: newSlotType,
+            price: newSlotPrice
+        });
+        onRefreshData();
+      }
+      setShowModal(false);
     } finally {
       setIsLoading(false);
     }
@@ -177,7 +209,6 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
         });
       }
       onRefreshData();
-      alert("Reserva recusada e cliente notificado.");
     } catch (e) {
       alert("Erro ao recusar.");
     } finally {
@@ -196,11 +227,20 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
   };
 
   const todayStr = new Date().toISOString().split('T')[0];
-  const agendaSlots = slots.filter(s => s.date >= todayStr).sort((a,b) => new Date(`${a.date}T${a.time}`).getTime() - new Date(`${b.date}T${b.time}`).getTime());
-  const historySlots = slots.filter(s => s.date < todayStr && s.status === 'confirmed').sort((a,b) => new Date(`${b.date}T${b.time}`).getTime() - new Date(`${a.date}T${a.time}`).getTime());
+  
+  // Agenda: Horários futuros não confirmados (incluindo pendentes)
+  const agendaSlots = slots
+    .filter(s => s.status !== 'confirmed' && s.date >= todayStr)
+    .sort((a,b) => new Date(`${a.date}T${a.time}`).getTime() - new Date(`${b.date}T${b.time}`).getTime());
+
+  // Histórico: Tudo que já foi confirmado OU que já passou da data
+  const historySlots = slots
+    .filter(s => s.status === 'confirmed' || s.date < todayStr)
+    .sort((a,b) => new Date(`${b.date}T${b.time}`).getTime() - new Date(`${a.date}T${a.time}`).getTime());
+
   const pendingSlots = slots.filter(s => s.status === 'pending_verification' && s.date >= todayStr);
 
-  const totalHistoryEarnings = historySlots.reduce((acc, s) => acc + s.price, 0);
+  const totalHistoryEarnings = historySlots.filter(s => s.status === 'confirmed').reduce((acc, s) => acc + s.price, 0);
 
   return (
     <div className="bg-gray-50 min-h-screen">
@@ -216,7 +256,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
              </div>
           </div>
           <div className="flex gap-2">
-            <button onClick={() => setShowAddSlotModal(true)} className="p-2 bg-pitch text-white rounded-xl active:scale-95 shadow-md">
+            <button onClick={openAddModal} className="p-2 bg-pitch text-white rounded-xl active:scale-95 shadow-md">
                <Plus className="w-5 h-5"/>
             </button>
             <button onClick={handleGenerate10Weeks} disabled={isLoading} className="bg-[#10b981] text-[#022c22] px-4 py-2.5 rounded-xl text-[10px] font-black uppercase flex items-center gap-2 shadow-lg active:scale-95 disabled:opacity-50">
@@ -257,12 +297,11 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
               {agendaSlots.length === 0 && (
                 <div className="p-20 text-center flex flex-col items-center gap-4">
                   <Calendar className="w-12 h-12 text-gray-200" />
-                  <p className="text-gray-400 font-bold uppercase text-xs">Nenhum horário futuro</p>
+                  <p className="text-gray-400 font-bold uppercase text-xs">Nenhum horário disponível</p>
                 </div>
               )}
               {agendaSlots.map(s => (
                 <div key={s.id} className="bg-white p-5 rounded-[2.5rem] border shadow-sm flex items-center justify-between group hover:border-pitch transition-all relative overflow-hidden">
-                  {s.matchType === 'FIXO' && <div className="absolute top-0 left-0 w-1 h-full bg-orange-400" />}
                   <div className="flex items-center gap-4">
                     <div className="w-16 h-16 bg-gray-50 rounded-2xl flex flex-col items-center justify-center border group-hover:bg-pitch group-hover:text-white transition-colors text-center p-1">
                       <span className="text-[8px] font-black uppercase opacity-60 leading-none mb-1">{getDayName(s.date).slice(0,3)}</span>
@@ -272,7 +311,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                     <div>
                       <div className="flex items-center gap-2">
                         <span className={`text-[8px] font-black px-1.5 py-0.5 rounded uppercase ${s.matchType === 'FIXO' ? 'bg-orange-100 text-orange-600' : 'bg-grass-100 text-grass-600'}`}>{s.matchType}</span>
-                        {s.isBooked && <span className="bg-pitch text-white text-[8px] font-black px-1.5 py-0.5 rounded uppercase flex items-center gap-1"><CheckCircle2 className="w-2 h-2"/> Confirmado</span>}
+                        {s.status === 'pending_verification' && <span className="bg-orange-500 text-white text-[8px] font-black px-1.5 py-0.5 rounded uppercase">Pendente</span>}
                       </div>
                       <div className="flex items-center gap-2 mt-1">
                         <span className="font-black text-pitch text-sm">{s.localTeamName || s.bookedByTeamName || 'Vaga Aberta'}</span>
@@ -282,8 +321,8 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                     </div>
                   </div>
                   <div className="flex gap-1">
-                    <button onClick={() => setEditingSlot(s)} className="p-2 text-gray-300 hover:text-pitch"><Edit3 className="w-4 h-4"/></button>
-                    <button onClick={() => onDeleteSlot(s.id)} className="p-2 text-gray-300 hover:text-red-500"><Trash2 className="w-4 h-4"/></button>
+                    <button onClick={() => openEditModal(s)} className="p-2 text-gray-300 hover:text-pitch transition-colors"><Edit3 className="w-5 h-5"/></button>
+                    <button onClick={() => onDeleteSlot(s.id)} className="p-2 text-gray-300 hover:text-red-500 transition-colors"><Trash2 className="w-5 h-5"/></button>
                   </div>
                 </div>
               ))}
@@ -318,7 +357,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
           <div className="space-y-4">
              <div className="bg-pitch rounded-[2.5rem] p-8 text-white flex items-center justify-between shadow-xl">
                 <div>
-                   <h2 className="text-[10px] font-black uppercase tracking-[0.2em] text-grass-500 mb-2">Faturamento de Confirmados</h2>
+                   <h2 className="text-[10px] font-black uppercase tracking-[0.2em] text-grass-500 mb-2">Faturamento Confirmado</h2>
                    <p className="text-4xl font-black italic tracking-tighter leading-none">R$ {totalHistoryEarnings.toFixed(0)}</p>
                 </div>
                 <div className="w-14 h-14 bg-white/10 rounded-2xl flex items-center justify-center backdrop-blur-md border border-white/20">
@@ -327,28 +366,43 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
              </div>
 
              <div className="grid gap-3">
-                <h3 className="text-[10px] font-black text-gray-400 uppercase tracking-widest flex items-center gap-2 mt-4"><HistoryIcon className="w-4 h-4" /> Jogos Anteriores</h3>
+                <h3 className="text-[10px] font-black text-gray-400 uppercase tracking-widest flex items-center gap-2 mt-4"><HistoryIcon className="w-4 h-4" /> Todos os Agendamentos</h3>
                 {historySlots.length === 0 && (
                   <div className="p-20 text-center text-gray-300 font-black uppercase text-xs">Nenhum registro no histórico</div>
                 )}
-                {historySlots.map(s => (
-                  <div key={s.id} className="bg-white p-5 rounded-[2.5rem] border flex items-center justify-between opacity-80 grayscale hover:grayscale-0 hover:opacity-100 transition-all">
-                    <div className="flex items-center gap-4">
-                      <div className="w-14 h-14 bg-gray-50 rounded-2xl flex flex-col items-center justify-center border text-center">
-                        <span className="text-[10px] font-black">{s.time}</span>
-                        <span className="text-[7px] font-bold uppercase opacity-40">{s.date.split('-').reverse().slice(0,2).join('/')}</span>
-                      </div>
-                      <div>
-                        <div className="flex items-center gap-2">
-                           <span className="font-black text-pitch text-sm">{s.bookedByTeamName || s.localTeamName}</span>
-                           <Swords className="w-3 h-3 text-gray-300" />
-                           <span className="font-black text-pitch text-sm">{s.opponentTeamName || 'Avulso'}</span>
+                {historySlots.map(s => {
+                  const isFuture = s.date >= todayStr;
+                  const isConfirmed = s.status === 'confirmed';
+                  
+                  return (
+                    <div key={s.id} className={`bg-white p-5 rounded-[2.5rem] border flex items-center justify-between transition-all ${!isConfirmed ? 'opacity-40' : ''}`}>
+                      <div className="flex items-center gap-4">
+                        <div className="w-14 h-14 bg-gray-50 rounded-2xl flex flex-col items-center justify-center border text-center">
+                          <span className="text-[10px] font-black">{s.time}</span>
+                          <span className="text-[7px] font-bold uppercase opacity-40">{s.date.split('-').reverse().slice(0,2).join('/')}</span>
                         </div>
-                        <p className="text-[9px] font-bold text-gray-400 uppercase mt-1">R$ {s.price} • {s.matchType}</p>
+                        <div>
+                          <div className="flex items-center gap-2">
+                             <span className="font-black text-pitch text-sm leading-none">{s.bookedByTeamName || s.localTeamName}</span>
+                             <Swords className="w-3 h-3 text-gray-300" />
+                             <span className="font-black text-pitch text-sm leading-none">{s.opponentTeamName || 'Avulso'}</span>
+                          </div>
+                          <div className="flex items-center gap-2 mt-1">
+                             <span className={`text-[8px] font-black px-1.5 py-0.5 rounded uppercase ${isFuture && isConfirmed ? 'bg-blue-100 text-blue-600' : isConfirmed ? 'bg-grass-100 text-grass-600' : 'bg-gray-100 text-gray-500'}`}>
+                                {isFuture && isConfirmed ? 'Agendado' : isConfirmed ? 'Concluído' : 'Expirado'}
+                             </span>
+                             <p className="text-[9px] font-bold text-gray-400 uppercase">R$ {s.price}</p>
+                          </div>
+                        </div>
                       </div>
+                      {isConfirmed && (
+                         <div className="flex items-center gap-1">
+                            {[1,2,3,4,5].map(star => <div key={star} className={`w-2 h-2 rounded-full ${star <= (s.fieldRating || 0) ? 'bg-yellow-400' : 'bg-gray-200'}`} />)}
+                         </div>
+                      )}
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
              </div>
           </div>
         )}
@@ -378,12 +432,14 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
         </div>
       )}
 
-      {showAddSlotModal && (
+      {showModal && (
         <div className="fixed inset-0 bg-pitch/95 backdrop-blur-md z-[100] flex items-end">
            <div className="bg-white w-full rounded-t-[3rem] p-10 animate-in slide-in-from-bottom duration-500 max-h-[90vh] overflow-y-auto">
              <div className="flex justify-between items-center mb-8">
-               <h2 className="text-2xl font-black italic uppercase tracking-tighter text-pitch">Criar Horário</h2>
-               <button onClick={() => setShowAddSlotModal(false)} className="p-2 bg-gray-100 rounded-full"><X className="w-6 h-6"/></button>
+               <h2 className="text-2xl font-black italic uppercase tracking-tighter text-pitch">
+                  {modalMode === 'ADD' ? 'Criar Horário' : 'Editar Horário'}
+               </h2>
+               <button onClick={() => setShowModal(false)} className="p-2 bg-gray-100 rounded-full"><X className="w-6 h-6"/></button>
              </div>
              <div className="space-y-4">
                 <div className="grid grid-cols-2 gap-4">
@@ -410,7 +466,17 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                     <input type="number" className="w-full bg-transparent font-black outline-none text-pitch" value={newSlotPrice} onChange={e => setNewSlotPrice(Number(e.target.value))} />
                   </div>
                 </div>
-                <Button onClick={handleCreateSingleSlot} isLoading={isLoading} className="w-full py-5 rounded-[2rem] font-black uppercase text-xs tracking-widest mt-4">Publicar Horário</Button>
+                
+                {modalMode === 'ADD' && (
+                  <div className="flex items-center gap-3 p-4 bg-gray-50 rounded-2xl border">
+                    <input type="checkbox" id="localTeam" className="w-5 h-5 rounded-lg text-pitch" checked={isLocalTeamChecked} onChange={e => setIsLocalTeamChecked(e.target.checked)} />
+                    <label htmlFor="localTeam" className="text-[10px] font-black text-pitch uppercase">Incluir meu time (Mandante)</label>
+                  </div>
+                )}
+
+                <Button onClick={handleSaveSlot} isLoading={isLoading} className="w-full py-5 rounded-[2rem] font-black uppercase text-xs tracking-widest mt-4 shadow-xl">
+                    {modalMode === 'ADD' ? 'Publicar Horário' : 'Salvar Alterações'}
+                </Button>
              </div>
            </div>
         </div>

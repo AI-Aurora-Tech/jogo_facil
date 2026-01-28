@@ -24,6 +24,7 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
   const [selectedCategoryForBooking, setSelectedCategoryForBooking] = useState(currentUser.teamCategories[0] || '');
   const [verifyingSlot, setVerifyingSlot] = useState<MatchSlot | null>(null);
   const [isAiLoading, setIsAiLoading] = useState(false);
+  const [isRatingLoading, setIsRatingLoading] = useState(false);
   const [bookingSuccessSlot, setBookingSuccessSlot] = useState<MatchSlot | null>(null);
   const [ratingSlot, setRatingSlot] = useState<MatchSlot | null>(null);
   const [hoverRating, setHoverRating] = useState(0);
@@ -46,7 +47,7 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
     } else {
       const isMine = slot.bookedByUserId === currentUser.id || 
                      (slot.opponentTeamName && slot.opponentTeamName.includes(currentUser.teamName || ''));
-      return isMine && slot.date >= todayStr;
+      return isMine; // No filtro de My Bookings mostramos tudo que é meu, independente da data
     }
   }).sort((a, b) => new Date(`${a.date}T${a.time}`).getTime() - new Date(`${b.date}T${b.time}`).getTime());
 
@@ -56,7 +57,6 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
         return;
     }
     
-    // Solução para o erro de Schema: Mesclar nome e categoria
     const mergedTeamName = `${currentUser.teamName} (${selectedCategoryForBooking})`;
     const isFirstRenter = !selectedSlot.hasLocalTeam && !selectedSlot.bookedByTeamName;
 
@@ -107,7 +107,8 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
   };
 
   const handleRateField = async (rating: number) => {
-    if (!ratingSlot) return;
+    if (!ratingSlot || isRatingLoading) return;
+    setIsRatingLoading(true);
     try {
       await api.updateSlot(ratingSlot.id, { fieldRating: rating });
       setRatingSlot(null);
@@ -115,6 +116,8 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
       alert("Valeu pela avaliação! Isso ajuda a arena a melhorar.");
     } catch (e) {
       alert("Erro ao salvar nota.");
+    } finally {
+      setIsRatingLoading(false);
     }
   };
 
@@ -140,11 +143,11 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
           const field = fields.find(f => f.id === slot.fieldId);
           if (!field) return null;
           const isChallenge = slot.hasLocalTeam || slot.bookedByTeamName;
-          const isOpponent = slot.opponentTeamName?.includes(currentUser.teamName || '');
           const canRate = slot.status === 'confirmed' && !slot.fieldRating;
+          const isFuture = slot.date >= todayStr;
 
           return (
-            <div key={slot.id} className="bg-white rounded-[2.5rem] overflow-hidden border shadow-sm transition-all hover:border-grass-500 hover:shadow-xl group">
+            <div key={slot.id} className="bg-white rounded-[2.5rem] overflow-hidden border shadow-sm transition-all hover:border-grass-500 group">
               <div className="p-6 flex gap-5">
                   <div className="w-20 h-20 rounded-3xl overflow-hidden border bg-gray-100 flex-shrink-0 relative">
                       <img src={field.imageUrl} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
@@ -162,7 +165,7 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
                               <Clock className="w-3 h-3" /> {slot.time} • {slot.date.split('-').reverse().slice(0,2).join('/')}
                            </div>
                            <div className={`px-3 py-1 rounded-xl text-[9px] font-black uppercase ${slot.matchType === 'FESTIVAL' ? 'bg-blue-50 text-blue-600' : 'bg-grass-50 text-grass-600'}`}>
-                                {slot.matchType} {slot.durationMinutes}min
+                                {slot.matchType}
                            </div>
                       </div>
                   </div>
@@ -194,7 +197,7 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
                 <div className="px-6 pb-4">
                   <div className="flex items-center gap-1">
                     {[1,2,3,4,5].map(s => <Star key={s} className={`w-3 h-3 ${s <= (slot.fieldRating || 0) ? 'fill-yellow-400 text-yellow-400' : 'text-gray-200'}`} />)}
-                    <span className="text-[9px] font-black text-gray-400 uppercase ml-2 italic">Avaliação enviada</span>
+                    <span className="text-[9px] font-black text-gray-400 uppercase ml-2 italic">Avaliado</span>
                   </div>
                 </div>
               )}
@@ -207,15 +210,15 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
                   {viewMode === 'MY_BOOKINGS' ? (
                       <div className="flex gap-2">
                         {slot.status === 'confirmed' ? (
-                           <span className="bg-grass-500 text-pitch px-5 py-3 rounded-2xl text-[10px] font-black uppercase flex items-center gap-2 shadow-lg">
-                              <CheckCircle2 className="w-4 h-4"/> Confirmado
+                           <span className={`px-5 py-3 rounded-2xl text-[10px] font-black uppercase flex items-center gap-2 shadow-lg ${isFuture ? 'bg-blue-500 text-white' : 'bg-grass-500 text-pitch'}`}>
+                              <CheckCircle2 className="w-4 h-4"/> {isFuture ? 'Agendado' : 'Concluído'}
                            </span>
                         ) : !slot.receiptUrl ? (
                            <button onClick={() => setVerifyingSlot(slot)} className="bg-orange-500 text-white px-5 py-3 rounded-2xl text-[10px] font-black uppercase shadow-lg active:scale-95">Pagar Pix</button>
                         ) : (
                            <span className="bg-gray-100 text-gray-400 px-5 py-3 rounded-2xl text-[10px] font-black uppercase border">Em análise...</span>
                         )}
-                        <button onClick={() => onCancelBooking(slot.id)} className="p-2 text-gray-300 hover:text-red-500"><XCircle className="w-6 h-6"/></button>
+                        {slot.status !== 'confirmed' && <button onClick={() => onCancelBooking(slot.id)} className="p-2 text-gray-300 hover:text-red-500"><XCircle className="w-6 h-6"/></button>}
                       </div>
                   ) : (
                       <Button className={`rounded-2xl px-10 py-4 text-[11px] font-black uppercase transition-all active:scale-95 shadow-lg ${isChallenge ? 'bg-orange-500 text-white' : 'bg-pitch text-white'}`} onClick={() => { setSelectedSlot(slot); setSelectedCategoryForBooking(currentUser.teamCategories[0] || ''); }}>
@@ -230,7 +233,12 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
 
       {ratingSlot && (
         <div className="fixed inset-0 bg-pitch/95 backdrop-blur-xl z-[400] flex items-center justify-center p-6">
-           <div className="bg-white rounded-[3.5rem] w-full max-w-sm p-10 text-center animate-in zoom-in-95 duration-300 shadow-2xl">
+           <div className="bg-white rounded-[3.5rem] w-full max-w-sm p-10 text-center animate-in zoom-in-95 duration-300 shadow-2xl relative">
+              {isRatingLoading && (
+                <div className="absolute inset-0 bg-white/80 z-10 flex flex-col items-center justify-center rounded-[3.5rem]">
+                   <Loader2 className="w-8 h-8 text-pitch animate-spin" />
+                </div>
+              )}
               <h2 className="text-2xl font-black text-pitch uppercase italic leading-tight">Avaliar Arena</h2>
               <p className="text-gray-500 text-xs font-medium mt-2 mb-8">Dê uma nota para a estrutura e atendimento desta arena.</p>
               <div className="flex justify-center gap-2 mb-8">
@@ -240,6 +248,7 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
                      onMouseEnter={() => setHoverRating(s)} 
                      onMouseLeave={() => setHoverRating(0)}
                      onClick={() => handleRateField(s)}
+                     disabled={isRatingLoading}
                      className="transition-transform active:scale-90"
                    >
                      <Star className={`w-10 h-10 ${s <= (hoverRating || 0) ? 'fill-yellow-400 text-yellow-400' : 'text-gray-200'}`} />
@@ -268,16 +277,6 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
                  >
                    <MessageCircle className="w-4 h-4" /> Avisar Arena
                  </a>
-                 
-                 {(bookingSuccessSlot.localTeamPhone || bookingSuccessSlot.bookedByUserPhone) && (
-                   <a 
-                     href={getWhatsappLink(bookingSuccessSlot.localTeamPhone || bookingSuccessSlot.bookedByUserPhone || '', `Olá capitão! Desafiamos seu time para o jogo de ${bookingSuccessSlot.time} no dia ${bookingSuccessSlot.date.split('-').reverse().join('/')}. Aguardamos a confirmação na Arena!`)}
-                     target="_blank"
-                     className="w-full bg-pitch text-white py-4 rounded-2xl font-black uppercase text-[10px] flex items-center justify-center gap-2 shadow-lg"
-                   >
-                     <MessageCircle className="w-4 h-4" /> Avisar Mandante
-                   </a>
-                 )}
               </div>
 
               <button onClick={() => { setBookingSuccessSlot(null); onRefresh(); }} className="mt-6 text-[10px] font-black text-gray-400 uppercase tracking-widest underline decoration-2">Fechar</button>

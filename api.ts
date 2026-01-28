@@ -170,7 +170,6 @@ export const api = {
   },
 
   createSlots: async (slots: Partial<MatchSlot>[]): Promise<void> => {
-    // Fix: Using camelCase property names from the MatchSlot interface for object access.
     const payload = slots.map(s => ({
       field_id: s.fieldId,
       date: s.date,
@@ -192,6 +191,10 @@ export const api = {
   updateSlot: async (slotId: string, data: Partial<MatchSlot>): Promise<void> => {
     const payload: any = {};
     if (data.status) payload.status = data.status;
+    if (data.date) payload.date = data.date;
+    if (data.time) payload.time = data.time;
+    if (data.matchType) payload.match_type = data.matchType;
+    if (data.price !== undefined) payload.price = data.price;
     if (data.isBooked !== undefined) payload.is_booked = data.isBooked;
     if (data.receiptUrl !== undefined) payload.receipt_url = data.receiptUrl;
     if (data.bookedByTeamName !== undefined) payload.booked_by_team_name = data.bookedByTeamName;
@@ -203,6 +206,7 @@ export const api = {
     if (data.localTeamName !== undefined) payload.local_team_name = data.localTeamName;
     if (data.localTeamPhone !== undefined) payload.local_team_phone = data.localTeamPhone;
     if (data.fieldRating !== undefined) payload.field_rating = data.fieldRating;
+    if (data.fieldRatingComment !== undefined) payload.field_rating_comment = data.fieldRatingComment;
     
     const { error } = await supabase.from('match_slot').update(payload).eq('id', slotId);
     if (error) throw error;
@@ -218,8 +222,8 @@ export const api = {
       id: t.id,
       name: t.name,
       fieldId: t.field_id,
-      fixed_day: t.fixed_day,
-      fixed_time: t.fixed_time,
+      fixedDay: t.fixed_day,
+      fixedTime: t.fixed_time,
       categories: t.categories,
       logoUrl: t.logo_url,
       createdAt: t.created_at
