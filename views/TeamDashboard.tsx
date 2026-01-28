@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { Search, MapPin, Clock, Tag, Swords, CalendarCheck, CheckCircle2, XCircle, Upload, Loader2, ChevronRight, MessageCircle, Info, Award } from 'lucide-react';
+import { Search, MapPin, Clock, Tag, Swords, CalendarCheck, CheckCircle2, XCircle, Upload, Loader2, ChevronRight, MessageCircle, Info, Award, Star } from 'lucide-react';
 import { Button } from '../components/Button';
 import { Field, MatchSlot, User } from '../types';
 import { verifyPixReceipt } from '../services/aiService';
@@ -25,6 +25,8 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
   const [verifyingSlot, setVerifyingSlot] = useState<MatchSlot | null>(null);
   const [isAiLoading, setIsAiLoading] = useState(false);
   const [bookingSuccessSlot, setBookingSuccessSlot] = useState<MatchSlot | null>(null);
+  const [ratingSlot, setRatingSlot] = useState<MatchSlot | null>(null);
+  const [hoverRating, setHoverRating] = useState(0);
 
   const todayStr = new Date().toISOString().split('T')[0];
 
@@ -34,12 +36,9 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
     if (field.ownerId === currentUser.id) return false;
 
     if (viewMode === 'EXPLORE') {
-      // Regra 1: Slot deve estar 'available' e ser futuro
       if (slot.date < todayStr || slot.status !== 'available') return false;
-      // Regra 2: Se for aluguel sem mandante e ja tiver 2 times, some
       const renterCount = (slot.bookedByTeamName ? 1 : 0) + (slot.opponentTeamName ? 1 : 0);
       if (!slot.hasLocalTeam && renterCount >= 2) return false;
-      // Regra 3: Se for local e ja tiver oponente, some
       if (slot.hasLocalTeam && slot.opponentTeamName) return false;
       
       if (searchTerm && !field.name.toLowerCase().includes(searchTerm.toLowerCase())) return false;
@@ -50,9 +49,11 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
   }).sort((a, b) => new Date(`${a.date}T${a.time}`).getTime() - new Date(`${b.date}T${b.time}`).getTime());
 
   const handleBookingConfirm = async () => {
-    if (!selectedSlot || !selectedCategoryForBooking) return;
+    if (!selectedSlot || !selectedCategoryForBooking) {
+        alert("Preencha todos os dados.");
+        return;
+    }
     
-    // Se não tem mandante nenhum, o cara vira o mandante (bookedBy)
     const isFirstRenter = !selectedSlot.hasLocalTeam && !selectedSlot.bookedByTeamName;
 
     try {
@@ -73,12 +74,11 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
         });
       }
       
-      const updatedSlot = { ...selectedSlot }; // Mock do update para o modal de sucesso
-      setBookingSuccessSlot(updatedSlot);
+      setBookingSuccessSlot({...selectedSlot});
       setSelectedSlot(null);
       onRefresh();
-    } catch (e) {
-      alert("Erro ao solicitar reserva.");
+    } catch (e: any) {
+      alert(`Erro ao solicitar reserva: ${e.message || 'Verifique sua conexão'}`);
     }
   };
 
@@ -91,14 +91,27 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
     if (!file || !verifyingSlot) return;
     setIsAiLoading(true);
     try {
-      const field = fields.find(f => f.id === verifyingSlot.fieldId);
       const base64 = await convertFileToBase64(file);
       await api.updateSlot(verifyingSlot.id, {
         receiptUrl: base64,
         status: 'pending_verification'
       });
       onRefresh();
+      setVerifyingSlot(null);
+      alert("Comprovante enviado para análise!");
     } finally { setIsAiLoading(false); }
+  };
+
+  const handleRateField = async (rating: number) => {
+    if (!ratingSlot) return;
+    try {
+      await api.updateSlot(ratingSlot.id, { fieldRating: rating });
+      setRatingSlot(null);
+      onRefresh();
+      alert("Obrigado pela sua avaliação!");
+    } catch (e) {
+      alert("Erro ao salvar avaliação.");
+    }
   };
 
   return (
@@ -123,6 +136,8 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
           const field = fields.find(f => f.id === slot.fieldId);
           if (!field) return null;
           const isChallenge = slot.hasLocalTeam || slot.bookedByTeamName;
+          const isOpponent = slot.opponentTeamName === currentUser.teamName;
+          const canRate = slot.status === 'confirmed' && !slot.fieldRating && (isOpponent || !slot.hasLocalTeam);
 
           return (
             <div key={slot.id} className="bg-white rounded-[2.5rem] overflow-hidden border shadow-sm transition-all hover:border-grass-500 hover:shadow-xl group">
@@ -148,6 +163,7 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
                       </div>
                   </div>
               </div>
+              
               <div className="px-6 pb-2">
                  <div className="bg-gray-50 rounded-2xl p-3 flex items-center gap-3">
                     <div className="w-8 h-8 bg-white rounded-xl flex items-center justify-center border shadow-sm">
@@ -161,6 +177,24 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
                     </div>
                  </div>
               </div>
+
+              {canRate && viewMode === 'MY_BOOKINGS' && (
+                <div className="px-6 pb-4">
+                  <button onClick={() => setRatingSlot(slot)} className="w-full bg-yellow-50 text-yellow-600 py-3 rounded-2xl text-[10px] font-black uppercase flex items-center justify-center gap-2 border border-yellow-100 shadow-sm active:scale-95 transition-all">
+                    <Star className="w-4 h-4 fill-yellow-600" /> Avaliar Arena
+                  </button>
+                </div>
+              )}
+
+              {slot.fieldRating && viewMode === 'MY_BOOKINGS' && (
+                <div className="px-6 pb-4">
+                  <div className="flex items-center gap-1">
+                    {[1,2,3,4,5].map(s => <Star key={s} className={`w-3 h-3 ${s <= slot.fieldRating! ? 'fill-yellow-400 text-yellow-400' : 'text-gray-200'}`} />)}
+                    <span className="text-[9px] font-black text-gray-400 uppercase ml-2 italic">Sua Nota p/ Arena</span>
+                  </div>
+                </div>
+              )}
+
               <div className="p-5 flex items-center justify-between">
                   <div>
                     <p className="text-xl font-black text-pitch italic leading-none">R$ {slot.price.toFixed(0)}</p>
@@ -189,6 +223,29 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
           );
         })}
       </div>
+
+      {ratingSlot && (
+        <div className="fixed inset-0 bg-pitch/95 backdrop-blur-xl z-[400] flex items-center justify-center p-6">
+           <div className="bg-white rounded-[3.5rem] w-full max-w-sm p-10 text-center animate-in zoom-in-95 duration-300">
+              <h2 className="text-2xl font-black text-pitch uppercase italic leading-tight">Avaliar Arena</h2>
+              <p className="text-gray-500 text-xs font-medium mt-2 mb-8">O que achou da estrutura da arena?</p>
+              <div className="flex justify-center gap-2 mb-8">
+                 {[1,2,3,4,5].map(s => (
+                   <button 
+                     key={s} 
+                     onMouseEnter={() => setHoverRating(s)} 
+                     onMouseLeave={() => setHoverRating(0)}
+                     onClick={() => handleRateField(s)}
+                     className="transition-transform active:scale-90"
+                   >
+                     <Star className={`w-10 h-10 ${s <= (hoverRating || 0) ? 'fill-yellow-400 text-yellow-400' : 'text-gray-200'}`} />
+                   </button>
+                 ))}
+              </div>
+              <button onClick={() => setRatingSlot(null)} className="text-[10px] font-black text-gray-400 uppercase tracking-widest underline decoration-2">Depois</button>
+           </div>
+        </div>
+      )}
 
       {bookingSuccessSlot && (
         <div className="fixed inset-0 bg-pitch/95 backdrop-blur-xl z-[300] flex items-center justify-center p-6">
@@ -219,7 +276,7 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
                  )}
               </div>
 
-              <button onClick={() => setBookingSuccessSlot(null)} className="mt-6 text-[10px] font-black text-gray-400 uppercase tracking-widest underline decoration-2">Entendido</button>
+              <button onClick={() => { setBookingSuccessSlot(null); onRefresh(); }} className="mt-6 text-[10px] font-black text-gray-400 uppercase tracking-widest underline decoration-2">Entendido</button>
            </div>
         </div>
       )}

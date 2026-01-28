@@ -156,7 +156,9 @@ export const api = {
       price: s.price,
       allowedCategories: s.allowed_categories || [],
       receiptUrl: s.receipt_url,
-      aiVerificationResult: s.ai_verification_result
+      aiVerificationResult: s.ai_verification_result,
+      fieldRating: s.field_rating,
+      fieldRatingComment: s.field_rating_comment
     }));
   },
 
@@ -199,6 +201,8 @@ export const api = {
     if (data.hasLocalTeam !== undefined) payload.has_local_team = data.hasLocalTeam;
     if (data.localTeamName !== undefined) payload.local_team_name = data.localTeamName;
     if (data.localTeamPhone !== undefined) payload.local_team_phone = data.localTeamPhone;
+    if (data.fieldRating !== undefined) payload.field_rating = data.fieldRating;
+    if (data.fieldRatingComment !== undefined) payload.field_rating_comment = data.fieldRatingComment;
     
     const { error } = await supabase.from('match_slot').update(payload).eq('id', slotId);
     if (error) throw error;

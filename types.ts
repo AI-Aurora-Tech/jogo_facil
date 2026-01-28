@@ -103,21 +103,23 @@ export interface MatchSlot {
   isBooked: boolean;
   hasLocalTeam: boolean;
   localTeamName?: string;
-  localTeamPhone?: string; // Para notificação WhatsApp
+  localTeamPhone?: string;
   bookedByUserId?: string;
   bookedByTeamName?: string;
-  bookedByUserPhone?: string; // Para o oponente notificar o primeiro locatário
+  bookedByUserPhone?: string;
   bookedByCategory?: string;
   opponentTeamName?: string;
   opponentTeamCategory?: string;
   opponentTeamPhone?: string;
-  rewardDescription?: string; // Ex: "Vale Troféu"
+  rewardDescription?: string;
   status: 'available' | 'pending_verification' | 'confirmed';
   price: number;
   allowedCategories: string[]; 
   receiptUrl?: string;
   aiVerificationResult?: string;
-  ratingGiven?: number;
+  ratingGiven?: number; // Avaliação do time dada pelo dono do campo
+  fieldRating?: number; // Nota da arena dada pelo time (0-5)
+  fieldRatingComment?: string;
 }
 
 export interface VerificationResult {

@@ -7,7 +7,7 @@ import { FieldDashboard } from './views/FieldDashboard';
 import { TeamDashboard } from './views/TeamDashboard';
 import { EditProfileModal } from './components/EditProfileModal';
 import { api } from './api';
-import { RefreshCw, Settings, Building2, Shield, Search, Loader2, Bell, X, Info } from 'lucide-react';
+import { RefreshCw, Settings, Building2, Shield, Search, Loader2, Bell, X, Info, History } from 'lucide-react';
 
 const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
@@ -74,6 +74,7 @@ const App: React.FC = () => {
             setView('APP');
             if (u.role === UserRole.SUPER_ADMIN) setActiveTab('SUPER');
             else if (u.role === UserRole.FIELD_OWNER) setActiveTab('ADMIN');
+            else setActiveTab('EXPLORE');
             await refreshData();
           } else {
             localStorage.removeItem('jf_session_user');
@@ -255,7 +256,7 @@ const App: React.FC = () => {
                    refreshData();
                 }}
                 onCancelBooking={async id => { 
-                  await api.updateSlot(id, { status: 'available', isBooked: false, bookedByTeamName: null as any, bookedByUserId: null as any, receiptUrl: null as any }); 
+                  await api.updateSlot(id, { status: 'available', isBooked: false, bookedByTeamName: null as any, bookedByUserId: null as any, bookedByUserPhone: null as any, opponentTeamName: null as any, opponentTeamPhone: null as any, receiptUrl: null as any }); 
                   refreshData(); 
                 }}
             />
@@ -308,10 +309,19 @@ const App: React.FC = () => {
             <Search className="w-6 h-6" />
             <span className="text-[8px] font-black uppercase">Explorar</span>
           </button>
-          <button onClick={() => setActiveTab('ADMIN')} className={`flex flex-col items-center gap-1 ${activeTab === 'ADMIN' ? 'text-[#10b981]' : 'text-gray-300'}`}>
-            <Building2 className="w-6 h-6" />
-            <span className="text-[8px] font-black uppercase">Arena</span>
-          </button>
+          
+          {user?.role === UserRole.TEAM_CAPTAIN ? (
+            <button onClick={() => setActiveTab('MY_GAMES')} className={`flex flex-col items-center gap-1 ${activeTab === 'MY_GAMES' ? 'text-[#10b981]' : 'text-gray-300'}`}>
+              <History className="w-6 h-6" />
+              <span className="text-[8px] font-black uppercase">Histórico</span>
+            </button>
+          ) : (
+            <button onClick={() => setActiveTab('ADMIN')} className={`flex flex-col items-center gap-1 ${activeTab === 'ADMIN' ? 'text-[#10b981]' : 'text-gray-300'}`}>
+              <Building2 className="w-6 h-6" />
+              <span className="text-[8px] font-black uppercase">Arena</span>
+            </button>
+          )}
+
           <button onClick={() => setActiveTab('PROFILE')} className={`flex flex-col items-center gap-1 ${activeTab === 'PROFILE' ? 'text-[#10b981]' : 'text-gray-300'}`}>
             <Settings className="w-6 h-6" />
             <span className="text-[8px] font-black uppercase">Perfil</span>
