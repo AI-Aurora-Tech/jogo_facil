@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { Plus, Trash2, Calendar, Clock, RefreshCcw, Loader2, X, Swords, Edit3, MessageCircle, TrendingUp, CheckCircle2, User as UserIcon, CalendarDays, History as HistoryIcon, UserCheck, Phone, Edit, Building2, MapPin, LayoutGrid, Flag } from 'lucide-react';
+import { Plus, Trash2, Calendar, Clock, RefreshCcw, Loader2, X, Swords, Edit3, MessageCircle, TrendingUp, CheckCircle2, User as UserIcon, CalendarDays, History as HistoryIcon, UserCheck, Phone, Edit, Building2, MapPin, LayoutGrid, Flag, Trophy } from 'lucide-react';
 import { Button } from '../components/Button';
 import { Field, MatchSlot, MatchType, User, CATEGORY_ORDER, RegisteredTeam, SPORTS } from '../types';
 import { api } from '../api';
@@ -81,6 +81,10 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
   };
 
   const handleSaveSlot = async () => {
+    if (isLocalTeamChecked && !selectedCategory) {
+      alert("Selecione uma categoria para o mandante.");
+      return;
+    }
     setIsLoading(true);
     try {
       let teamName = '';
@@ -137,7 +141,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
       onRefreshData();
     } catch (e: any) {
       console.error(e);
-      alert("Erro ao salvar horário: " + (e.message || "Verifique se todas as colunas existem no seu Supabase."));
+      alert("Erro ao salvar horário: " + (e.message || "Verifique se executou os comandos SQL no Supabase."));
     } finally {
       setIsLoading(false);
     }
@@ -213,6 +217,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
 
   return (
     <div className="bg-gray-50 min-h-screen pb-32">
+      {/* Header Gestão */}
       <div className="p-6 bg-white border-b sticky top-0 z-20 glass">
         <div className="flex justify-between items-center mb-4">
           <div className="flex items-center gap-3">
@@ -246,6 +251,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
         </div>
       </div>
 
+      {/* Listagem Agenda */}
       <div className="p-6">
         {activeTab === 'AGENDA' && (
           <div className="space-y-4">
@@ -273,20 +279,12 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                 </div>
               </div>
             ))}
+            {agendaSlots.length === 0 && <p className="text-center py-20 text-gray-300 font-black uppercase text-[10px]">Nenhum horário aberto</p>}
           </div>
         )}
 
         {activeTab === 'MENSALISTAS' && (
           <div className="space-y-4">
-             <div className="p-8 bg-pitch rounded-[2.5rem] text-white flex items-center justify-between shadow-xl mb-6">
-                <div>
-                   <h2 className="text-lg font-black italic uppercase tracking-tighter">Meus Mensalistas</h2>
-                   <p className="text-[9px] font-bold text-grass-500 uppercase tracking-widest mt-1">Times de Horário Fixo</p>
-                </div>
-                <div className="w-12 h-12 bg-white/10 rounded-2xl flex items-center justify-center border border-white/20">
-                   <UserCheck className="w-6 h-6 text-grass-500" />
-                </div>
-             </div>
              {registeredTeams.map(t => (
                <div key={t.id} className="bg-white p-6 rounded-[3rem] border shadow-sm flex items-center justify-between group hover:border-pitch transition-all">
                   <div className="flex items-center gap-4">
@@ -302,7 +300,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                   </div>
                   <div className="flex gap-2">
                      <button onClick={() => openEditMensalista(t)} className="p-3 text-gray-400 hover:text-pitch"><Edit className="w-5 h-5"/></button>
-                     <button onClick={() => api.deleteRegisteredTeam(t.id).then(loadMensalistas)} className="p-3 text-gray-300 hover:text-red-500"><Trash2 className="w-5 h-5"/></button>
+                     <button onClick={() => { if(confirm("Remover mensalista?")) api.deleteRegisteredTeam(t.id).then(loadMensalistas); }} className="p-3 text-gray-300 hover:text-red-500"><Trash2 className="w-5 h-5"/></button>
                   </div>
                </div>
              ))}
@@ -312,7 +310,6 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
 
         {activeTab === 'HISTORICO' && (
            <div className="space-y-4">
-              <h3 className="text-[10px] font-black text-pitch uppercase tracking-widest flex items-center gap-2">Histórico Completo</h3>
               {[...confirmedSlots, ...pastSlots].map(s => (
                 <div key={s.id} className={`bg-white p-5 rounded-[2.5rem] border shadow-sm flex items-center justify-between ${s.date < today ? 'opacity-60' : ''}`}>
                   <div className="flex items-center gap-4">
@@ -346,7 +343,9 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                <h2 className="text-2xl font-black italic uppercase text-pitch">{editingSlot ? 'Editar Horário' : 'Novo Horário'}</h2>
                <button onClick={() => setShowAddSlotModal(false)} className="p-2 bg-gray-100 rounded-full"><X className="w-6 h-6"/></button>
              </div>
+             
              <div className="space-y-4">
+                {/* Data e Hora */}
                 <div className="grid grid-cols-2 gap-4">
                    <div className={`bg-gray-50 p-4 rounded-2xl border ${editingSlot ? 'opacity-50 pointer-events-none' : ''}`}>
                       <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Data</label>
@@ -358,55 +357,59 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                    </div>
                 </div>
 
+                {/* Tipo de Jogo (Amistoso vs Festival) */}
                 <div className="grid grid-cols-2 gap-4">
                    <div className="bg-gray-50 p-4 rounded-2xl border">
-                      <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Tipo de Jogo</label>
-                      <select className="w-full bg-transparent font-black outline-none" value={newSlotType} onChange={e => setNewSlotType(e.target.value as MatchType)}>
+                      <label className="text-[8px] font-black text-gray-400 uppercase block mb-1 flex items-center gap-1"><Trophy className="w-3 h-3"/> Tipo de Jogo</label>
+                      <select className="w-full bg-transparent font-black outline-none uppercase text-xs" value={newSlotType} onChange={e => setNewSlotType(e.target.value as MatchType)}>
                          <option value="AMISTOSO">Amistoso</option>
                          <option value="FESTIVAL">Festival</option>
-                         <option value="ALUGUEL">Aluguel</option>
+                         <option value="ALUGUEL">Aluguel Avulso</option>
                       </select>
                    </div>
                    <div className="bg-gray-50 p-4 rounded-2xl border">
                       <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Esporte</label>
-                      <select className="w-full bg-transparent font-black outline-none" value={selectedSport} onChange={e => setSelectedSport(e.target.value)}>
+                      <select className="w-full bg-transparent font-black outline-none uppercase text-xs" value={selectedSport} onChange={e => setSelectedSport(e.target.value)}>
                          {SPORTS.map(s => <option key={s} value={s}>{s}</option>)}
                       </select>
                    </div>
                 </div>
 
+                {/* Local / Quadra */}
                 <div className="bg-gray-50 p-4 rounded-2xl border">
-                   <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Local / Quadra</label>
-                   <select className="w-full bg-transparent font-black outline-none" value={selectedCourt} onChange={e => setSelectedCourt(e.target.value)}>
-                      {field.courts?.length > 0 ? field.courts.map(c => <option key={c} value={c}>{c}</option>) : <option value="Principal">Principal</option>}
+                   <label className="text-[8px] font-black text-gray-400 uppercase block mb-1 flex items-center gap-1"><LayoutGrid className="w-3 h-3"/> Qual Quadra / Campo?</label>
+                   <select className="w-full bg-transparent font-black outline-none uppercase text-xs" value={selectedCourt} onChange={e => setSelectedCourt(e.target.value)}>
+                      {field.courts?.length > 0 ? field.courts.map(c => <option key={c} value={c}>{c}</option>) : <option value="Principal">Campo Principal</option>}
                    </select>
                 </div>
 
+                {/* Mandante */}
                 <div className="p-4 bg-gray-50 rounded-2xl border">
                    <div className="flex items-center gap-3 mb-4">
-                      <input type="checkbox" id="local" className="w-5 h-5 rounded-lg" checked={isLocalTeamChecked} onChange={e => setIsLocalTeamChecked(e.target.checked)} />
-                      <label htmlFor="local" className="text-[10px] font-black text-pitch uppercase">Incluir Mandante</label>
+                      <input type="checkbox" id="local" className="w-5 h-5 accent-pitch rounded-lg" checked={isLocalTeamChecked} onChange={e => setIsLocalTeamChecked(e.target.checked)} />
+                      <label htmlFor="local" className="text-[10px] font-black text-pitch uppercase">Possui Mandante?</label>
                    </div>
+                   
                    {isLocalTeamChecked && (
-                      <div className="space-y-4">
-                         <div className="flex p-1 bg-white rounded-xl border mb-4">
+                      <div className="animate-in fade-in zoom-in-95 duration-200 space-y-4">
+                         <div className="flex p-1 bg-white rounded-xl border">
                             <button onClick={() => setMandanteSource('MY_TEAMS')} className={`flex-1 py-2 text-[8px] font-black uppercase rounded-lg transition-all ${mandanteSource === 'MY_TEAMS' ? 'bg-pitch text-white' : 'text-gray-400'}`}>Meus Times</button>
-                            <button onClick={() => setMandanteSource('MENSALISTAS')} className={`flex-1 py-2 text-[8px] font-black uppercase rounded-lg transition-all ${mandanteSource === 'MENSALISTAS' ? 'bg-pitch text-white' : 'text-gray-400'}`}>Mensalistas</button>
+                            <button onClick={() => setMandanteSource('MENSALISTAS')} className={`flex-1 py-2 text-[8px] font-black uppercase rounded-lg transition-all ${mandanteSource === 'MENSALISTAS' ? 'bg-pitch text-white' : 'text-gray-400'}`}>Meus Mensalistas</button>
                          </div>
                          
                          <div>
                             <label className="text-[8px] font-black text-gray-400 uppercase block mb-2">Selecione o Time</label>
                             {mandanteSource === 'MY_TEAMS' ? (
-                               <div className="flex gap-2">
+                               <div className="flex flex-wrap gap-2">
                                   {currentUser.teams.map((t, i) => (
-                                     <button key={i} onClick={() => { setSelectedTeamIdx(i); setSelectedCategory(''); }} className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase transition-all ${selectedTeamIdx === i ? 'bg-pitch text-white' : 'bg-white border text-gray-400'}`}>{t.name}</button>
+                                     <button key={i} onClick={() => { setSelectedTeamIdx(i); setSelectedCategory(''); }} className={`flex-1 py-3 px-4 rounded-xl text-[10px] font-black uppercase transition-all ${selectedTeamIdx === i ? 'bg-pitch text-white' : 'bg-white border text-gray-400'}`}>{t.name}</button>
                                   ))}
                                </div>
                             ) : (
-                               <select className="w-full p-3 bg-white border rounded-xl font-black uppercase text-[10px]" value={selectedMensalistaId} onChange={e => {
+                               <select className="w-full p-3 bg-white border rounded-xl font-black uppercase text-[10px] outline-none" value={selectedMensalistaId} onChange={e => {
                                   setSelectedMensalistaId(e.target.value);
                                   const m = registeredTeams.find(t => t.id === e.target.value);
-                                  if (m) setSelectedCategory(m.categories[0]);
+                                  if (m) setSelectedCategory(m.categories[0] || '');
                                }}>
                                   <option value="">Selecione um Mensalista</option>
                                   {registeredTeams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
@@ -418,29 +421,33 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                             <label className="text-[8px] font-black text-gray-400 uppercase block mb-2">Categoria Mandante</label>
                             <div className="flex flex-wrap gap-2">
                                {(mandanteSource === 'MY_TEAMS' ? currentUser.teams[selectedTeamIdx]?.categories : registeredTeams.find(t => t.id === selectedMensalistaId)?.categories)?.map(c => (
-                                  <button key={c} onClick={() => setSelectedCategory(c)} className={`px-4 py-2 rounded-full text-[10px] font-black uppercase transition-all ${selectedCategory === c ? 'bg-grass-500 text-pitch' : 'bg-white border text-gray-400'}`}>{c}</button>
+                                  <button key={c} onClick={() => setSelectedCategory(c)} className={`px-4 py-2 rounded-full text-[10px] font-black uppercase transition-all ${selectedCategory === c ? 'bg-grass-500 text-pitch border-grass-500' : 'bg-white border text-gray-400'}`}>{c}</button>
                                ))}
                             </div>
                          </div>
+
                          {selectedCategory && (
-                            <div className="p-3 bg-grass-50 rounded-xl border border-grass-100">
+                            <div className="p-3 bg-grass-50 rounded-xl border border-grass-200">
                                <p className="text-[9px] font-black text-grass-700 uppercase italic">Aceita adversários (±1): {calculateAllowedRange(selectedCategory).join(', ')}</p>
                             </div>
                          )}
                       </div>
                    )}
                 </div>
+
+                {/* Preço */}
                 <div className="bg-gray-50 p-4 rounded-2xl border">
                    <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Valor do Horário (R$)</label>
-                   <input type="number" className="w-full bg-transparent font-black text-xl outline-none" value={newSlotPrice} onChange={e => setNewSlotPrice(Number(e.target.value))} />
+                   <input type="number" className="w-full bg-transparent font-black text-2xl outline-none text-pitch" value={newSlotPrice} onChange={e => setNewSlotPrice(Number(e.target.value))} />
                 </div>
-                <Button onClick={handleSaveSlot} isLoading={isLoading} className="w-full py-5 rounded-[2rem] font-black uppercase text-xs shadow-xl">Confirmar</Button>
+
+                <Button onClick={handleSaveSlot} isLoading={isLoading} className="w-full py-6 rounded-[2.5rem] font-black uppercase text-xs shadow-xl active:scale-95">Publicar Horário</Button>
              </div>
            </div>
         </div>
       )}
 
-      {/* Modal Criar/Editar Mensalista */}
+      {/* Modal Mensalista (Criar/Editar) */}
       {showAddMensalistaModal && (
         <div className="fixed inset-0 bg-pitch/95 backdrop-blur-md z-[100] flex items-end">
            <div className="bg-white w-full rounded-t-[3rem] p-10 animate-in slide-in-from-bottom duration-500 max-h-[90vh] overflow-y-auto">
@@ -451,39 +458,43 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
               <div className="space-y-4">
                  <div className="bg-gray-50 p-4 rounded-2xl border">
                     <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Nome do Time</label>
-                    <input className="w-full bg-transparent font-black outline-none" value={mensalistaName} onChange={e => setMensalistaName(e.target.value)} />
+                    <input className="w-full bg-transparent font-black outline-none text-pitch" value={mensalistaName} onChange={e => setMensalistaName(e.target.value)} />
                  </div>
-                 <div className="grid grid-cols-2 gap-4">
+                 
+                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="bg-gray-50 p-4 rounded-2xl border">
-                       <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Capitão</label>
-                       <input className="w-full bg-transparent font-black outline-none" value={mensalistaCaptain} onChange={e => setMensalistaCaptain(e.target.value)} placeholder="Nome do Capitão" />
+                       <label className="text-[8px] font-black text-gray-400 uppercase block mb-1 flex items-center gap-1"><UserIcon className="w-3 h-3"/> Nome do Capitão</label>
+                       <input className="w-full bg-transparent font-bold outline-none text-pitch" value={mensalistaCaptain} onChange={e => setMensalistaCaptain(e.target.value)} placeholder="Ex: Rodrigo Capitão" />
                     </div>
                     <div className="bg-gray-50 p-4 rounded-2xl border">
-                       <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">WhatsApp Capitão</label>
-                       <input className="w-full bg-transparent font-black outline-none" value={mensalistaPhone} onChange={e => setMensalistaPhone(e.target.value)} placeholder="(00) 00000-0000" />
+                       <label className="text-[8px] font-black text-gray-400 uppercase block mb-1 flex items-center gap-1"><Phone className="w-3 h-3"/> WhatsApp Capitão</label>
+                       <input className="w-full bg-transparent font-bold outline-none text-pitch" value={mensalistaPhone} onChange={e => setMensalistaPhone(e.target.value)} placeholder="(11) 99999-9999" />
                     </div>
                  </div>
+
                  <div className="grid grid-cols-2 gap-4">
                     <div className="bg-gray-50 p-4 rounded-2xl border">
-                       <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Dia Fixo</label>
-                       <select className="w-full bg-transparent font-black outline-none" value={mensalistaDay} onChange={e => setMensalistaDay(Number(e.target.value))}>
+                       <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Dia da Semana</label>
+                       <select className="w-full bg-transparent font-black outline-none text-xs uppercase" value={mensalistaDay} onChange={e => setMensalistaDay(Number(e.target.value))}>
                           {['Dom','Seg','Ter','Qua','Qui','Sex','Sab'].map((d, i) => <option key={i} value={i}>{d}</option>)}
                        </select>
                     </div>
                     <div className="bg-gray-50 p-4 rounded-2xl border">
                        <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Horário</label>
-                       <input type="time" className="w-full bg-transparent font-black outline-none" value={mensalistaTime} onChange={e => setMensalistaTime(e.target.value)} />
+                       <input type="time" className="w-full bg-transparent font-black outline-none text-pitch" value={mensalistaTime} onChange={e => setMensalistaTime(e.target.value)} />
                     </div>
                  </div>
+
                  <div className="bg-gray-50 p-4 rounded-2xl border">
                     <label className="text-[8px] font-black text-gray-400 uppercase block mb-2">Categoria</label>
                     <div className="flex flex-wrap gap-2">
                        {CATEGORY_ORDER.map(c => (
-                          <button key={c} onClick={() => setMensalistaCategory(c)} className={`px-3 py-1.5 rounded-full text-[9px] font-black uppercase transition-all ${mensalistaCategory === c ? 'bg-pitch text-white' : 'bg-white border text-gray-400'}`}>{c}</button>
+                          <button key={c} onClick={() => setMensalistaCategory(c)} className={`px-3 py-2 rounded-full text-[9px] font-black uppercase transition-all ${mensalistaCategory === c ? 'bg-pitch text-white' : 'bg-white border text-gray-400'}`}>{c}</button>
                        ))}
                     </div>
                  </div>
-                 <Button onClick={handleSaveMensalista} isLoading={isLoading} className="w-full py-5 rounded-[2rem] font-black uppercase text-xs shadow-xl">Salvar Mensalista</Button>
+                 
+                 <Button onClick={handleSaveMensalista} isLoading={isLoading} className="w-full py-6 rounded-[2.5rem] font-black uppercase text-xs shadow-xl active:scale-95">Salvar Dados</Button>
               </div>
            </div>
         </div>
