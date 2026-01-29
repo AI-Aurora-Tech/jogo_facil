@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { User, UserRole, Field, TeamConfig } from '../types';
 import { Button } from './Button';
-import { X, User as UserIcon, Shield, Check, Plus, AlertCircle, Building2, MapPin, Smartphone, Camera, Trash2 } from 'lucide-react';
+import { X, User as UserIcon, Shield, Check, Plus, AlertCircle, Building2, MapPin, Smartphone, Camera, Trash2, LayoutGrid } from 'lucide-react';
 import { formatCategory, convertFileToBase64 } from '../utils';
 
 interface EditProfileModalProps {
@@ -21,6 +21,8 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({ user, field,
   const [arenaName, setArenaName] = useState(field?.name || '');
   const [arenaLocation, setArenaLocation] = useState(field?.location || '');
   const [arenaPrice, setArenaPrice] = useState(field?.hourlyRate || 0);
+  const [courts, setCourts] = useState<string[]>(field?.courts || []);
+  const [newCourt, setNewCourt] = useState('');
 
   const [catInput, setCatInput] = useState('');
   const [error, setError] = useState('');
@@ -57,6 +59,17 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({ user, field,
     setTeams(newTeams);
   };
 
+  const addCourt = () => {
+    if (newCourt.trim() && !courts.includes(newCourt.trim())) {
+      setCourts([...courts, newCourt.trim()]);
+      setNewCourt('');
+    }
+  };
+
+  const removeCourt = (val: string) => {
+    setCourts(courts.filter(c => c !== val));
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (teams.length === 0) {
@@ -66,7 +79,7 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({ user, field,
     const updatedUser = { ...user, name, phoneNumber: phone, teams };
     let updatedField;
     if (user.role === UserRole.FIELD_OWNER && field) {
-      updatedField = { name: arenaName, location: arenaLocation, hourlyRate: arenaPrice };
+      updatedField = { name: arenaName, location: arenaLocation, hourlyRate: arenaPrice, courts };
     }
     onUpdate(updatedUser, updatedField);
   };
@@ -96,9 +109,44 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({ user, field,
             </div>
           </section>
 
+          {user.role === UserRole.FIELD_OWNER && (
+            <section className="space-y-6">
+              <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest border-b pb-2 flex items-center gap-2"><Building2 className="w-3 h-3" /> Gestão da Arena</h4>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="bg-gray-50 p-4 rounded-2xl border">
+                   <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Nome da Arena</label>
+                   <input className="w-full bg-transparent font-bold text-pitch outline-none" placeholder="Ex: CDC Ibirapuera" value={arenaName} onChange={e => setArenaName(e.target.value)} />
+                </div>
+                <div className="bg-gray-50 p-4 rounded-2xl border">
+                   <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Preço Base (R$)</label>
+                   <input className="w-full bg-transparent font-bold text-pitch outline-none" type="number" value={arenaPrice} onChange={e => setArenaPrice(Number(e.target.value))} />
+                </div>
+              </div>
+              <div className="bg-gray-50 p-4 rounded-2xl border">
+                 <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Endereço</label>
+                 <input className="w-full bg-transparent font-bold text-pitch outline-none" placeholder="Rua, Número, Bairro" value={arenaLocation} onChange={e => setArenaLocation(e.target.value)} />
+              </div>
+
+              <div className="bg-grass-50 p-6 rounded-[2.5rem] border border-grass-100">
+                <h5 className="text-[9px] font-black text-grass-700 uppercase tracking-widest mb-4 flex items-center gap-2"><LayoutGrid className="w-3 h-3"/> Minhas Quadras / Campos</h5>
+                <div className="flex gap-2 mb-4">
+                   <input className="flex-1 bg-white p-3 rounded-xl border text-xs font-bold" placeholder="Ex: Society 1, Quadra Coberta..." value={newCourt} onChange={e => setNewCourt(e.target.value)} />
+                   <button type="button" onClick={addCourt} className="bg-pitch text-white p-3 rounded-xl active:scale-95"><Plus className="w-4 h-4"/></button>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                   {courts.map(c => (
+                     <div key={c} className="bg-white border border-grass-200 px-3 py-1.5 rounded-full text-[9px] font-black uppercase text-pitch flex items-center gap-2">
+                       {c} <X onClick={() => removeCourt(c)} className="w-3 h-3 cursor-pointer text-red-500" />
+                     </div>
+                   ))}
+                </div>
+              </div>
+            </section>
+          )}
+
           <section className="space-y-6">
             <div className="flex justify-between items-center border-b pb-2">
-              <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest flex items-center gap-2"><Shield className="w-3 h-3" /> Meus Times (Max 2)</h4>
+              <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest flex items-center gap-2"><Shield className="w-3 h-3" /> Meus Times (Mandantes)</h4>
               {teams.length < 2 && (
                 <button type="button" onClick={handleAddTeam} className="text-[10px] font-black text-grass-500 uppercase flex items-center gap-1"><Plus className="w-3 h-3" /> Adicionar</button>
               )}
@@ -108,17 +156,14 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({ user, field,
               {teams.map((team, idx) => (
                 <div key={idx} className="bg-gray-50 p-6 rounded-[2.5rem] border border-gray-200 relative">
                   <button type="button" onClick={() => handleRemoveTeam(idx)} className="absolute top-4 right-4 text-red-400 hover:text-red-600"><Trash2 className="w-4 h-4"/></button>
-                  
                   <div className="mb-4">
-                    <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Nome do Time {idx + 1}</label>
+                    <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Nome do Time</label>
                     <input className="w-full bg-transparent border-b-2 font-black text-lg outline-none text-pitch focus:border-pitch" value={team.name} onChange={e => updateTeamName(idx, e.target.value)} />
                   </div>
-
                   <div className="flex gap-2">
                     <input className="flex-1 bg-white p-3 rounded-xl border text-xs font-bold" placeholder="Add Categoria (ex: sub 9)" value={catInput} onChange={e => setCatInput(e.target.value)} />
                     <button type="button" onClick={() => addCategoryToTeam(idx)} className="bg-pitch text-white p-3 rounded-xl"><Plus className="w-4 h-4"/></button>
                   </div>
-
                   <div className="flex flex-wrap gap-2 mt-4">
                     {team.categories.map(c => (
                       <div key={c} className="bg-white border-2 border-pitch px-3 py-1.5 rounded-full text-[10px] font-black uppercase flex items-center gap-2">
@@ -131,18 +176,7 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({ user, field,
             </div>
           </section>
 
-          {user.role === UserRole.FIELD_OWNER && (
-            <section className="space-y-4">
-              <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest border-b pb-2 flex items-center gap-2"><Building2 className="w-3 h-3" /> Arena</h4>
-              <div className="space-y-3">
-                <input className="w-full p-4 bg-gray-50 rounded-2xl border font-bold" placeholder="Nome da Arena" value={arenaName} onChange={e => setArenaName(e.target.value)} />
-                <input className="w-full p-4 bg-gray-50 rounded-2xl border font-bold" placeholder="Localização" value={arenaLocation} onChange={e => setArenaLocation(e.target.value)} />
-                <input className="w-full p-4 bg-gray-50 rounded-2xl border font-bold" type="number" placeholder="Preço" value={arenaPrice} onChange={e => setArenaPrice(Number(e.target.value))} />
-              </div>
-            </section>
-          )}
-
-          <Button type="submit" className="w-full py-5 rounded-[2rem] font-black uppercase text-xs shadow-xl">Salvar Alterações</Button>
+          <Button type="submit" className="w-full py-5 rounded-[2rem] font-black uppercase text-xs shadow-xl">Salvar Todas as Configurações</Button>
         </form>
       </div>
     </div>

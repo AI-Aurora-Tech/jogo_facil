@@ -291,7 +291,8 @@ const App: React.FC = () => {
           currentUserContext.role === UserRole.FIELD_OWNER ? (
             <FieldDashboard 
                 categories={categories} 
-                field={fields.find(f => f.ownerId === currentUserContext.id) || { id: '', name: 'Carregando...', ownerId: '', location: '', hourlyRate: 0, cancellationFeePercent: 0, pixConfig: { key: '', name: '' }, imageUrl: '', contactPhone: '', latitude: 0, longitude: 0 }} 
+                {/* Fix: Added 'courts: []' to fallback field object to satisfy Field interface requirement */}
+                field={fields.find(f => f.ownerId === currentUserContext.id) || { id: '', name: 'Carregando...', ownerId: '', location: '', hourlyRate: 0, cancellationFeePercent: 0, pixConfig: { key: '', name: '' }, imageUrl: '', contactPhone: '', latitude: 0, longitude: 0, courts: [] }} 
                 slots={slots.filter(s => s.fieldId === fields.find(f => f.ownerId === currentUserContext.id)?.id)} 
                 currentUser={currentUserContext}
                 onAddSlot={async s => { await api.createSlots(s); refreshData(); }}

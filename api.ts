@@ -128,13 +128,14 @@ export const api = {
         ownerId: f.owner_id,
         name: f.name,
         location: f.location,
-        hourlyRate: f.hourly_rate,
+        hourlyRate: f.hourly_rate || 0,
         cancellationFeePercent: f.cancellation_fee_percent,
         pixConfig: { key: f.pix_key || '', name: f.pix_name || '' },
         imageUrl: f.image_url,
         contactPhone: f.contact_phone,
         latitude: f.latitude,
-        longitude: f.longitude
+        longitude: f.longitude,
+        courts: f.courts || []
     }));
   },
 
@@ -143,6 +144,8 @@ export const api = {
     if (updates.name) payload.name = updates.name;
     if (updates.location) payload.location = updates.location;
     if (updates.hourlyRate !== undefined) payload.hourly_rate = updates.hourlyRate;
+    if (updates.courts) payload.courts = updates.courts;
+    
     const { data, error } = await supabase.from('field').update(payload).eq('id', fieldId).select().single();
     if (error) throw error;
     return data as any;
@@ -172,9 +175,11 @@ export const api = {
       opponentTeamPhone: s.opponent_team_phone,
       allowedOpponentCategories: s.allowed_opponent_categories || [],
       status: s.status,
-      price: s.price,
+      price: s.price || 0,
       receiptUrl: s.receipt_url,
-      fieldRating: s.rating_given
+      fieldRating: s.rating_given,
+      courtName: s.court_name,
+      sport: s.sport || 'Futebol'
     }));
   },
 
@@ -191,6 +196,8 @@ export const api = {
     if (data.price !== undefined) payload.price = data.price;
     if (data.localTeamCategory) payload.local_team_category = data.localTeamCategory;
     if (data.allowedOpponentCategories) payload.allowed_opponent_categories = data.allowedOpponentCategories;
+    if (data.courtName) payload.court_name = data.courtName;
+    if (data.sport) payload.sport = data.sport;
     
     const { error } = await supabase.from('match_slot').update(payload).eq('id', slotId);
     if (error) throw error;
@@ -209,11 +216,13 @@ export const api = {
       local_team_phone: s.localTeamPhone || null,
       allowed_opponent_categories: s.allowedOpponentCategories || [],
       price: s.price || 0,
-      status: s.status || 'available'
+      status: s.status || 'available',
+      court_name: s.courtName || null,
+      sport: s.sport || 'Futebol'
     }));
     const { error } = await supabase.from('match_slot').insert(payload);
     if (error) {
-      console.error("Supabase Error:", error);
+      console.error("Supabase Insertion Error:", error);
       throw error;
     }
   },
@@ -232,7 +241,9 @@ export const api = {
       fixedTime: t.fixed_time,
       categories: t.categories,
       logoUrl: t.logo_url,
-      createdAt: t.created_at
+      createdAt: t.created_at,
+      captainName: t.captain_name,
+      captainPhone: t.captain_phone
     }));
   },
 
@@ -242,7 +253,9 @@ export const api = {
       name: team.name,
       fixed_day: team.fixedDay,
       fixed_time: team.fixedTime,
-      categories: team.categories
+      categories: team.categories,
+      captain_name: team.captainName,
+      captain_phone: team.captainPhone
     }]);
   },
 
@@ -252,6 +265,9 @@ export const api = {
     if (updates.fixedDay) payload.fixed_day = updates.fixedDay;
     if (updates.fixedTime) payload.fixed_time = updates.fixedTime;
     if (updates.categories) payload.categories = updates.categories;
+    if (updates.captainName) payload.captain_name = updates.captainName;
+    if (updates.captainPhone) payload.captain_phone = updates.captainPhone;
+    
     const { error } = await supabase.from('registered_team').update(payload).eq('id', teamId);
     if (error) throw error;
   },

@@ -1,8 +1,8 @@
 
 import React, { useState, useEffect } from 'react';
-import { Plus, Trash2, Calendar, Clock, RefreshCcw, Loader2, X, Swords, Edit3, MessageCircle, TrendingUp, CheckCircle2, User as UserIcon, CalendarDays, History as HistoryIcon, UserCheck, Phone, Edit } from 'lucide-react';
+import { Plus, Trash2, Calendar, Clock, RefreshCcw, Loader2, X, Swords, Edit3, MessageCircle, TrendingUp, CheckCircle2, User as UserIcon, CalendarDays, History as HistoryIcon, UserCheck, Phone, Edit, Building2, MapPin } from 'lucide-react';
 import { Button } from '../components/Button';
-import { Field, MatchSlot, MatchType, User, CATEGORY_ORDER, RegisteredTeam } from '../types';
+import { Field, MatchSlot, MatchType, User, CATEGORY_ORDER, RegisteredTeam, SPORTS } from '../types';
 import { api } from '../api';
 
 interface FieldDashboardProps {
@@ -15,12 +15,10 @@ interface FieldDashboardProps {
   onDeleteSlot: (slotId: string) => void;
   onConfirmBooking: (slotId: string) => void;
   onRejectBooking: (slotId: string) => void;
-  // Fix: Add missing props used in App.tsx
   onUpdateField: (fieldId: string, updates: Partial<Field>) => Promise<boolean>;
   onRateTeam: () => void;
 }
 
-// Fix: Destructure missing props categories, onUpdateField, and onRateTeam
 export const FieldDashboard: React.FC<FieldDashboardProps> = ({ 
   field, slots, onAddSlot, onRefreshData, onDeleteSlot, onConfirmBooking, onRejectBooking, currentUser, categories, onUpdateField, onRateTeam
 }) => {
@@ -40,11 +38,16 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
   const [newSlotType, setNewSlotType] = useState<MatchType>('AMISTOSO');
   const [newSlotPrice, setNewSlotPrice] = useState(field.hourlyRate || 0);
   const [isLocalTeamChecked, setIsLocalTeamChecked] = useState(false);
+  const [mandanteSource, setMandanteSource] = useState<'MY_TEAMS' | 'MENSALISTAS'>('MY_TEAMS');
   const [selectedTeamIdx, setSelectedTeamIdx] = useState(0);
+  const [selectedMensalistaId, setSelectedMensalistaId] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('');
+  const [selectedCourt, setSelectedCourt] = useState(field.courts?.[0] || '');
+  const [selectedSport, setSelectedSport] = useState('Futebol');
 
   // New/Edit Mensalista State
   const [mensalistaName, setMensalistaName] = useState('');
+  const [mensalistaCaptain, setMensalistaCaptain] = useState('');
   const [mensalistaPhone, setMensalistaPhone] = useState('');
   const [mensalistaDay, setMensalistaDay] = useState(1);
   const [mensalistaTime, setMensalistaTime] = useState('19:00');
@@ -63,13 +66,11 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
 
   const calculateAllowedRange = (cat: string): string[] => {
     if (!cat) return [];
-    // Strict numeric range logic for "Sub-X"
     const subMatch = cat.match(/Sub-(\d+)/i);
     if (subMatch) {
       const num = parseInt(subMatch[1]);
       return [`Sub-${num - 1}`, `Sub-${num}`, `Sub-${num + 1}`];
     }
-    // For categories like "Principal", "Veterano", etc., we can use CATEGORY_ORDER logic or just return the cat
     const idx = CATEGORY_ORDER.indexOf(cat);
     if (idx === -1) return [cat];
     const range = [];
@@ -82,16 +83,33 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
   const handleSaveSlot = async () => {
     setIsLoading(true);
     try {
+      let teamName = '';
+      let teamPhone = '';
+      
+      if (isLocalTeamChecked) {
+        if (mandanteSource === 'MY_TEAMS') {
+          const team = currentUser.teams[selectedTeamIdx];
+          teamName = team?.name || '';
+          teamPhone = currentUser.phoneNumber;
+        } else {
+          const mensa = registeredTeams.find(t => t.id === selectedMensalistaId);
+          teamName = mensa?.name || '';
+          teamPhone = mensa?.captainPhone || '';
+        }
+      }
+
       const allowedCats = selectedCategory ? calculateAllowedRange(selectedCategory) : [];
-      const team = currentUser.teams[selectedTeamIdx];
 
       if (editingSlot) {
         await api.updateSlot(editingSlot.id, {
           matchType: newSlotType,
           price: newSlotPrice,
           localTeamCategory: isLocalTeamChecked ? selectedCategory : undefined,
+          localTeamName: isLocalTeamChecked ? teamName : undefined,
           allowedOpponentCategories: allowedCats,
-          hasLocalTeam: isLocalTeamChecked
+          hasLocalTeam: isLocalTeamChecked,
+          courtName: selectedCourt,
+          sport: selectedSport
         });
         setEditingSlot(null);
       } else {
@@ -103,19 +121,22 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
           matchType: newSlotType,
           isBooked: false,
           hasLocalTeam: isLocalTeamChecked,
-          localTeamName: isLocalTeamChecked ? team.name : undefined,
+          localTeamName: isLocalTeamChecked ? teamName : undefined,
           localTeamCategory: isLocalTeamChecked ? selectedCategory : undefined,
-          localTeamPhone: isLocalTeamChecked ? currentUser.phoneNumber : undefined,
+          localTeamPhone: isLocalTeamChecked ? teamPhone : undefined,
           allowedOpponentCategories: allowedCats,
-          price: newSlotPrice,
-          status: 'available'
+          price: newSlotPrice || 0,
+          status: 'available',
+          courtName: selectedCourt,
+          sport: selectedSport
         };
         await onAddSlot([payload]);
       }
       setShowAddSlotModal(false);
       onRefreshData();
-    } catch (e) {
-      alert("Erro ao salvar horário.");
+    } catch (e: any) {
+      console.error(e);
+      alert("Erro ao salvar horário: " + (e.message || "Tente novamente."));
     } finally {
       setIsLoading(false);
     }
@@ -130,7 +151,9 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
           name: mensalistaName,
           fixedDay: String(mensalistaDay),
           fixedTime: mensalistaTime,
-          categories: [mensalistaCategory]
+          categories: [mensalistaCategory],
+          captainName: mensalistaCaptain,
+          captainPhone: mensalistaPhone
         });
         setEditingMensalista(null);
       } else {
@@ -139,9 +162,11 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
           name: mensalistaName,
           fixedDay: String(mensalistaDay),
           fixedTime: mensalistaTime,
-          categories: [mensalistaCategory]
+          categories: [mensalistaCategory],
+          captainName: mensalistaCaptain,
+          captainPhone: mensalistaPhone
         });
-        // Generate 12 weeks only for NEW mensalistas
+        // Generate 12 weeks
         const newSlots: Omit<MatchSlot, 'id'>[] = [];
         const today = new Date();
         let count = 0;
@@ -164,7 +189,9 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
               localTeamPhone: mensalistaPhone,
               allowedOpponentCategories: calculateAllowedRange(mensalistaCategory),
               price: field.hourlyRate,
-              status: 'available'
+              status: 'available',
+              courtName: field.courts?.[0] || 'Principal',
+              sport: 'Futebol'
             });
             count++;
           }
@@ -190,12 +217,16 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
     setNewSlotPrice(slot.price);
     setIsLocalTeamChecked(slot.hasLocalTeam);
     setSelectedCategory(slot.localTeamCategory || '');
+    setSelectedCourt(slot.courtName || '');
+    setSelectedSport(slot.sport || 'Futebol');
     setShowAddSlotModal(true);
   };
 
   const openEditMensalista = (team: RegisteredTeam) => {
     setEditingMensalista(team);
     setMensalistaName(team.name);
+    setMensalistaCaptain(team.captainName || '');
+    setMensalistaPhone(team.captainPhone || '');
     setMensalistaDay(Number(team.fixedDay));
     setMensalistaTime(team.fixedTime);
     setMensalistaCategory(team.categories[0] || '');
@@ -261,7 +292,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                    <div>
                       <div className="flex items-center gap-2">
                         <span className={`text-[8px] font-black px-1.5 py-0.5 rounded uppercase ${s.matchType === 'FIXO' ? 'bg-orange-100 text-orange-600' : 'bg-grass-100 text-grass-600'}`}>{s.matchType}</span>
-                        <span className="text-[8px] font-black text-gray-400 uppercase italic">Vs: {s.allowedOpponentCategories.join(', ')}</span>
+                        <span className="text-[8px] font-black text-gray-400 uppercase italic">{s.courtName || 'Principal'} • {s.sport}</span>
                       </div>
                       <p className="font-black text-pitch text-sm mt-1">{s.localTeamName || 'Vaga Aberta'} ({s.localTeamCategory || 'Livre'})</p>
                    </div>
@@ -292,6 +323,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                      <div className="w-14 h-14 bg-gray-50 rounded-2xl flex items-center justify-center font-black text-pitch text-xl border">{t.name.charAt(0)}</div>
                      <div>
                         <h4 className="font-black text-pitch uppercase leading-none">{t.name}</h4>
+                        <p className="text-[9px] font-bold text-gray-400 uppercase mt-1">Capitão: {t.captainName || 'Não Inf.'}</p>
                         <div className="flex items-center gap-3 mt-2">
                            <span className="text-[9px] font-black text-gray-400 uppercase flex items-center gap-1"><Clock className="w-3 h-3"/> {['Dom','Seg','Ter','Qua','Qui','Sex','Sab'][Number(t.fixedDay)]} às {t.fixedTime}</span>
                            <span className="text-[9px] font-black bg-pitch text-grass-500 px-2 py-0.5 rounded uppercase">{t.categories[0]}</span>
@@ -324,7 +356,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                           <Swords className="w-3 h-3 text-gray-300" />
                           <span className="font-black text-pitch text-sm">{s.opponentTeamName || 'Aguardando'}</span>
                        </div>
-                       <p className="text-[9px] font-bold text-gray-400 uppercase mt-1">{s.date.split('-').reverse().join('/')} • R$ {s.price}</p>
+                       <p className="text-[9px] font-bold text-gray-400 uppercase mt-1">{s.date.split('-').reverse().join('/')} • R$ {s.price} • {s.courtName}</p>
                     </div>
                   </div>
                   <div className={`px-3 py-1 rounded-full text-[8px] font-black uppercase ${s.status === 'confirmed' ? 'bg-grass-100 text-grass-600' : 'bg-gray-100 text-gray-500'}`}>
@@ -355,6 +387,22 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                       <input type="time" className="w-full bg-transparent font-black outline-none" value={newSlotTime} onChange={e => setNewSlotTime(e.target.value)} />
                    </div>
                 </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                   <div className="bg-gray-50 p-4 rounded-2xl border">
+                      <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Qual Quadra?</label>
+                      <select className="w-full bg-transparent font-black outline-none" value={selectedCourt} onChange={e => setSelectedCourt(e.target.value)}>
+                         {field.courts?.length > 0 ? field.courts.map(c => <option key={c} value={c}>{c}</option>) : <option value="Principal">Principal</option>}
+                      </select>
+                   </div>
+                   <div className="bg-gray-50 p-4 rounded-2xl border">
+                      <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Qual Esporte?</label>
+                      <select className="w-full bg-transparent font-black outline-none" value={selectedSport} onChange={e => setSelectedSport(e.target.value)}>
+                         {SPORTS.map(s => <option key={s} value={s}>{s}</option>)}
+                      </select>
+                   </div>
+                </div>
+
                 <div className="p-4 bg-gray-50 rounded-2xl border">
                    <div className="flex items-center gap-3 mb-4">
                       <input type="checkbox" id="local" className="w-5 h-5 rounded-lg" checked={isLocalTeamChecked} onChange={e => setIsLocalTeamChecked(e.target.checked)} />
@@ -362,12 +410,43 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                    </div>
                    {isLocalTeamChecked && (
                       <div className="space-y-4">
+                         <div className="flex p-1 bg-white rounded-xl border mb-4">
+                            <button onClick={() => setMandanteSource('MY_TEAMS')} className={`flex-1 py-2 text-[8px] font-black uppercase rounded-lg transition-all ${mandanteSource === 'MY_TEAMS' ? 'bg-pitch text-white' : 'text-gray-400'}`}>Meus Times</button>
+                            <button onClick={() => setMandanteSource('MENSALISTAS')} className={`flex-1 py-2 text-[8px] font-black uppercase rounded-lg transition-all ${mandanteSource === 'MENSALISTAS' ? 'bg-pitch text-white' : 'text-gray-400'}`}>Mensalistas</button>
+                         </div>
+                         
                          <div>
-                            <label className="text-[8px] font-black text-gray-400 uppercase block mb-2">Categoria Mandante</label>
+                            <label className="text-[8px] font-black text-gray-400 uppercase block mb-2">Selecione o Time</label>
+                            {mandanteSource === 'MY_TEAMS' ? (
+                               <div className="flex gap-2">
+                                  {currentUser.teams.map((t, i) => (
+                                     <button key={i} onClick={() => { setSelectedTeamIdx(i); setSelectedCategory(''); }} className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase transition-all ${selectedTeamIdx === i ? 'bg-pitch text-white' : 'bg-white border text-gray-400'}`}>{t.name}</button>
+                                  ))}
+                               </div>
+                            ) : (
+                               <select className="w-full p-3 bg-white border rounded-xl font-black uppercase text-[10px]" value={selectedMensalistaId} onChange={e => {
+                                  setSelectedMensalistaId(e.target.value);
+                                  const m = registeredTeams.find(t => t.id === e.target.value);
+                                  if (m) setSelectedCategory(m.categories[0]);
+                               }}>
+                                  <option value="">Selecione um Mensalista</option>
+                                  {registeredTeams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                               </select>
+                            )}
+                         </div>
+
+                         <div>
+                            <label className="text-[8px] font-black text-gray-400 uppercase block mb-2">Qual a Categoria do Mandante?</label>
                             <div className="flex flex-wrap gap-2">
-                               {currentUser.teams[selectedTeamIdx]?.categories.map(c => (
-                                  <button key={c} onClick={() => setSelectedCategory(c)} className={`px-4 py-2 rounded-full text-[10px] font-black uppercase transition-all ${selectedCategory === c ? 'bg-grass-500 text-pitch' : 'bg-white border text-gray-400'}`}>{c}</button>
-                               ))}
+                               {mandanteSource === 'MY_TEAMS' ? (
+                                  currentUser.teams[selectedTeamIdx]?.categories.map(c => (
+                                     <button key={c} onClick={() => setSelectedCategory(c)} className={`px-4 py-2 rounded-full text-[10px] font-black uppercase transition-all ${selectedCategory === c ? 'bg-grass-500 text-pitch' : 'bg-white border text-gray-400'}`}>{c}</button>
+                                  ))
+                               ) : (
+                                  registeredTeams.find(t => t.id === selectedMensalistaId)?.categories.map(c => (
+                                     <button key={c} onClick={() => setSelectedCategory(c)} className={`px-4 py-2 rounded-full text-[10px] font-black uppercase transition-all ${selectedCategory === c ? 'bg-grass-500 text-pitch' : 'bg-white border text-gray-400'}`}>{c}</button>
+                                  ))
+                               )}
                             </div>
                          </div>
                          {selectedCategory && (
@@ -379,10 +458,10 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                    )}
                 </div>
                 <div className="bg-gray-50 p-4 rounded-2xl border">
-                   <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Valor (R$)</label>
+                   <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Valor do Horário (R$)</label>
                    <input type="number" className="w-full bg-transparent font-black text-xl outline-none" value={newSlotPrice} onChange={e => setNewSlotPrice(Number(e.target.value))} />
                 </div>
-                <Button onClick={handleSaveSlot} isLoading={isLoading} className="w-full py-5 rounded-[2rem] font-black uppercase text-xs shadow-xl">Confirmar</Button>
+                <Button onClick={handleSaveSlot} isLoading={isLoading} className="w-full py-5 rounded-[2rem] font-black uppercase text-xs shadow-xl">Confirmar Publicação</Button>
              </div>
            </div>
         </div>
@@ -400,6 +479,16 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                  <div className="bg-gray-50 p-4 rounded-2xl border">
                     <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Nome do Time</label>
                     <input className="w-full bg-transparent font-black outline-none" value={mensalistaName} onChange={e => setMensalistaName(e.target.value)} />
+                 </div>
+                 <div className="grid grid-cols-2 gap-4">
+                    <div className="bg-gray-50 p-4 rounded-2xl border">
+                       <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Nome do Capitão</label>
+                       <input className="w-full bg-transparent font-black outline-none" value={mensalistaCaptain} onChange={e => setMensalistaCaptain(e.target.value)} placeholder="Ex: João da Silva" />
+                    </div>
+                    <div className="bg-gray-50 p-4 rounded-2xl border">
+                       <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">WhatsApp Capitão</label>
+                       <input className="w-full bg-transparent font-black outline-none" value={mensalistaPhone} onChange={e => setMensalistaPhone(e.target.value)} placeholder="(00) 00000-0000" />
+                    </div>
                  </div>
                  <div className="grid grid-cols-2 gap-4">
                     <div className="bg-gray-50 p-4 rounded-2xl border">
@@ -421,7 +510,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                        ))}
                     </div>
                  </div>
-                 <Button onClick={handleSaveMensalista} isLoading={isLoading} className="w-full py-5 rounded-[2rem] font-black uppercase text-xs shadow-xl">Salvar</Button>
+                 <Button onClick={handleSaveMensalista} isLoading={isLoading} className="w-full py-5 rounded-[2rem] font-black uppercase text-xs shadow-xl">Salvar Mensalista</Button>
               </div>
            </div>
         </div>

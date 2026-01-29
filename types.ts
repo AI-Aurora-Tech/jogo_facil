@@ -31,16 +31,16 @@ export interface User {
   role: UserRole;
   subscription: SubscriptionPlan;
   subscriptionExpiry: string | null;
-  teams: TeamConfig[]; // Max 2 teams
+  teams: TeamConfig[];
   latitude?: number;
   longitude?: number;
   teamRating?: number;
   teamRatingCount?: number;
-  // Deprecated fields kept for compatibility during transition
+  // Fix: Adding missing properties used in App.tsx and services/api.ts
   teamName?: string;
   teamCategories?: string[];
   teamLogoUrl?: string;
-  subTeams?: string[];
+  subTeams?: TeamConfig[];
 }
 
 export interface Notification {
@@ -65,6 +65,7 @@ export interface Field {
   contactPhone: string;
   latitude: number;
   longitude: number;
+  courts: string[]; // List of available courts/spaces
 }
 
 export interface MatchSlot {
@@ -86,40 +87,16 @@ export interface MatchSlot {
   opponentTeamName?: string;
   opponentTeamCategory?: string;
   opponentTeamPhone?: string;
-  allowedOpponentCategories: string[]; // Range of ±1 category
+  allowedOpponentCategories: string[];
   status: 'available' | 'pending_verification' | 'confirmed';
   price: number;
   receiptUrl?: string;
   fieldRating?: number;
   fieldRatingComment?: string;
+  courtName?: string; // Which court this belongs to
+  sport: string;     // Soccer, Volleyball, etc.
 }
 
-/**
- * Interface for PIX receipt verification result.
- */
-export interface VerificationResult {
-  isValid: boolean;
-  amountFound: number | null;
-  dateFound: string | null;
-  reason: string;
-}
-
-/**
- * Interface for tracking pending profile or data updates.
- */
-export interface PendingUpdate {
-  id: string;
-  requesterId: string;
-  targetId: string;
-  entityType: 'USER' | 'FIELD' | 'MATCH_SLOT';
-  jsonData: any;
-  status: 'pending' | 'approved' | 'rejected';
-  createdAt: string;
-}
-
-/**
- * Interface for teams registered at a specific field (mensalistas).
- */
 export interface RegisteredTeam {
   id: string;
   name: string;
@@ -129,8 +106,31 @@ export interface RegisteredTeam {
   categories: string[];
   logoUrl?: string;
   createdAt: string;
+  captainName?: string;
+  captainPhone?: string;
+}
+
+// Fix: Adding VerificationResult interface to satisfy aiService.ts import
+export interface VerificationResult {
+  isValid: boolean;
+  amountFound: number | null;
+  dateFound: string | null;
+  reason: string;
+}
+
+// Fix: Adding PendingUpdate interface to satisfy App.tsx and api.ts imports
+export interface PendingUpdate {
+  id: string;
+  requesterId: string;
+  targetId: string;
+  entityType: string;
+  jsonData: any;
+  status: 'pending' | 'approved' | 'rejected';
+  createdAt: string;
 }
 
 export const CATEGORY_ORDER = [
-  "Sub-7", "Sub-9", "Sub-11", "Sub-13", "Sub-15", "Sub-17", "Sub-20", "Principal", "Veterano", "Master"
+  "Sub-7", "Sub-8", "Sub-9", "Sub-10", "Sub-11", "Sub-12", "Sub-13", "Sub-14", "Sub-15", "Sub-16", "Sub-17", "Sub-20", "Principal", "Veterano", "Master"
 ];
+
+export const SPORTS = ["Futebol", "Vôlei", "Handball", "Basquete", "Futsal", "Tênis", "Beach Tennis"];
