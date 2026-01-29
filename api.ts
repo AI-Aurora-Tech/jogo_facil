@@ -144,7 +144,7 @@ export const api = {
     if (updates.name) payload.name = updates.name;
     if (updates.location) payload.location = updates.location;
     if (updates.hourlyRate !== undefined) payload.hourly_rate = updates.hourlyRate;
-    if (updates.courts) payload.courts = updates.courts;
+    if (updates.courts !== undefined) payload.courts = updates.courts;
     
     const { data, error } = await supabase.from('field').update(payload).eq('id', fieldId).select().single();
     if (error) throw error;
@@ -249,15 +249,17 @@ export const api = {
   },
 
   addRegisteredTeam: async (team: Partial<RegisteredTeam>): Promise<void> => {
-    await supabase.from('registered_team').insert([{
+    const payload = {
       field_id: team.fieldId,
       name: team.name,
       fixed_day: team.fixedDay,
       fixed_time: team.fixedTime,
       categories: team.categories,
-      captain_name: team.captainName,
-      captain_phone: team.captainPhone
-    }]);
+      captain_name: team.captainName || null,
+      captain_phone: team.captainPhone || null
+    };
+    const { error } = await supabase.from('registered_team').insert([payload]);
+    if (error) throw error;
   },
 
   updateRegisteredTeam: async (teamId: string, updates: Partial<RegisteredTeam>): Promise<void> => {
@@ -266,8 +268,8 @@ export const api = {
     if (updates.fixedDay) payload.fixed_day = updates.fixedDay;
     if (updates.fixedTime) payload.fixed_time = updates.fixedTime;
     if (updates.categories) payload.categories = updates.categories;
-    if (updates.captainName) payload.captain_name = updates.captainName;
-    if (updates.captainPhone) payload.captain_phone = updates.captainPhone;
+    if (updates.captainName !== undefined) payload.captain_name = updates.captainName;
+    if (updates.captainPhone !== undefined) payload.captain_phone = updates.captainPhone;
     
     const { error } = await supabase.from('registered_team').update(payload).eq('id', teamId);
     if (error) throw error;

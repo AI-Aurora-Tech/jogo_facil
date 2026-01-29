@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { Plus, Trash2, Calendar, Clock, RefreshCcw, Loader2, X, Swords, Edit3, MessageCircle, TrendingUp, CheckCircle2, User as UserIcon, CalendarDays, History as HistoryIcon, UserCheck, Phone, Edit, Building2, MapPin } from 'lucide-react';
+import { Plus, Trash2, Calendar, Clock, RefreshCcw, Loader2, X, Swords, Edit3, MessageCircle, TrendingUp, CheckCircle2, User as UserIcon, CalendarDays, History as HistoryIcon, UserCheck, Phone, Edit, Building2, MapPin, LayoutGrid, Flag } from 'lucide-react';
 import { Button } from '../components/Button';
 import { Field, MatchSlot, MatchType, User, CATEGORY_ORDER, RegisteredTeam, SPORTS } from '../types';
 import { api } from '../api';
@@ -42,7 +42,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
   const [selectedTeamIdx, setSelectedTeamIdx] = useState(0);
   const [selectedMensalistaId, setSelectedMensalistaId] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('');
-  const [selectedCourt, setSelectedCourt] = useState(field.courts?.[0] || '');
+  const [selectedCourt, setSelectedCourt] = useState(field.courts?.[0] || 'Principal');
   const [selectedSport, setSelectedSport] = useState('Futebol');
 
   // New/Edit Mensalista State
@@ -103,9 +103,10 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
       if (editingSlot) {
         await api.updateSlot(editingSlot.id, {
           matchType: newSlotType,
-          price: newSlotPrice,
+          price: Number(newSlotPrice),
           localTeamCategory: isLocalTeamChecked ? selectedCategory : undefined,
           localTeamName: isLocalTeamChecked ? teamName : undefined,
+          localTeamPhone: isLocalTeamChecked ? teamPhone : undefined,
           allowedOpponentCategories: allowedCats,
           hasLocalTeam: isLocalTeamChecked,
           courtName: selectedCourt,
@@ -125,7 +126,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
           localTeamCategory: isLocalTeamChecked ? selectedCategory : undefined,
           localTeamPhone: isLocalTeamChecked ? teamPhone : undefined,
           allowedOpponentCategories: allowedCats,
-          price: newSlotPrice || 0,
+          price: Number(newSlotPrice) || 0,
           status: 'available',
           courtName: selectedCourt,
           sport: selectedSport
@@ -136,7 +137,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
       onRefreshData();
     } catch (e: any) {
       console.error(e);
-      alert("Erro ao salvar horário: " + (e.message || "Tente novamente."));
+      alert("Erro ao salvar horário: " + (e.message || "Verifique se todas as colunas existem no seu Supabase."));
     } finally {
       setIsLoading(false);
     }
@@ -166,44 +167,13 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
           captainName: mensalistaCaptain,
           captainPhone: mensalistaPhone
         });
-        // Generate 12 weeks
-        const newSlots: Omit<MatchSlot, 'id'>[] = [];
-        const today = new Date();
-        let count = 0;
-        let dayOffset = 0;
-        while (count < 12) {
-          const date = new Date(today);
-          date.setDate(today.getDate() + dayOffset);
-          if (date.getDay() === mensalistaDay) {
-            const dateStr = date.toISOString().split('T')[0];
-            newSlots.push({
-              fieldId: field.id,
-              date: dateStr,
-              time: mensalistaTime,
-              durationMinutes: 60,
-              matchType: 'FIXO',
-              isBooked: false,
-              hasLocalTeam: true,
-              localTeamName: mensalistaName,
-              localTeamCategory: mensalistaCategory,
-              localTeamPhone: mensalistaPhone,
-              allowedOpponentCategories: calculateAllowedRange(mensalistaCategory),
-              price: field.hourlyRate,
-              status: 'available',
-              courtName: field.courts?.[0] || 'Principal',
-              sport: 'Futebol'
-            });
-            count++;
-          }
-          dayOffset++;
-        }
-        await onAddSlot(newSlots);
       }
       setShowAddMensalistaModal(false);
       loadMensalistas();
       onRefreshData();
-    } catch (e) {
-      alert("Erro ao salvar mensalista.");
+    } catch (e: any) {
+      console.error(e);
+      alert("Erro ao salvar mensalista: " + (e.message || "Tente novamente."));
     } finally {
       setIsLoading(false);
     }
@@ -217,7 +187,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
     setNewSlotPrice(slot.price);
     setIsLocalTeamChecked(slot.hasLocalTeam);
     setSelectedCategory(slot.localTeamCategory || '');
-    setSelectedCourt(slot.courtName || '');
+    setSelectedCourt(slot.courtName || 'Principal');
     setSelectedSport(slot.sport || 'Futebol');
     setShowAddSlotModal(true);
   };
@@ -291,7 +261,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                    </div>
                    <div>
                       <div className="flex items-center gap-2">
-                        <span className={`text-[8px] font-black px-1.5 py-0.5 rounded uppercase ${s.matchType === 'FIXO' ? 'bg-orange-100 text-orange-600' : 'bg-grass-100 text-grass-600'}`}>{s.matchType}</span>
+                        <span className={`text-[8px] font-black px-1.5 py-0.5 rounded uppercase ${s.matchType === 'FIXO' ? 'bg-orange-100 text-orange-600' : s.matchType === 'FESTIVAL' ? 'bg-blue-100 text-blue-600' : 'bg-grass-100 text-grass-600'}`}>{s.matchType}</span>
                         <span className="text-[8px] font-black text-gray-400 uppercase italic">{s.courtName || 'Principal'} • {s.sport}</span>
                       </div>
                       <p className="font-black text-pitch text-sm mt-1">{s.localTeamName || 'Vaga Aberta'} ({s.localTeamCategory || 'Livre'})</p>
@@ -390,17 +360,26 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
 
                 <div className="grid grid-cols-2 gap-4">
                    <div className="bg-gray-50 p-4 rounded-2xl border">
-                      <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Qual Quadra?</label>
-                      <select className="w-full bg-transparent font-black outline-none" value={selectedCourt} onChange={e => setSelectedCourt(e.target.value)}>
-                         {field.courts?.length > 0 ? field.courts.map(c => <option key={c} value={c}>{c}</option>) : <option value="Principal">Principal</option>}
+                      <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Tipo de Jogo</label>
+                      <select className="w-full bg-transparent font-black outline-none" value={newSlotType} onChange={e => setNewSlotType(e.target.value as MatchType)}>
+                         <option value="AMISTOSO">Amistoso</option>
+                         <option value="FESTIVAL">Festival</option>
+                         <option value="ALUGUEL">Aluguel</option>
                       </select>
                    </div>
                    <div className="bg-gray-50 p-4 rounded-2xl border">
-                      <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Qual Esporte?</label>
+                      <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Esporte</label>
                       <select className="w-full bg-transparent font-black outline-none" value={selectedSport} onChange={e => setSelectedSport(e.target.value)}>
                          {SPORTS.map(s => <option key={s} value={s}>{s}</option>)}
                       </select>
                    </div>
+                </div>
+
+                <div className="bg-gray-50 p-4 rounded-2xl border">
+                   <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Local / Quadra</label>
+                   <select className="w-full bg-transparent font-black outline-none" value={selectedCourt} onChange={e => setSelectedCourt(e.target.value)}>
+                      {field.courts?.length > 0 ? field.courts.map(c => <option key={c} value={c}>{c}</option>) : <option value="Principal">Principal</option>}
+                   </select>
                 </div>
 
                 <div className="p-4 bg-gray-50 rounded-2xl border">
@@ -436,22 +415,16 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                          </div>
 
                          <div>
-                            <label className="text-[8px] font-black text-gray-400 uppercase block mb-2">Qual a Categoria do Mandante?</label>
+                            <label className="text-[8px] font-black text-gray-400 uppercase block mb-2">Categoria Mandante</label>
                             <div className="flex flex-wrap gap-2">
-                               {mandanteSource === 'MY_TEAMS' ? (
-                                  currentUser.teams[selectedTeamIdx]?.categories.map(c => (
-                                     <button key={c} onClick={() => setSelectedCategory(c)} className={`px-4 py-2 rounded-full text-[10px] font-black uppercase transition-all ${selectedCategory === c ? 'bg-grass-500 text-pitch' : 'bg-white border text-gray-400'}`}>{c}</button>
-                                  ))
-                               ) : (
-                                  registeredTeams.find(t => t.id === selectedMensalistaId)?.categories.map(c => (
-                                     <button key={c} onClick={() => setSelectedCategory(c)} className={`px-4 py-2 rounded-full text-[10px] font-black uppercase transition-all ${selectedCategory === c ? 'bg-grass-500 text-pitch' : 'bg-white border text-gray-400'}`}>{c}</button>
-                                  ))
-                               )}
+                               {(mandanteSource === 'MY_TEAMS' ? currentUser.teams[selectedTeamIdx]?.categories : registeredTeams.find(t => t.id === selectedMensalistaId)?.categories)?.map(c => (
+                                  <button key={c} onClick={() => setSelectedCategory(c)} className={`px-4 py-2 rounded-full text-[10px] font-black uppercase transition-all ${selectedCategory === c ? 'bg-grass-500 text-pitch' : 'bg-white border text-gray-400'}`}>{c}</button>
+                               ))}
                             </div>
                          </div>
                          {selectedCategory && (
                             <div className="p-3 bg-grass-50 rounded-xl border border-grass-100">
-                               <p className="text-[9px] font-black text-grass-700 uppercase">Aceita adversários (±1): {calculateAllowedRange(selectedCategory).join(', ')}</p>
+                               <p className="text-[9px] font-black text-grass-700 uppercase italic">Aceita adversários (±1): {calculateAllowedRange(selectedCategory).join(', ')}</p>
                             </div>
                          )}
                       </div>
@@ -461,7 +434,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                    <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Valor do Horário (R$)</label>
                    <input type="number" className="w-full bg-transparent font-black text-xl outline-none" value={newSlotPrice} onChange={e => setNewSlotPrice(Number(e.target.value))} />
                 </div>
-                <Button onClick={handleSaveSlot} isLoading={isLoading} className="w-full py-5 rounded-[2rem] font-black uppercase text-xs shadow-xl">Confirmar Publicação</Button>
+                <Button onClick={handleSaveSlot} isLoading={isLoading} className="w-full py-5 rounded-[2rem] font-black uppercase text-xs shadow-xl">Confirmar</Button>
              </div>
            </div>
         </div>
@@ -482,8 +455,8 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                  </div>
                  <div className="grid grid-cols-2 gap-4">
                     <div className="bg-gray-50 p-4 rounded-2xl border">
-                       <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Nome do Capitão</label>
-                       <input className="w-full bg-transparent font-black outline-none" value={mensalistaCaptain} onChange={e => setMensalistaCaptain(e.target.value)} placeholder="Ex: João da Silva" />
+                       <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Capitão</label>
+                       <input className="w-full bg-transparent font-black outline-none" value={mensalistaCaptain} onChange={e => setMensalistaCaptain(e.target.value)} placeholder="Nome do Capitão" />
                     </div>
                     <div className="bg-gray-50 p-4 rounded-2xl border">
                        <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">WhatsApp Capitão</label>
