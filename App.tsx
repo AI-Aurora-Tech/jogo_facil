@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { UserRole, Field, MatchSlot, User, PendingUpdate, Notification } from './types';
+import { UserRole, Field, MatchSlot, User, Notification } from './types';
 import { Landing } from './views/Landing';
 import { Auth } from './views/Auth';
 import { FieldDashboard } from './views/FieldDashboard';
@@ -138,7 +138,7 @@ const App: React.FC = () => {
         await api.createNotification({
           userId: field.ownerId,
           title: "Agendamento Cancelado",
-          description: `O time ${user?.teamName} cancelou o horário de ${slot.time} no dia ${slot.date}.`,
+          description: `O time cancelou o horário de ${slot.time} no dia ${slot.date}.`,
           type: 'warning'
         });
       }
@@ -291,7 +291,6 @@ const App: React.FC = () => {
           currentUserContext.role === UserRole.FIELD_OWNER ? (
             <FieldDashboard 
                 categories={categories} 
-                {/* Fix: Added 'courts: []' to fallback field object to satisfy Field interface requirement */}
                 field={fields.find(f => f.ownerId === currentUserContext.id) || { id: '', name: 'Carregando...', ownerId: '', location: '', hourlyRate: 0, cancellationFeePercent: 0, pixConfig: { key: '', name: '' }, imageUrl: '', contactPhone: '', latitude: 0, longitude: 0, courts: [] }} 
                 slots={slots.filter(s => s.fieldId === fields.find(f => f.ownerId === currentUserContext.id)?.id)} 
                 currentUser={currentUserContext}

@@ -194,10 +194,11 @@ export const api = {
     if (data.opponentTeamPhone !== undefined) payload.opponent_team_phone = data.opponentTeamPhone;
     if (data.matchType) payload.match_type = data.matchType;
     if (data.price !== undefined) payload.price = data.price;
-    if (data.localTeamCategory) payload.local_team_category = data.localTeamCategory;
-    if (data.allowedOpponentCategories) payload.allowed_opponent_categories = data.allowedOpponentCategories;
-    if (data.courtName) payload.court_name = data.courtName;
-    if (data.sport) payload.sport = data.sport;
+    if (data.localTeamName !== undefined) payload.local_team_name = data.localTeamName;
+    if (data.localTeamCategory !== undefined) payload.local_team_category = data.localTeamCategory;
+    if (data.allowedOpponentCategories !== undefined) payload.allowed_opponent_categories = data.allowedOpponentCategories;
+    if (data.courtName !== undefined) payload.court_name = data.courtName;
+    if (data.sport !== undefined) payload.sport = data.sport;
     
     const { error } = await supabase.from('match_slot').update(payload).eq('id', slotId);
     if (error) throw error;
