@@ -3,13 +3,11 @@ import { supabase } from './supabaseClient';
 import { User, Field, MatchSlot, RegisteredTeam, UserRole, Notification, TeamConfig } from './types';
 
 const mapUserFromDb = (u: any): User => {
-  // Converte as colunas individuais de volta para a estrutura de array de 2 times
   const teams: TeamConfig[] = [];
   if (u.team_name) {
     teams.push({ name: u.team_name, categories: u.team_categories || [] });
   }
   if (u.sub_teams && Array.isArray(u.sub_teams)) {
-    // Assume que o segundo time está no campo sub_teams como objeto ou array
     u.sub_teams.forEach((t: any) => {
       if (teams.length < 2) teams.push(t);
     });
@@ -46,7 +44,6 @@ export const api = {
 
   register: async (userData: any): Promise<User> => {
     const { fieldData, ...userFields } = userData;
-    // No registro, pegamos o primeiro time das categorias
     const firstTeam = userFields.teams?.[0];
     const secondTeam = userFields.teams?.[1] ? [userFields.teams[1]] : [];
 
@@ -61,7 +58,7 @@ export const api = {
         subscription: userFields.subscription,
         team_name: firstTeam?.name || '',
         team_categories: firstTeam?.categories || [],
-        sub_teams: secondTeam // Salva o segundo time no campo sub_teams
+        sub_teams: secondTeam
       }])
       .select().single();
 
@@ -190,6 +187,10 @@ export const api = {
     if (data.opponentTeamName !== undefined) payload.opponent_team_name = data.opponentTeamName;
     if (data.opponentTeamCategory !== undefined) payload.opponent_team_category = data.opponentTeamCategory;
     if (data.opponentTeamPhone !== undefined) payload.opponent_team_phone = data.opponentTeamPhone;
+    if (data.matchType) payload.match_type = data.matchType;
+    if (data.price !== undefined) payload.price = data.price;
+    if (data.localTeamCategory) payload.local_team_category = data.localTeamCategory;
+    if (data.allowedOpponentCategories) payload.allowed_opponent_categories = data.allowedOpponentCategories;
     
     const { error } = await supabase.from('match_slot').update(payload).eq('id', slotId);
     if (error) throw error;
@@ -207,16 +208,19 @@ export const api = {
       local_team_category: s.localTeamCategory || null,
       local_team_phone: s.localTeamPhone || null,
       allowed_opponent_categories: s.allowedOpponentCategories || [],
-      price: s.price,
+      price: s.price || 0,
       status: s.status || 'available'
     }));
     const { error } = await supabase.from('match_slot').insert(payload);
-    if (error) throw error;
+    if (error) {
+      console.error("Supabase Error:", error);
+      throw error;
+    }
   },
 
   deleteSlot: async (id: string) => { await supabase.from('match_slot').delete().eq('id', id); },
 
-  getCategories: async () => ["Sub-7", "Sub-9", "Sub-11", "Sub-13", "Sub-15", "Sub-17", "Sub-20", "Principal", "Veterano", "Master"],
+  getCategories: async () => ["Sub-7", "Sub-8", "Sub-9", "Sub-10", "Sub-11", "Sub-12", "Sub-13", "Sub-14", "Sub-15", "Sub-16", "Sub-17", "Sub-20", "Principal", "Veterano", "Master"],
   
   getRegisteredTeams: async (fieldId: string): Promise<RegisteredTeam[]> => {
     const { data } = await supabase.from('registered_team').select('*').eq('field_id', fieldId);
@@ -240,6 +244,16 @@ export const api = {
       fixed_time: team.fixedTime,
       categories: team.categories
     }]);
+  },
+
+  updateRegisteredTeam: async (teamId: string, updates: Partial<RegisteredTeam>): Promise<void> => {
+    const payload: any = {};
+    if (updates.name) payload.name = updates.name;
+    if (updates.fixedDay) payload.fixed_day = updates.fixedDay;
+    if (updates.fixedTime) payload.fixed_time = updates.fixedTime;
+    if (updates.categories) payload.categories = updates.categories;
+    const { error } = await supabase.from('registered_team').update(payload).eq('id', teamId);
+    if (error) throw error;
   },
 
   deleteRegisteredTeam: async (teamId: string): Promise<void> => {

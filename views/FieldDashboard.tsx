@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { Plus, Trash2, Calendar, Clock, RefreshCcw, Loader2, X, Swords, Edit3, MessageCircle, TrendingUp, CheckCircle2, User as UserIcon, CalendarDays, History as HistoryIcon, UserCheck, Phone } from 'lucide-react';
+import { Plus, Trash2, Calendar, Clock, RefreshCcw, Loader2, X, Swords, Edit3, MessageCircle, TrendingUp, CheckCircle2, User as UserIcon, CalendarDays, History as HistoryIcon, UserCheck, Phone, Edit } from 'lucide-react';
 import { Button } from '../components/Button';
 import { Field, MatchSlot, MatchType, User, CATEGORY_ORDER, RegisteredTeam } from '../types';
 import { api } from '../api';
@@ -15,10 +15,14 @@ interface FieldDashboardProps {
   onDeleteSlot: (slotId: string) => void;
   onConfirmBooking: (slotId: string) => void;
   onRejectBooking: (slotId: string) => void;
+  // Fix: Add missing props used in App.tsx
+  onUpdateField: (fieldId: string, updates: Partial<Field>) => Promise<boolean>;
+  onRateTeam: () => void;
 }
 
+// Fix: Destructure missing props categories, onUpdateField, and onRateTeam
 export const FieldDashboard: React.FC<FieldDashboardProps> = ({ 
-  field, slots, onAddSlot, onRefreshData, onDeleteSlot, onConfirmBooking, onRejectBooking, currentUser
+  field, slots, onAddSlot, onRefreshData, onDeleteSlot, onConfirmBooking, onRejectBooking, currentUser, categories, onUpdateField, onRateTeam
 }) => {
   const [activeTab, setActiveTab] = useState<'AGENDA' | 'MENSALISTAS' | 'HISTORICO'>('AGENDA');
   const [isLoading, setIsLoading] = useState(false);
@@ -27,8 +31,10 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
   // Modals
   const [showAddSlotModal, setShowAddSlotModal] = useState(false);
   const [showAddMensalistaModal, setShowAddMensalistaModal] = useState(false);
+  const [editingSlot, setEditingSlot] = useState<MatchSlot | null>(null);
+  const [editingMensalista, setEditingMensalista] = useState<RegisteredTeam | null>(null);
 
-  // New Slot State
+  // New/Edit Slot State
   const [newSlotDate, setNewSlotDate] = useState(new Date().toISOString().split('T')[0]);
   const [newSlotTime, setNewSlotTime] = useState('18:00');
   const [newSlotType, setNewSlotType] = useState<MatchType>('AMISTOSO');
@@ -37,10 +43,10 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
   const [selectedTeamIdx, setSelectedTeamIdx] = useState(0);
   const [selectedCategory, setSelectedCategory] = useState('');
 
-  // New Mensalista State
+  // New/Edit Mensalista State
   const [mensalistaName, setMensalistaName] = useState('');
   const [mensalistaPhone, setMensalistaPhone] = useState('');
-  const [mensalistaDay, setMensalistaDay] = useState(1); // Segunda
+  const [mensalistaDay, setMensalistaDay] = useState(1);
   const [mensalistaTime, setMensalistaTime] = useState('19:00');
   const [mensalistaCategory, setMensalistaCategory] = useState('');
 
@@ -56,6 +62,14 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
   };
 
   const calculateAllowedRange = (cat: string): string[] => {
+    if (!cat) return [];
+    // Strict numeric range logic for "Sub-X"
+    const subMatch = cat.match(/Sub-(\d+)/i);
+    if (subMatch) {
+      const num = parseInt(subMatch[1]);
+      return [`Sub-${num - 1}`, `Sub-${num}`, `Sub-${num + 1}`];
+    }
+    // For categories like "Principal", "Veterano", etc., we can use CATEGORY_ORDER logic or just return the cat
     const idx = CATEGORY_ORDER.indexOf(cat);
     if (idx === -1) return [cat];
     const range = [];
@@ -71,23 +85,35 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
       const allowedCats = selectedCategory ? calculateAllowedRange(selectedCategory) : [];
       const team = currentUser.teams[selectedTeamIdx];
 
-      const payload: Omit<MatchSlot, 'id'> = {
-        fieldId: field.id,
-        date: newSlotDate,
-        time: newSlotTime,
-        durationMinutes: 60,
-        matchType: newSlotType,
-        isBooked: false,
-        hasLocalTeam: isLocalTeamChecked,
-        localTeamName: isLocalTeamChecked ? team.name : undefined,
-        localTeamCategory: isLocalTeamChecked ? selectedCategory : undefined,
-        localTeamPhone: isLocalTeamChecked ? currentUser.phoneNumber : undefined,
-        allowedOpponentCategories: allowedCats,
-        price: newSlotPrice,
-        status: 'available'
-      };
-      await onAddSlot([payload]);
+      if (editingSlot) {
+        await api.updateSlot(editingSlot.id, {
+          matchType: newSlotType,
+          price: newSlotPrice,
+          localTeamCategory: isLocalTeamChecked ? selectedCategory : undefined,
+          allowedOpponentCategories: allowedCats,
+          hasLocalTeam: isLocalTeamChecked
+        });
+        setEditingSlot(null);
+      } else {
+        const payload: Omit<MatchSlot, 'id'> = {
+          fieldId: field.id,
+          date: newSlotDate,
+          time: newSlotTime,
+          durationMinutes: 60,
+          matchType: newSlotType,
+          isBooked: false,
+          hasLocalTeam: isLocalTeamChecked,
+          localTeamName: isLocalTeamChecked ? team.name : undefined,
+          localTeamCategory: isLocalTeamChecked ? selectedCategory : undefined,
+          localTeamPhone: isLocalTeamChecked ? currentUser.phoneNumber : undefined,
+          allowedOpponentCategories: allowedCats,
+          price: newSlotPrice,
+          status: 'available'
+        };
+        await onAddSlot([payload]);
+      }
       setShowAddSlotModal(false);
+      onRefreshData();
     } catch (e) {
       alert("Erro ao salvar horário.");
     } finally {
@@ -99,52 +125,56 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
     if (!mensalistaName || !mensalistaCategory) return;
     setIsLoading(true);
     try {
-      // 1. Salva o registro do mensalista
-      await api.addRegisteredTeam({
-        fieldId: field.id,
-        name: mensalistaName,
-        fixedDay: String(mensalistaDay),
-        fixedTime: mensalistaTime,
-        categories: [mensalistaCategory]
-      });
-
-      // 2. Gera 12 semanas de horários
-      const newSlots: Omit<MatchSlot, 'id'>[] = [];
-      const today = new Date();
-      let count = 0;
-      let dayOffset = 0;
-
-      while (count < 12) {
-        const date = new Date(today);
-        date.setDate(today.getDate() + dayOffset);
-        
-        if (date.getDay() === mensalistaDay) {
-          const dateStr = date.toISOString().split('T')[0];
-          newSlots.push({
-            fieldId: field.id,
-            date: dateStr,
-            time: mensalistaTime,
-            durationMinutes: 60,
-            matchType: 'FIXO',
-            isBooked: false,
-            hasLocalTeam: true,
-            localTeamName: mensalistaName,
-            localTeamCategory: mensalistaCategory,
-            localTeamPhone: mensalistaPhone,
-            allowedOpponentCategories: calculateAllowedRange(mensalistaCategory),
-            price: field.hourlyRate,
-            status: 'available'
-          });
-          count++;
+      if (editingMensalista) {
+        await api.updateRegisteredTeam(editingMensalista.id, {
+          name: mensalistaName,
+          fixedDay: String(mensalistaDay),
+          fixedTime: mensalistaTime,
+          categories: [mensalistaCategory]
+        });
+        setEditingMensalista(null);
+      } else {
+        await api.addRegisteredTeam({
+          fieldId: field.id,
+          name: mensalistaName,
+          fixedDay: String(mensalistaDay),
+          fixedTime: mensalistaTime,
+          categories: [mensalistaCategory]
+        });
+        // Generate 12 weeks only for NEW mensalistas
+        const newSlots: Omit<MatchSlot, 'id'>[] = [];
+        const today = new Date();
+        let count = 0;
+        let dayOffset = 0;
+        while (count < 12) {
+          const date = new Date(today);
+          date.setDate(today.getDate() + dayOffset);
+          if (date.getDay() === mensalistaDay) {
+            const dateStr = date.toISOString().split('T')[0];
+            newSlots.push({
+              fieldId: field.id,
+              date: dateStr,
+              time: mensalistaTime,
+              durationMinutes: 60,
+              matchType: 'FIXO',
+              isBooked: false,
+              hasLocalTeam: true,
+              localTeamName: mensalistaName,
+              localTeamCategory: mensalistaCategory,
+              localTeamPhone: mensalistaPhone,
+              allowedOpponentCategories: calculateAllowedRange(mensalistaCategory),
+              price: field.hourlyRate,
+              status: 'available'
+            });
+            count++;
+          }
+          dayOffset++;
         }
-        dayOffset++;
+        await onAddSlot(newSlots);
       }
-
-      await onAddSlot(newSlots);
       setShowAddMensalistaModal(false);
       loadMensalistas();
       onRefreshData();
-      alert("Mensalista cadastrado e 12 semanas de agenda geradas!");
     } catch (e) {
       alert("Erro ao salvar mensalista.");
     } finally {
@@ -152,9 +182,28 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
     }
   };
 
+  const openEditSlot = (slot: MatchSlot) => {
+    setEditingSlot(slot);
+    setNewSlotDate(slot.date);
+    setNewSlotTime(slot.time);
+    setNewSlotType(slot.matchType);
+    setNewSlotPrice(slot.price);
+    setIsLocalTeamChecked(slot.hasLocalTeam);
+    setSelectedCategory(slot.localTeamCategory || '');
+    setShowAddSlotModal(true);
+  };
+
+  const openEditMensalista = (team: RegisteredTeam) => {
+    setEditingMensalista(team);
+    setMensalistaName(team.name);
+    setMensalistaDay(Number(team.fixedDay));
+    setMensalistaTime(team.fixedTime);
+    setMensalistaCategory(team.categories[0] || '');
+    setShowAddMensalistaModal(true);
+  };
+
   const getDayName = (dateStr: string) => ['Dom','Seg','Ter','Qua','Qui','Sex','Sab'][new Date(`${dateStr}T00:00:00`).getDay()];
 
-  // Filter Logic
   const today = new Date().toISOString().split('T')[0];
   const agendaSlots = slots.filter(s => s.status === 'available' && s.date >= today);
   const pendingSlots = slots.filter(s => s.status === 'pending_verification' && s.date >= today);
@@ -163,7 +212,6 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
 
   return (
     <div className="bg-gray-50 min-h-screen pb-32">
-      {/* Header Fixo */}
       <div className="p-6 bg-white border-b sticky top-0 z-20 glass">
         <div className="flex justify-between items-center mb-4">
           <div className="flex items-center gap-3">
@@ -177,7 +225,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
           </div>
           <div className="flex gap-2">
             <button onClick={() => onRefreshData()} className="p-3 bg-gray-100 rounded-xl active:rotate-180 transition-transform"><RefreshCcw className="w-5 h-5"/></button>
-            <button onClick={() => activeTab === 'MENSALISTAS' ? setShowAddMensalistaModal(true) : setShowAddSlotModal(true)} className="p-3 bg-pitch text-white rounded-xl active:scale-95 shadow-md">
+            <button onClick={() => { setEditingSlot(null); setShowAddSlotModal(true); }} className="p-3 bg-pitch text-white rounded-xl active:scale-95 shadow-md">
               <Plus className="w-5 h-5"/>
             </button>
           </div>
@@ -203,12 +251,6 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
             <h3 className="text-[10px] font-black text-gray-400 uppercase tracking-widest flex items-center gap-2">
               <Calendar className="w-4 h-4" /> Horários em Aberto
             </h3>
-            {agendaSlots.length === 0 && (
-              <div className="p-20 text-center flex flex-col items-center gap-4 text-gray-300">
-                <Calendar className="w-12 h-12 opacity-10" />
-                <p className="font-black uppercase text-xs">Nenhum horário aberto</p>
-              </div>
-            )}
             {agendaSlots.map(s => (
               <div key={s.id} className="bg-white p-5 rounded-[2.5rem] border shadow-sm flex items-center justify-between group hover:border-pitch transition-all">
                 <div className="flex items-center gap-4">
@@ -219,73 +261,17 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                    <div>
                       <div className="flex items-center gap-2">
                         <span className={`text-[8px] font-black px-1.5 py-0.5 rounded uppercase ${s.matchType === 'FIXO' ? 'bg-orange-100 text-orange-600' : 'bg-grass-100 text-grass-600'}`}>{s.matchType}</span>
-                        <span className="text-[8px] font-black text-gray-400 uppercase italic">Para: {s.allowedOpponentCategories.join(', ')}</span>
+                        <span className="text-[8px] font-black text-gray-400 uppercase italic">Vs: {s.allowedOpponentCategories.join(', ')}</span>
                       </div>
                       <p className="font-black text-pitch text-sm mt-1">{s.localTeamName || 'Vaga Aberta'} ({s.localTeamCategory || 'Livre'})</p>
                    </div>
                 </div>
-                <button onClick={() => onDeleteSlot(s.id)} className="p-2 text-gray-300 hover:text-red-500 transition-colors"><Trash2 className="w-5 h-5"/></button>
+                <div className="flex gap-2">
+                   <button onClick={() => openEditSlot(s)} className="p-2 text-gray-400 hover:text-pitch"><Edit className="w-4 h-4"/></button>
+                   <button onClick={() => onDeleteSlot(s.id)} className="p-2 text-gray-300 hover:text-red-500"><Trash2 className="w-4 h-4"/></button>
+                </div>
               </div>
             ))}
-          </div>
-        )}
-
-        {activeTab === 'HISTORICO' && (
-          <div className="space-y-8">
-            {pendingSlots.length > 0 && (
-              <section className="space-y-4">
-                 <h3 className="text-[10px] font-black text-orange-500 uppercase tracking-widest flex items-center gap-2">
-                   <TrendingUp className="w-4 h-4" /> Aprovações Pendentes
-                 </h3>
-                 {pendingSlots.map(s => (
-                   <div key={s.id} className="bg-orange-50 p-5 rounded-[2.5rem] border-2 border-orange-100 flex items-center justify-between shadow-sm">
-                      <div className="flex items-center gap-4">
-                        <div className="w-14 h-14 bg-white rounded-2xl flex flex-col items-center justify-center border text-orange-500">
-                           <Clock className="w-6 h-6" />
-                        </div>
-                        <div>
-                           <p className="font-black text-pitch text-sm">{s.opponentTeamName || 'Time Desafiante'}</p>
-                           <p className="text-[9px] font-bold text-gray-400 uppercase">{getDayName(s.date)}, {s.date.split('-').reverse().join('/')} às {s.time}</p>
-                        </div>
-                      </div>
-                      <div className="flex gap-2">
-                         <button onClick={() => onRejectBooking(s.id)} className="p-2 text-red-500 bg-white rounded-xl shadow-sm border"><X className="w-5 h-5"/></button>
-                         <button onClick={() => onConfirmBooking(s.id)} className="p-2 text-white bg-orange-500 rounded-xl shadow-md"><CheckCircle2 className="w-5 h-5"/></button>
-                      </div>
-                   </div>
-                 ))}
-              </section>
-            )}
-
-            <section className="space-y-4">
-              <h3 className="text-[10px] font-black text-pitch uppercase tracking-widest flex items-center gap-2">
-                 <CheckCircle2 className="w-4 h-4 text-grass-500" /> Confirmados / Passados
-              </h3>
-              {confirmedSlots.length === 0 && pastSlots.length === 0 && (
-                <div className="p-10 text-center text-gray-300 font-bold uppercase text-xs">Nenhum registro histórico</div>
-              )}
-              {[...confirmedSlots, ...pastSlots].map(s => (
-                <div key={s.id} className={`bg-white p-5 rounded-[2.5rem] border shadow-sm flex items-center justify-between ${s.date < today ? 'opacity-60' : ''}`}>
-                  <div className="flex items-center gap-4">
-                    <div className="w-14 h-14 bg-gray-50 rounded-2xl flex flex-col items-center justify-center border text-center">
-                       <span className="text-[8px] font-black uppercase opacity-60 leading-none">{getDayName(s.date)}</span>
-                       <span className="text-[11px] font-black">{s.time}</span>
-                    </div>
-                    <div>
-                       <div className="flex items-center gap-2">
-                          <span className="font-black text-pitch text-sm">{s.localTeamName || 'Mandante'}</span>
-                          <Swords className="w-3 h-3 text-gray-300" />
-                          <span className="font-black text-pitch text-sm">{s.opponentTeamName || 'Visitante'}</span>
-                       </div>
-                       <p className="text-[9px] font-bold text-gray-400 uppercase mt-1">{s.date.split('-').reverse().join('/')} • R$ {s.price}</p>
-                    </div>
-                  </div>
-                  <div className={`px-3 py-1 rounded-full text-[8px] font-black uppercase ${s.date < today ? 'bg-gray-100 text-gray-500' : 'bg-grass-100 text-grass-600'}`}>
-                    {s.date < today ? 'Concluído' : 'Confirmado'}
-                  </div>
-                </div>
-              ))}
-            </section>
           </div>
         )}
 
@@ -300,74 +286,82 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                    <UserCheck className="w-6 h-6 text-grass-500" />
                 </div>
              </div>
-
-             {registeredTeams.length === 0 && (
-               <button onClick={() => setShowAddMensalistaModal(true)} className="w-full py-16 border-2 border-dashed border-gray-200 rounded-[2.5rem] flex flex-col items-center gap-4 text-gray-400 hover:border-pitch hover:text-pitch transition-all active:scale-95">
-                 <Plus className="w-10 h-10" />
-                 <span className="font-black uppercase text-xs">Cadastrar Primeiro Mensalista</span>
-               </button>
-             )}
-
-             <div className="grid gap-3">
-               {registeredTeams.map(t => (
-                 <div key={t.id} className="bg-white p-6 rounded-[3rem] border shadow-sm flex items-center justify-between group hover:border-pitch transition-all">
-                    <div className="flex items-center gap-4">
-                       <div className="w-14 h-14 bg-gray-50 rounded-2xl flex items-center justify-center font-black text-pitch text-xl border">
-                         {t.name.charAt(0)}
-                       </div>
-                       <div>
-                          <h4 className="font-black text-pitch uppercase leading-none">{t.name}</h4>
-                          <div className="flex items-center gap-3 mt-2">
-                             <span className="text-[9px] font-black text-gray-400 uppercase flex items-center gap-1"><Clock className="w-3 h-3"/> {['Dom','Seg','Ter','Qua','Qui','Sex','Sab'][Number(t.fixedDay)]} às {t.fixedTime}</span>
-                             <span className="text-[9px] font-black bg-pitch text-grass-500 px-2 py-0.5 rounded uppercase">{t.categories[0]}</span>
-                          </div>
-                       </div>
-                    </div>
-                    <button onClick={() => api.deleteRegisteredTeam(t.id).then(loadMensalistas)} className="p-3 text-gray-300 hover:text-red-500 transition-colors"><Trash2 className="w-5 h-5"/></button>
-                 </div>
-               ))}
-             </div>
+             {registeredTeams.map(t => (
+               <div key={t.id} className="bg-white p-6 rounded-[3rem] border shadow-sm flex items-center justify-between group hover:border-pitch transition-all">
+                  <div className="flex items-center gap-4">
+                     <div className="w-14 h-14 bg-gray-50 rounded-2xl flex items-center justify-center font-black text-pitch text-xl border">{t.name.charAt(0)}</div>
+                     <div>
+                        <h4 className="font-black text-pitch uppercase leading-none">{t.name}</h4>
+                        <div className="flex items-center gap-3 mt-2">
+                           <span className="text-[9px] font-black text-gray-400 uppercase flex items-center gap-1"><Clock className="w-3 h-3"/> {['Dom','Seg','Ter','Qua','Qui','Sex','Sab'][Number(t.fixedDay)]} às {t.fixedTime}</span>
+                           <span className="text-[9px] font-black bg-pitch text-grass-500 px-2 py-0.5 rounded uppercase">{t.categories[0]}</span>
+                        </div>
+                     </div>
+                  </div>
+                  <div className="flex gap-2">
+                     <button onClick={() => openEditMensalista(t)} className="p-3 text-gray-400 hover:text-pitch"><Edit className="w-5 h-5"/></button>
+                     <button onClick={() => api.deleteRegisteredTeam(t.id).then(loadMensalistas)} className="p-3 text-gray-300 hover:text-red-500"><Trash2 className="w-5 h-5"/></button>
+                  </div>
+               </div>
+             ))}
+             <button onClick={() => { setEditingMensalista(null); setShowAddMensalistaModal(true); }} className="w-full py-4 border-2 border-dashed border-gray-200 rounded-[2rem] text-gray-400 font-black uppercase text-[10px] hover:border-pitch transition-all">Adicionar Novo Mensalista</button>
           </div>
+        )}
+
+        {activeTab === 'HISTORICO' && (
+           <div className="space-y-4">
+              <h3 className="text-[10px] font-black text-pitch uppercase tracking-widest flex items-center gap-2">Histórico Completo</h3>
+              {[...confirmedSlots, ...pastSlots].map(s => (
+                <div key={s.id} className={`bg-white p-5 rounded-[2.5rem] border shadow-sm flex items-center justify-between ${s.date < today ? 'opacity-60' : ''}`}>
+                  <div className="flex items-center gap-4">
+                    <div className="w-14 h-14 bg-gray-50 rounded-2xl flex flex-col items-center justify-center border text-center">
+                       <span className="text-[8px] font-black uppercase leading-none">{getDayName(s.date)}</span>
+                       <span className="text-[11px] font-black">{s.time}</span>
+                    </div>
+                    <div>
+                       <div className="flex items-center gap-2">
+                          <span className="font-black text-pitch text-sm">{s.localTeamName}</span>
+                          <Swords className="w-3 h-3 text-gray-300" />
+                          <span className="font-black text-pitch text-sm">{s.opponentTeamName || 'Aguardando'}</span>
+                       </div>
+                       <p className="text-[9px] font-bold text-gray-400 uppercase mt-1">{s.date.split('-').reverse().join('/')} • R$ {s.price}</p>
+                    </div>
+                  </div>
+                  <div className={`px-3 py-1 rounded-full text-[8px] font-black uppercase ${s.status === 'confirmed' ? 'bg-grass-100 text-grass-600' : 'bg-gray-100 text-gray-500'}`}>
+                    {s.status === 'confirmed' ? 'Confirmado' : 'Encerrado'}
+                  </div>
+                </div>
+              ))}
+           </div>
         )}
       </div>
 
-      {/* Modal Criar Horário Avulso */}
+      {/* Modal Criar/Editar Horário */}
       {showAddSlotModal && (
         <div className="fixed inset-0 bg-pitch/95 backdrop-blur-md z-[100] flex items-end">
            <div className="bg-white w-full rounded-t-[3rem] p-10 animate-in slide-in-from-bottom duration-500 max-h-[90vh] overflow-y-auto">
              <div className="flex justify-between items-center mb-8">
-               <h2 className="text-2xl font-black italic uppercase text-pitch">Novo Horário</h2>
+               <h2 className="text-2xl font-black italic uppercase text-pitch">{editingSlot ? 'Editar Horário' : 'Novo Horário'}</h2>
                <button onClick={() => setShowAddSlotModal(false)} className="p-2 bg-gray-100 rounded-full"><X className="w-6 h-6"/></button>
              </div>
-             
              <div className="space-y-4">
                 <div className="grid grid-cols-2 gap-4">
-                   <div className="bg-gray-50 p-4 rounded-2xl border">
+                   <div className={`bg-gray-50 p-4 rounded-2xl border ${editingSlot ? 'opacity-50 pointer-events-none' : ''}`}>
                       <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Data</label>
                       <input type="date" className="w-full bg-transparent font-black outline-none" value={newSlotDate} onChange={e => setNewSlotDate(e.target.value)} />
                    </div>
-                   <div className="bg-gray-50 p-4 rounded-2xl border">
+                   <div className={`bg-gray-50 p-4 rounded-2xl border ${editingSlot ? 'opacity-50 pointer-events-none' : ''}`}>
                       <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Hora</label>
                       <input type="time" className="w-full bg-transparent font-black outline-none" value={newSlotTime} onChange={e => setNewSlotTime(e.target.value)} />
                    </div>
                 </div>
-
                 <div className="p-4 bg-gray-50 rounded-2xl border">
                    <div className="flex items-center gap-3 mb-4">
                       <input type="checkbox" id="local" className="w-5 h-5 rounded-lg" checked={isLocalTeamChecked} onChange={e => setIsLocalTeamChecked(e.target.checked)} />
-                      <label htmlFor="local" className="text-[10px] font-black text-pitch uppercase">Incluir meu time Mandante</label>
+                      <label htmlFor="local" className="text-[10px] font-black text-pitch uppercase">Incluir Mandante</label>
                    </div>
-                   
                    {isLocalTeamChecked && (
-                      <div className="space-y-4 animate-in fade-in duration-300">
-                         <div>
-                            <label className="text-[8px] font-black text-gray-400 uppercase block mb-2">Qual seu time?</label>
-                            <div className="flex gap-2">
-                               {currentUser.teams.map((t, i) => (
-                                  <button key={i} onClick={() => { setSelectedTeamIdx(i); setSelectedCategory(''); }} className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase transition-all ${selectedTeamIdx === i ? 'bg-pitch text-white' : 'bg-white border text-gray-400'}`}>{t.name}</button>
-                               ))}
-                            </div>
-                         </div>
+                      <div className="space-y-4">
                          <div>
                             <label className="text-[8px] font-black text-gray-400 uppercase block mb-2">Categoria Mandante</label>
                             <div className="flex flex-wrap gap-2">
@@ -378,81 +372,56 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                          </div>
                          {selectedCategory && (
                             <div className="p-3 bg-grass-50 rounded-xl border border-grass-100">
-                               <p className="text-[9px] font-black text-grass-700 uppercase">Aceita adversários: {calculateAllowedRange(selectedCategory).join(', ')}</p>
+                               <p className="text-[9px] font-black text-grass-700 uppercase">Aceita adversários (±1): {calculateAllowedRange(selectedCategory).join(', ')}</p>
                             </div>
                          )}
                       </div>
                    )}
                 </div>
-
                 <div className="bg-gray-50 p-4 rounded-2xl border">
-                   <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Valor do Horário (R$)</label>
+                   <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Valor (R$)</label>
                    <input type="number" className="w-full bg-transparent font-black text-xl outline-none" value={newSlotPrice} onChange={e => setNewSlotPrice(Number(e.target.value))} />
                 </div>
-
-                <Button onClick={handleSaveSlot} isLoading={isLoading} className="w-full py-5 rounded-[2rem] font-black uppercase text-xs shadow-xl">Publicar Agenda</Button>
+                <Button onClick={handleSaveSlot} isLoading={isLoading} className="w-full py-5 rounded-[2rem] font-black uppercase text-xs shadow-xl">Confirmar</Button>
              </div>
            </div>
         </div>
       )}
 
-      {/* Modal Novo Mensalista */}
+      {/* Modal Criar/Editar Mensalista */}
       {showAddMensalistaModal && (
         <div className="fixed inset-0 bg-pitch/95 backdrop-blur-md z-[100] flex items-end">
            <div className="bg-white w-full rounded-t-[3rem] p-10 animate-in slide-in-from-bottom duration-500 max-h-[90vh] overflow-y-auto">
               <div className="flex justify-between items-center mb-8">
-                 <h2 className="text-2xl font-black italic uppercase text-pitch">Novo Mensalista</h2>
+                 <h2 className="text-2xl font-black italic uppercase text-pitch">{editingMensalista ? 'Editar Mensalista' : 'Novo Mensalista'}</h2>
                  <button onClick={() => setShowAddMensalistaModal(false)} className="p-2 bg-gray-100 rounded-full"><X className="w-6 h-6"/></button>
               </div>
-
               <div className="space-y-4">
                  <div className="bg-gray-50 p-4 rounded-2xl border">
                     <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Nome do Time</label>
-                    <input className="w-full bg-transparent font-black outline-none text-pitch" placeholder="Ex: Time dos Amigos FC" value={mensalistaName} onChange={e => setMensalistaName(e.target.value)} />
+                    <input className="w-full bg-transparent font-black outline-none" value={mensalistaName} onChange={e => setMensalistaName(e.target.value)} />
                  </div>
-                 
-                 <div className="bg-gray-50 p-4 rounded-2xl border">
-                    <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">WhatsApp do Capitão</label>
-                    <div className="flex items-center gap-2">
-                       <Phone className="w-4 h-4 text-gray-400" />
-                       <input className="w-full bg-transparent font-black outline-none text-pitch" placeholder="(00) 00000-0000" value={mensalistaPhone} onChange={e => setMensalistaPhone(e.target.value)} />
-                    </div>
-                 </div>
-
                  <div className="grid grid-cols-2 gap-4">
                     <div className="bg-gray-50 p-4 rounded-2xl border">
                        <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Dia Fixo</label>
                        <select className="w-full bg-transparent font-black outline-none" value={mensalistaDay} onChange={e => setMensalistaDay(Number(e.target.value))}>
-                          <option value={0}>Domingo</option>
-                          <option value={1}>Segunda</option>
-                          <option value={2}>Terça</option>
-                          <option value={3}>Quarta</option>
-                          <option value={4}>Quinta</option>
-                          <option value={5}>Sexta</option>
-                          <option value={6}>Sábado</option>
+                          {['Dom','Seg','Ter','Qua','Qui','Sex','Sab'].map((d, i) => <option key={i} value={i}>{d}</option>)}
                        </select>
                     </div>
                     <div className="bg-gray-50 p-4 rounded-2xl border">
-                       <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Horário Fixo</label>
+                       <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Horário</label>
                        <input type="time" className="w-full bg-transparent font-black outline-none" value={mensalistaTime} onChange={e => setMensalistaTime(e.target.value)} />
                     </div>
                  </div>
-
                  <div className="bg-gray-50 p-4 rounded-2xl border">
-                    <label className="text-[8px] font-black text-gray-400 uppercase block mb-2">Categoria do Mensalista</label>
+                    <label className="text-[8px] font-black text-gray-400 uppercase block mb-2">Categoria</label>
                     <div className="flex flex-wrap gap-2">
                        {CATEGORY_ORDER.map(c => (
                           <button key={c} onClick={() => setMensalistaCategory(c)} className={`px-3 py-1.5 rounded-full text-[9px] font-black uppercase transition-all ${mensalistaCategory === c ? 'bg-pitch text-white' : 'bg-white border text-gray-400'}`}>{c}</button>
                        ))}
                     </div>
                  </div>
-
-                 <div className="bg-orange-50 p-4 rounded-2xl border border-orange-100 flex gap-3">
-                    <RefreshCcw className="w-5 h-5 text-orange-500 flex-shrink-0" />
-                    <p className="text-[10px] font-black text-orange-900 uppercase">Atenção: O sistema gerará automaticamente os próximos 3 meses de agenda para este time.</p>
-                 </div>
-
-                 <Button onClick={handleSaveMensalista} isLoading={isLoading} className="w-full py-5 rounded-[2rem] font-black uppercase text-xs shadow-xl">Salvar e Gerar Agenda</Button>
+                 <Button onClick={handleSaveMensalista} isLoading={isLoading} className="w-full py-5 rounded-[2rem] font-black uppercase text-xs shadow-xl">Salvar</Button>
               </div>
            </div>
         </div>
