@@ -1,6 +1,6 @@
 
 import { supabase } from './supabaseClient';
-import { User, Field, MatchSlot, RegisteredTeam, UserRole, Notification, PendingUpdate } from './types';
+import { User, Field, MatchSlot, RegisteredTeam, UserRole, Notification } from './types';
 
 const mapUserFromDb = (u: any): User => ({
   id: u.id,
@@ -10,10 +10,7 @@ const mapUserFromDb = (u: any): User => ({
   role: u.role,
   subscription: u.subscription,
   subscriptionExpiry: u.subscription_expiry,
-  teamName: u.team_name,
-  teamCategories: u.team_categories || [],
-  teamLogoUrl: u.team_logo_url,
-  subTeams: u.sub_teams || [],
+  teams: u.teams || [],
   latitude: u.latitude,
   longitude: u.longitude,
   teamRating: u.team_rating,
@@ -44,9 +41,7 @@ export const api = {
         phone_number: userFields.phoneNumber,
         role: userFields.role,
         subscription: userFields.subscription,
-        team_name: userFields.teamName,
-        team_categories: userFields.teamCategories,
-        team_logo_url: userFields.teamLogoUrl
+        teams: userFields.teams || []
       }])
       .select().single();
 
@@ -69,9 +64,7 @@ export const api = {
     const { data, error } = await supabase.from('user').update({
       name: user.name,
       phone_number: user.phoneNumber,
-      team_name: user.teamName,
-      team_categories: user.teamCategories,
-      team_logo_url: user.teamLogoUrl,
+      teams: user.teams,
       password: user.password
     }).eq('id', user.id).select().single();
     if (error) throw error;
@@ -79,12 +72,7 @@ export const api = {
   },
 
   getNotifications: async (userId: string): Promise<Notification[]> => {
-    const { data, error } = await supabase
-      .from('notification')
-      .select('*')
-      .eq('user_id', userId)
-      .order('created_at', { ascending: false });
-    if (error) return [];
+    const { data, error } = await supabase.from('notification').select('*').eq('user_id', userId).order('created_at', { ascending: false });
     return (data || []).map(n => ({
       id: n.id,
       userId: n.user_id,
@@ -96,7 +84,7 @@ export const api = {
     }));
   },
 
-  createNotification: async (n: Omit<Notification, 'id' | 'timestamp' | 'read'>): Promise<void> => {
+  createNotification: async (n: any) => {
     await supabase.from('notification').insert([{
       user_id: n.userId,
       title: n.title,
@@ -106,7 +94,7 @@ export const api = {
     }]);
   },
 
-  markNotificationAsRead: async (id: string): Promise<void> => {
+  markNotificationAsRead: async (id: string) => {
     await supabase.from('notification').update({ read: true }).eq('id', id);
   },
 
@@ -128,16 +116,35 @@ export const api = {
     }));
   },
 
-  updateField: async (fieldId: string, updates: Partial<Field>): Promise<void> => {
+  /**
+   * Update field information in the database.
+   */
+  updateField: async (fieldId: string, updates: Partial<Field>): Promise<Field> => {
     const payload: any = {};
     if (updates.name) payload.name = updates.name;
     if (updates.location) payload.location = updates.location;
     if (updates.hourlyRate !== undefined) payload.hourly_rate = updates.hourlyRate;
-    if (updates.contactPhone) payload.contact_phone = updates.contactPhone;
     if (updates.imageUrl) payload.image_url = updates.imageUrl;
-    
-    const { error } = await supabase.from('field').update(payload).eq('id', fieldId);
+    if (updates.contactPhone) payload.contact_phone = updates.contactPhone;
+    if (updates.pixConfig) {
+      payload.pix_key = updates.pixConfig.key;
+      payload.pix_name = updates.pixConfig.name;
+    }
+    const { data, error } = await supabase.from('field').update(payload).eq('id', fieldId).select().single();
     if (error) throw error;
+    return {
+        id: data.id,
+        ownerId: data.owner_id,
+        name: data.name,
+        location: data.location,
+        hourlyRate: data.hourly_rate,
+        cancellationFeePercent: data.cancellation_fee_percent,
+        pixConfig: { key: data.pix_key || '', name: data.pix_name || '' },
+        imageUrl: data.image_url,
+        contactPhone: data.contact_phone,
+        latitude: data.latitude,
+        longitude: data.longitude
+    };
   },
 
   getSlots: async (): Promise<MatchSlot[]> => {
@@ -153,21 +160,43 @@ export const api = {
       isBooked: s.is_booked,
       hasLocalTeam: s.has_local_team,
       localTeamName: s.local_team_name,
+      localTeamCategory: s.local_team_category,
       localTeamPhone: s.local_team_phone,
       bookedByUserId: s.booked_by_user_id,
-      bookedByUserPhone: s.booked_by_user_phone,
       bookedByTeamName: s.booked_by_team_name,
-      bookedByCategory: s.booked_by_category,
+      bookedByTeamCategory: s.booked_by_team_category,
+      bookedByUserPhone: s.booked_by_user_phone,
       opponentTeamName: s.opponent_team_name,
+      opponentTeamCategory: s.opponent_team_category,
       opponentTeamPhone: s.opponent_team_phone,
+      allowedOpponentCategories: s.allowed_opponent_categories || [],
       status: s.status,
       price: s.price,
-      allowedCategories: s.allowed_categories || [],
       receiptUrl: s.receipt_url,
-      aiVerificationResult: s.ai_verification_result,
-      fieldRating: s.rating_given, // Mapeia rating_given para fieldRating
-      fieldRatingComment: s.field_rating_comment
+      fieldRating: s.rating_given
     }));
+  },
+
+  updateSlot: async (slotId: string, data: Partial<MatchSlot>): Promise<void> => {
+    const payload: any = {};
+    if (data.status) payload.status = data.status;
+    if (data.isBooked !== undefined) payload.is_booked = data.isBooked;
+    if (data.receiptUrl !== undefined) payload.receipt_url = data.receiptUrl;
+    if (data.bookedByTeamName !== undefined) payload.booked_by_team_name = data.bookedByTeamName;
+    if (data.bookedByTeamCategory !== undefined) payload.booked_by_team_category = data.bookedByTeamCategory;
+    if (data.bookedByUserId !== undefined) payload.booked_by_user_id = data.bookedByUserId;
+    if (data.bookedByUserPhone !== undefined) payload.booked_by_user_phone = data.bookedByUserPhone;
+    if (data.opponentTeamName !== undefined) payload.opponent_team_name = data.opponentTeamName;
+    if (data.opponentTeamCategory !== undefined) payload.opponent_team_category = data.opponentTeamCategory;
+    if (data.opponentTeamPhone !== undefined) payload.opponent_team_phone = data.opponentTeamPhone;
+    if (data.fieldRating !== undefined) payload.rating_given = data.fieldRating;
+    
+    // Add mapping for new fields
+    if (data.localTeamCategory) payload.local_team_category = data.localTeamCategory;
+    if (data.allowedOpponentCategories) payload.allowed_opponent_categories = data.allowedOpponentCategories;
+
+    const { error } = await supabase.from('match_slot').update(payload).eq('id', slotId);
+    if (error) throw error;
   },
 
   createSlots: async (slots: Partial<MatchSlot>[]): Promise<void> => {
@@ -177,85 +206,23 @@ export const api = {
       time: s.time,
       match_type: s.matchType || 'ALUGUEL',
       is_booked: s.isBooked || false,
-      has_local_team: s.hasLocalTeam || false,
+      has_local_team: s.has_local_team || false,
       local_team_name: s.localTeamName || null,
+      local_team_category: s.localTeamCategory || null,
       local_team_phone: s.localTeamPhone || null,
+      allowed_opponent_categories: s.allowedOpponentCategories || [],
       price: s.price,
-      status: s.status || 'available',
-      booked_by_user_id: s.bookedByUserId || null,
-      booked_by_team_name: s.bookedByTeamName || null,
-      booked_by_category: s.bookedByCategory || null
+      status: s.status || 'available'
     }));
     const { error } = await supabase.from('match_slot').insert(payload);
     if (error) throw error;
   },
 
-  updateSlot: async (slotId: string, data: Partial<MatchSlot>): Promise<void> => {
-    const payload: any = {};
-    if (data.status) payload.status = data.status;
-    if (data.date) payload.date = data.date;
-    if (data.time) payload.time = data.time;
-    if (data.matchType) payload.match_type = data.matchType;
-    if (data.price !== undefined) payload.price = data.price;
-    if (data.isBooked !== undefined) payload.is_booked = data.isBooked;
-    if (data.receiptUrl !== undefined) payload.receipt_url = data.receiptUrl;
-    if (data.bookedByTeamName !== undefined) payload.booked_by_team_name = data.bookedByTeamName;
-    if (data.bookedByUserId !== undefined) payload.booked_by_user_id = data.bookedByUserId;
-    if (data.bookedByUserPhone !== undefined) payload.booked_by_user_phone = data.bookedByUserPhone;
-    if (data.bookedByCategory !== undefined) payload.booked_by_category = data.bookedByCategory;
-    if (data.opponentTeamName !== undefined) payload.opponent_team_name = data.opponentTeamName;
-    if (data.opponentTeamPhone !== undefined) payload.opponent_team_phone = data.opponentTeamPhone;
-    if (data.hasLocalTeam !== undefined) payload.has_local_team = data.hasLocalTeam;
-    if (data.localTeamName !== undefined) payload.local_team_name = data.localTeamName;
-    if (data.localTeamPhone !== undefined) payload.local_team_phone = data.localTeamPhone;
-    
-    // CORREÇÃO: Usa 'rating_given' em vez de 'field_rating' que está faltando no banco
-    if (data.fieldRating !== undefined) payload.rating_given = data.fieldRating;
-    
-    const { error } = await supabase.from('match_slot').update(payload).eq('id', slotId);
-    if (error) {
-      console.error("ERRO DETALHADO SUPABASE (UpdateSlot):", error);
-      throw new Error(error.message || "Erro de conexão com o banco de dados.");
-    }
-  },
+  deleteSlot: async (id: string) => { await supabase.from('match_slot').delete().eq('id', id); },
 
-  deleteSlot: async (slotId: string): Promise<void> => {
-    const { error } = await supabase.from('match_slot').delete().eq('id', slotId);
-    if (error) throw error;
-  },
-
-  getRegisteredTeams: async (fieldId: string): Promise<RegisteredTeam[]> => {
-    const { data } = await supabase.from('registered_team').select('*').eq('field_id', fieldId);
-    return (data || []).map(t => ({
-      id: t.id,
-      name: t.name,
-      fieldId: t.field_id,
-      fixedDay: t.fixed_day,
-      fixedTime: t.fixed_time,
-      categories: t.categories,
-      logoUrl: t.logo_url,
-      createdAt: t.created_at
-    }));
-  },
-
-  addRegisteredTeam: async (team: Partial<RegisteredTeam>): Promise<void> => {
-    await supabase.from('registered_team').insert([{
-      field_id: team.fieldId,
-      name: team.name,
-      fixed_day: team.fixedDay,
-      fixed_time: team.fixedTime,
-      categories: team.categories
-    }]);
-  },
-
-  deleteRegisteredTeam: async (teamId: string): Promise<void> => {
-    await supabase.from('registered_team').delete().eq('id', teamId);
-  },
-
-  getCategories: async (): Promise<string[]> => ["Sub-9", "Sub-11", "Sub-13", "Sub-15", "Veterano", "Principal", "Sport", "Feminino"],
-  getAllUsers: async (): Promise<User[]> => {
-    const { data } = await supabase.from('user').select('*');
-    return (data || []).map(mapUserFromDb);
-  },
-  getPendingUpdatesForTarget: async (t: string) => []
+  getCategories: async () => ["Sub-7", "Sub-9", "Sub-11", "Sub-13", "Sub-15", "Sub-17", "Sub-20", "Principal", "Veterano", "Master"],
+  
+  getRegisteredTeams: async (fieldId: string) => [], // Stub for now
+  deleteRegisteredTeam: async (id: string) => {}, // Stub
+  getAllUsers: async () => [] // Stub
 };

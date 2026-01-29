@@ -1,11 +1,9 @@
 
 import React, { useState } from 'react';
-import { Search, MapPin, Clock, Tag, Swords, CalendarCheck, CheckCircle2, XCircle, Upload, Loader2, ChevronRight, MessageCircle, Info, Award, Star } from 'lucide-react';
+import { Search, MapPin, Clock, Swords, CalendarCheck, XCircle, Loader2, MessageCircle, Info, Star } from 'lucide-react';
 import { Button } from '../components/Button';
 import { Field, MatchSlot, User } from '../types';
-import { verifyPixReceipt } from '../services/aiService';
 import { api } from '../api';
-import { convertFileToBase64 } from '../utils';
 
 interface TeamDashboardProps {
   categories: string[];
@@ -19,250 +17,133 @@ interface TeamDashboardProps {
 }
 
 export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, fields, slots, onCancelBooking, viewMode, onRefresh }) => {
-  const [searchTerm, setSearchTerm] = useState('');
   const [selectedSlot, setSelectedSlot] = useState<MatchSlot | null>(null);
-  const [selectedCategoryForBooking, setSelectedCategoryForBooking] = useState(currentUser.teamCategories[0] || '');
-  const [verifyingSlot, setVerifyingSlot] = useState<MatchSlot | null>(null);
-  const [isAiLoading, setIsAiLoading] = useState(false);
-  const [isRatingLoading, setIsRatingLoading] = useState(false);
-  const [bookingSuccessSlot, setBookingSuccessSlot] = useState<MatchSlot | null>(null);
-  const [ratingSlot, setRatingSlot] = useState<MatchSlot | null>(null);
-  const [hoverRating, setHoverRating] = useState(0);
-
+  const [selectedTeamIdx, setSelectedTeamIdx] = useState(0);
+  const [selectedCategory, setSelectedCategory] = useState('');
+  
   const todayStr = new Date().toISOString().split('T')[0];
 
   const filteredSlots = slots.filter(slot => {
     const field = fields.find(f => f.id === slot.fieldId);
-    if (!field) return false;
-    if (field.ownerId === currentUser.id) return false;
+    if (!field || field.ownerId === currentUser.id) return false;
 
     if (viewMode === 'EXPLORE') {
       if (slot.date < todayStr || slot.status !== 'available') return false;
-      const renterCount = (slot.bookedByTeamName ? 1 : 0) + (slot.opponentTeamName ? 1 : 0);
-      if (!slot.hasLocalTeam && renterCount >= 2) return false;
-      if (slot.hasLocalTeam && slot.opponentTeamName) return false;
-      
-      if (searchTerm && !field.name.toLowerCase().includes(searchTerm.toLowerCase())) return false;
+      // If mandante exists, visitor can only book if any of their team categories fit the range
+      if (slot.hasLocalTeam) {
+        const canAnyoneFit = currentUser.teams.some(t => t.categories.some(cat => slot.allowedOpponentCategories.includes(cat)));
+        if (!canAnyoneFit) return false;
+      }
       return true;
     } else {
-      const isMine = slot.bookedByUserId === currentUser.id || 
-                     (slot.opponentTeamName && slot.opponentTeamName.includes(currentUser.teamName || ''));
-      return isMine;
+      return slot.bookedByUserId === currentUser.id || slot.opponentTeamPhone === currentUser.phoneNumber;
     }
-  }).sort((a, b) => {
-    if (viewMode === 'MY_BOOKINGS') {
-        return new Date(`${b.date}T${b.time}`).getTime() - new Date(`${a.date}T${a.time}`).getTime();
-    }
-    return new Date(`${a.date}T${a.time}`).getTime() - new Date(`${b.date}T${b.time}`).getTime();
-  });
+  }).sort((a,b) => new Date(`${a.date}T${a.time}`).getTime() - new Date(`${b.date}T${b.time}`).getTime());
 
   const handleBookingConfirm = async () => {
-    if (!selectedSlot || !selectedCategoryForBooking) {
-        alert("Selecione sua categoria primeiro.");
-        return;
-    }
-    
-    const mergedTeamName = `${currentUser.teamName} (${selectedCategoryForBooking})`;
-    const isFirstRenter = !selectedSlot.hasLocalTeam && !selectedSlot.bookedByTeamName;
-
+    if (!selectedSlot || !selectedCategory) return;
+    const team = currentUser.teams[selectedTeamIdx];
     try {
-      if (isFirstRenter) {
-        await api.updateSlot(selectedSlot.id, {
-          bookedByUserId: currentUser.id,
-          bookedByTeamName: mergedTeamName,
-          bookedByUserPhone: currentUser.phoneNumber,
-          bookedByCategory: selectedCategoryForBooking,
-          status: 'pending_verification',
-          isBooked: false
-        });
-      } else {
-        await api.updateSlot(selectedSlot.id, {
-          opponentTeamName: mergedTeamName,
-          opponentTeamPhone: currentUser.phoneNumber,
-          status: 'pending_verification'
-        });
-      }
-      
-      setBookingSuccessSlot({...selectedSlot, opponentTeamName: mergedTeamName});
-      setSelectedSlot(null);
-      onRefresh();
-    } catch (e: any) {
-      alert(`Erro ao solicitar reserva: ${e.message || 'Erro de conexão'}`);
-    }
-  };
-
-  const getWhatsappLink = (phone: string, message: string) => {
-    return `https://wa.me/${phone.replace(/\D/g, '')}?text=${encodeURIComponent(message)}`;
-  };
-
-  const handleReceiptUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || !verifyingSlot) return;
-    setIsAiLoading(true);
-    try {
-      const base64 = await convertFileToBase64(file);
-      await api.updateSlot(verifyingSlot.id, {
-        receiptUrl: base64,
+      await api.updateSlot(selectedSlot.id, {
+        opponentTeamName: team.name,
+        opponentTeamCategory: selectedCategory,
+        opponentTeamPhone: currentUser.phoneNumber,
         status: 'pending_verification'
       });
+      setSelectedSlot(null);
       onRefresh();
-      setVerifyingSlot(null);
-      alert("Comprovante enviado! Aguarde a aprovação da arena.");
-    } catch (e) {
-      alert("Erro ao enviar comprovante.");
-    } finally { setIsAiLoading(false); }
-  };
-
-  const handleRateField = async (rating: number) => {
-    if (!ratingSlot || isRatingLoading) return;
-    setIsRatingLoading(true);
-    try {
-      await api.updateSlot(ratingSlot.id, { fieldRating: rating });
-      setRatingSlot(null);
-      setHoverRating(0);
-      onRefresh();
-      alert("Valeu pela avaliação! Isso ajuda a arena a melhorar.");
-    } catch (e: any) {
-      alert(`Erro ao salvar nota: ${e.message || 'Erro de conexão no banco'}`);
-      console.error(e);
-      setRatingSlot(null); // Fecha o modal em caso de erro para não travar
-    } finally {
-      setIsRatingLoading(false);
-    }
+      alert("Solicitação enviada!");
+    } catch (e) { alert("Erro ao solicitar."); }
   };
 
   return (
-    <div className="flex flex-col h-full bg-gray-50">
-      {viewMode === 'EXPLORE' && (
-        <div className="p-6 bg-white border-b sticky top-0 z-20 glass">
-            <div className="relative">
-                <Search className="absolute left-4 top-3.5 text-gray-400 w-5 h-5" />
-                <input type="text" placeholder="Buscar arena..." className="w-full pl-12 pr-4 py-3.5 bg-gray-100 rounded-2xl outline-none font-bold text-xs" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
-            </div>
-        </div>
-      )}
-
-      <div className="p-6 space-y-6">
-        {filteredSlots.length === 0 && (
-          <div className="p-20 text-center flex flex-col items-center gap-4 text-gray-400">
-             <CalendarCheck className="w-12 h-12 opacity-10" />
-             <p className="font-bold uppercase text-[10px] tracking-widest">Nenhuma partida encontrada</p>
-          </div>
-        )}
-        {filteredSlots.map(slot => {
-          const field = fields.find(f => f.id === slot.fieldId);
-          if (!field) return null;
-          const isChallenge = slot.hasLocalTeam || slot.bookedByTeamName;
-          const isConfirmed = slot.status === 'confirmed';
-          const canRate = isConfirmed && !slot.fieldRating;
-          const isFuture = slot.date >= todayStr;
-
-          return (
-            <div key={slot.id} className={`bg-white rounded-[2.5rem] overflow-hidden border shadow-sm transition-all hover:border-grass-500 group ${!isFuture && !isConfirmed ? 'opacity-60 grayscale' : ''}`}>
-              <div className="p-6 flex gap-5">
-                  <div className="w-20 h-20 rounded-3xl overflow-hidden border bg-gray-100 flex-shrink-0 relative">
-                      <img src={field.imageUrl} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                      <h3 className="font-black text-pitch text-lg uppercase leading-none truncate">{field.name}</h3>
-                      <p className="text-[10px] font-bold text-gray-400 mt-1 flex items-center truncate"><MapPin className="w-3 h-3 mr-1" /> {field.location}</p>
-                      <div className="flex flex-wrap gap-2 mt-3">
-                           <div className="bg-gray-100 px-3 py-1 rounded-xl text-[9px] font-black uppercase flex items-center gap-1">
-                              <Clock className="w-3 h-3" /> {slot.time} • {slot.date.split('-').reverse().slice(0,2).join('/')}
-                           </div>
-                           <div className={`px-3 py-1 rounded-xl text-[9px] font-black uppercase ${slot.matchType === 'FESTIVAL' ? 'bg-blue-50 text-blue-600' : 'bg-grass-50 text-grass-600'}`}>
-                                {slot.matchType}
-                           </div>
-                      </div>
-                  </div>
+    <div className="flex flex-col h-full bg-gray-50 p-6 space-y-6">
+      {filteredSlots.map(slot => {
+        const field = fields.find(f => f.id === slot.fieldId);
+        const isChallenge = slot.hasLocalTeam;
+        const isConfirmed = slot.status === 'confirmed';
+        
+        return (
+          <div key={slot.id} className="bg-white rounded-[2.5rem] border shadow-sm overflow-hidden group hover:border-grass-500 transition-all">
+            <div className="p-6 flex gap-5">
+              <div className="w-16 h-16 bg-gray-100 rounded-2xl overflow-hidden border">
+                <img src={field?.imageUrl} className="w-full h-full object-cover" />
               </div>
-              
-              <div className="px-6 pb-2">
-                 <div className="bg-gray-50 rounded-2xl p-3 flex items-center gap-3">
-                    <div className="w-8 h-8 bg-white rounded-xl flex items-center justify-center border shadow-sm">
-                       <Swords className="w-4 h-4 text-gray-300" />
-                    </div>
-                    <div className="flex-1">
-                       <p className="text-[9px] font-black text-gray-400 uppercase leading-none">Confronto</p>
-                       <p className="text-[11px] font-black text-pitch truncate">
-                          {slot.localTeamName || slot.bookedByTeamName || 'Mandante Aberto'} vs {slot.opponentTeamName || 'Você'}
-                       </p>
-                    </div>
+              <div className="flex-1">
+                 <h3 className="font-black text-pitch text-lg leading-none uppercase">{field?.name}</h3>
+                 <div className="flex gap-2 mt-2">
+                    <span className="text-[9px] font-black bg-gray-100 px-2 py-1 rounded-xl flex items-center gap-1 uppercase"><Clock className="w-3 h-3"/> {slot.time} • {slot.date.split('-').reverse().slice(0,2).join('/')}</span>
                  </div>
               </div>
+            </div>
 
-              {canRate && viewMode === 'MY_BOOKINGS' && (
-                <div className="px-6 pb-4">
-                  <button onClick={() => setRatingSlot(slot)} className="w-full bg-yellow-50 text-yellow-600 py-3 rounded-2xl text-[10px] font-black uppercase flex items-center justify-center gap-2 border border-yellow-100 shadow-sm active:scale-95 transition-all">
-                    <Star className="w-4 h-4 fill-yellow-600" /> Avaliar Arena
-                  </button>
+            <div className="px-6 pb-2">
+              <div className="bg-gray-50 rounded-2xl p-4 flex items-center justify-between">
+                <div>
+                   <p className="text-[8px] font-black text-gray-400 uppercase mb-1">Mandante</p>
+                   <p className="text-sm font-black text-pitch">{slot.localTeamName || 'Aluguel Avulso'}</p>
+                   <p className="text-[10px] font-bold text-grass-600">{slot.localTeamCategory || 'Sem restrição'}</p>
                 </div>
-              )}
-
-              {slot.fieldRating && viewMode === 'MY_BOOKINGS' && (
-                <div className="px-6 pb-4">
-                  <div className="flex items-center gap-1">
-                    {[1,2,3,4,5].map(s => <Star key={s} className={`w-3 h-3 ${s <= (slot.fieldRating || 0) ? 'fill-yellow-400 text-yellow-400' : 'text-gray-200'}`} />)}
-                    <span className="text-[9px] font-black text-gray-400 uppercase ml-2 italic">Arena Avaliada</span>
-                  </div>
+                <Swords className="w-4 h-4 text-gray-300" />
+                <div className="text-right">
+                   <p className="text-[8px] font-black text-gray-400 uppercase mb-1">Adversário Aceito</p>
+                   <p className="text-[10px] font-black text-pitch uppercase">{slot.allowedOpponentCategories.join(', ') || 'Qualquer um'}</p>
                 </div>
-              )}
-
-              <div className="p-5 flex items-center justify-between">
-                  <div>
-                    <p className="text-xl font-black text-pitch italic leading-none">R$ {slot.price.toFixed(0)}</p>
-                    <p className="text-[8px] font-bold text-gray-400 uppercase tracking-widest">Valor do Jogo</p>
-                  </div>
-                  {viewMode === 'MY_BOOKINGS' ? (
-                      <div className="flex gap-2">
-                        {isConfirmed ? (
-                           <span className={`px-5 py-3 rounded-2xl text-[10px] font-black uppercase flex items-center gap-2 shadow-lg ${isFuture ? 'bg-blue-500 text-white' : 'bg-grass-500 text-pitch'}`}>
-                              <CheckCircle2 className="w-4 h-4"/> {isFuture ? 'Agendado' : 'Concluído'}
-                           </span>
-                        ) : !slot.receiptUrl ? (
-                           <button onClick={() => setVerifyingSlot(slot)} className="bg-orange-500 text-white px-5 py-3 rounded-2xl text-[10px] font-black uppercase shadow-lg active:scale-95">Pagar Pix</button>
-                        ) : (
-                           <span className="bg-gray-100 text-gray-400 px-5 py-3 rounded-2xl text-[10px] font-black uppercase border">Análise...</span>
-                        )}
-                        {!isConfirmed && <button onClick={() => onCancelBooking(slot.id)} className="p-2 text-gray-300 hover:text-red-500"><XCircle className="w-6 h-6"/></button>}
-                      </div>
-                  ) : (
-                      <Button className={`rounded-2xl px-10 py-4 text-[11px] font-black uppercase transition-all active:scale-95 shadow-lg ${isChallenge ? 'bg-orange-500 text-white' : 'bg-pitch text-white'}`} onClick={() => { setSelectedSlot(slot); setSelectedCategoryForBooking(currentUser.teamCategories[0] || ''); }}>
-                        {isChallenge ? 'Desafiar' : 'Reservar'}
-                      </Button>
-                  )}
               </div>
             </div>
-          );
-        })}
-      </div>
 
-      {ratingSlot && (
-        <div className="fixed inset-0 bg-pitch/95 backdrop-blur-xl z-[400] flex items-center justify-center p-6">
-           <div className="bg-white rounded-[3.5rem] w-full max-w-sm p-10 text-center animate-in zoom-in-95 duration-300 shadow-2xl relative">
-              {isRatingLoading && (
-                <div className="absolute inset-0 bg-white/80 z-10 flex flex-col items-center justify-center rounded-[3.5rem]">
-                   <Loader2 className="w-8 h-8 text-pitch animate-spin" />
-                </div>
-              )}
-              <h2 className="text-2xl font-black text-pitch uppercase italic leading-tight">Avaliar Arena</h2>
-              <p className="text-gray-500 text-xs font-medium mt-2 mb-8">Como foi o atendimento e o campo?</p>
-              <div className="flex justify-center gap-2 mb-8">
-                 {[1,2,3,4,5].map(s => (
-                   <button 
-                     key={s} 
-                     onMouseEnter={() => setHoverRating(s)} 
-                     onMouseLeave={() => setHoverRating(0)}
-                     onClick={() => handleRateField(s)}
-                     disabled={isRatingLoading}
-                     className="transition-transform active:scale-125 p-1"
-                   >
-                     <Star className={`w-10 h-10 ${s <= (hoverRating || 0) ? 'fill-yellow-400 text-yellow-400' : 'text-gray-200'}`} />
-                   </button>
-                 ))}
-              </div>
-              <button onClick={() => setRatingSlot(null)} className="text-[10px] font-black text-gray-400 uppercase tracking-widest underline decoration-2">Agora não</button>
-           </div>
+            <div className="p-6 flex items-center justify-between border-t mt-2">
+               <div>
+                  <p className="text-xl font-black text-pitch leading-none italic">R$ {slot.price}</p>
+                  <p className="text-[8px] font-black text-gray-400 uppercase">Total Jogo</p>
+               </div>
+               <Button onClick={() => { setSelectedSlot(slot); setSelectedCategory(''); }} className={`rounded-2xl px-8 py-4 font-black uppercase text-[10px] ${isChallenge ? 'bg-orange-500' : 'bg-pitch'}`}>
+                  {isChallenge ? 'Desafiar' : 'Reservar'}
+               </Button>
+            </div>
+          </div>
+        );
+      })}
+
+      {selectedSlot && (
+        <div className="fixed inset-0 bg-pitch/95 backdrop-blur-xl z-[400] flex items-end">
+          <div className="bg-white w-full rounded-t-[4rem] p-12 animate-in slide-in-from-bottom duration-500">
+            <h2 className="text-2xl font-black text-pitch uppercase italic mb-8">Confirmar Reserva</h2>
+            <div className="space-y-6">
+               <div>
+                  <label className="text-[10px] font-black text-gray-400 uppercase mb-3 block">Com qual time você vai?</label>
+                  <div className="flex gap-3">
+                     {currentUser.teams.map((t, i) => (
+                        <button key={i} onClick={() => { setSelectedTeamIdx(i); setSelectedCategory(''); }} className={`flex-1 py-4 rounded-2xl font-black uppercase text-[10px] transition-all ${selectedTeamIdx === i ? 'bg-pitch text-white' : 'bg-gray-50 border text-gray-400'}`}>{t.name}</button>
+                     ))}
+                  </div>
+               </div>
+               
+               <div>
+                  <label className="text-[10px] font-black text-gray-400 uppercase mb-3 block">Selecione a Categoria</label>
+                  <div className="flex flex-wrap gap-2">
+                     {currentUser.teams[selectedTeamIdx]?.categories.map(cat => {
+                        const isAllowed = selectedSlot.allowedOpponentCategories.length === 0 || selectedSlot.allowedOpponentCategories.includes(cat);
+                        return (
+                          <button 
+                            key={cat} 
+                            disabled={!isAllowed}
+                            onClick={() => setSelectedCategory(cat)} 
+                            className={`px-4 py-2 rounded-full font-black uppercase text-[10px] transition-all ${!isAllowed ? 'opacity-20 grayscale' : selectedCategory === cat ? 'bg-grass-500 text-pitch' : 'bg-gray-50 border text-gray-400'}`}
+                          >
+                             {cat}
+                          </button>
+                        );
+                     })}
+                  </div>
+               </div>
+
+               <div className="flex gap-4 pt-6">
+                  <button onClick={() => setSelectedSlot(null)} className="flex-1 font-black uppercase text-[10px] text-gray-400">Voltar</button>
+                  <Button onClick={handleBookingConfirm} disabled={!selectedCategory} className="flex-[2] py-5 rounded-[2rem] font-black uppercase text-xs">Confirmar Desafio</Button>
+               </div>
+            </div>
+          </div>
         </div>
       )}
     </div>

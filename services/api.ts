@@ -10,6 +10,7 @@ const mapUserFromDb = (u: any): User => ({
   role: u.role,
   subscription: u.subscription,
   subscriptionExpiry: u.subscription_expiry,
+  teams: u.teams || [], // Map to the new teams structure
   teamName: u.team_name,
   teamCategories: u.team_categories || [],
   teamLogoUrl: u.team_logo_url,
@@ -53,7 +54,8 @@ export const api = {
         subscription: userFields.subscription,
         team_name: userFields.teamName,
         team_categories: userFields.teamCategories,
-        team_logo_url: userFields.teamLogoUrl
+        team_logo_url: userFields.teamLogoUrl,
+        teams: userFields.teams || []
       }])
       .select().single();
 
@@ -78,7 +80,8 @@ export const api = {
       phone_number: user.phoneNumber,
       team_name: user.teamName,
       team_categories: user.teamCategories,
-      team_logo_url: user.teamLogoUrl
+      team_logo_url: user.teamLogoUrl,
+      teams: user.teams
     };
     if (user.password && user.password.trim() !== '') payload.password = user.password;
 
@@ -133,7 +136,7 @@ export const api = {
       id: d.id,
       requesterId: d.requester_id,
       targetId: d.target_id,
-      entity_type: d.entity_type,
+      entityType: d.entity_type, // Fix: Map entity_type to entityType to match PendingUpdate interface
       jsonData: d.json_data,
       status: d.status,
       createdAt: d.created_at
@@ -205,10 +208,10 @@ export const api = {
       opponentTeamPhone: s.opponent_team_phone,
       status: s.status,
       price: s.price,
-      allowedCategories: s.allowed_categories || [],
+      allowedOpponentCategories: s.allowed_opponent_categories || [], // Map to the correct interface name
       receiptUrl: s.receipt_url,
       aiVerificationResult: s.ai_verification_result
-    })) as MatchSlot[];
+    })) as unknown as MatchSlot[];
   },
 
   createSlots: async (slots: Partial<MatchSlot>[]): Promise<void> => {
@@ -222,7 +225,7 @@ export const api = {
       local_team_name: s.localTeamName || null,
       price: s.price,
       status: s.status || 'available',
-      allowed_categories: s.allowedCategories || []
+      allowed_opponent_categories: s.allowedOpponentCategories || [] // Fix: Use allowedOpponentCategories instead of allowedCategories
     }));
     await supabase.from('match_slot').insert(payload);
   },

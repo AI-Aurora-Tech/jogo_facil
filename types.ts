@@ -16,21 +16,31 @@ export enum SubscriptionPlan {
 
 export type MatchType = 'AMISTOSO' | 'FESTIVAL' | 'ALUGUEL' | 'FIXO';
 
-export interface PendingUpdate {
-  id: string;
-  requesterId: string;
-  targetId: string;
-  entityType: 'USER' | 'FIELD';
-  jsonData: any;
-  status: 'pending' | 'approved' | 'rejected';
-  createdAt: string;
+export interface TeamConfig {
+  name: string;
+  categories: string[];
+  logoUrl?: string;
 }
 
-export interface SubTeam {
+export interface User {
   id: string;
   name: string;
-  category: string;
-  logoUrl?: string;
+  email: string;
+  password?: string;
+  phoneNumber: string;
+  role: UserRole;
+  subscription: SubscriptionPlan;
+  subscriptionExpiry: string | null;
+  teams: TeamConfig[]; // Max 2 teams
+  latitude?: number;
+  longitude?: number;
+  teamRating?: number;
+  teamRatingCount?: number;
+  // Deprecated fields kept for compatibility during transition
+  teamName?: string;
+  teamCategories?: string[];
+  teamLogoUrl?: string;
+  subTeams?: string[];
 }
 
 export interface Notification {
@@ -43,41 +53,6 @@ export interface Notification {
   read: boolean;
 }
 
-export interface User {
-  id: string;
-  name: string;
-  email: string;
-  password?: string;
-  phoneNumber: string;
-  role: UserRole;
-  subscription: SubscriptionPlan;
-  subscriptionExpiry: string | null;
-  teamName?: string; 
-  teamCategories: string[]; 
-  teamLogoUrl?: string;
-  subTeams: SubTeam[]; 
-  latitude?: number;
-  longitude?: number;
-  teamRating?: number;
-  teamRatingCount?: number;
-}
-
-export interface PixConfig {
-  key: string;
-  name: string;
-}
-
-export interface RegisteredTeam {
-  id: string;
-  name: string;
-  fieldId: string;
-  fixedDay: number; // 0-6 (Dom-Sab)
-  fixedTime: string;
-  categories: string[];
-  logoUrl?: string;
-  createdAt: string;
-}
-
 export interface Field {
   id: string;
   ownerId: string;
@@ -85,12 +60,11 @@ export interface Field {
   location: string;
   hourlyRate: number;
   cancellationFeePercent: number;
-  pixConfig: PixConfig;
+  pixConfig: { key: string; name: string };
   imageUrl: string;
   contactPhone: string;
   latitude: number;
   longitude: number;
-  localTeams?: string[]; 
 }
 
 export interface MatchSlot {
@@ -103,28 +77,60 @@ export interface MatchSlot {
   isBooked: boolean;
   hasLocalTeam: boolean;
   localTeamName?: string;
+  localTeamCategory?: string;
   localTeamPhone?: string;
   bookedByUserId?: string;
   bookedByTeamName?: string;
+  bookedByTeamCategory?: string;
   bookedByUserPhone?: string;
-  bookedByCategory?: string;
   opponentTeamName?: string;
   opponentTeamCategory?: string;
   opponentTeamPhone?: string;
-  rewardDescription?: string;
+  allowedOpponentCategories: string[]; // Range of ±1 category
   status: 'available' | 'pending_verification' | 'confirmed';
   price: number;
-  allowedCategories: string[]; 
   receiptUrl?: string;
-  aiVerificationResult?: string;
-  ratingGiven?: number; // Avaliação do time dada pelo dono do campo
-  fieldRating?: number; // Nota da arena dada pelo time (0-5)
+  fieldRating?: number;
   fieldRatingComment?: string;
 }
 
+/**
+ * Interface for PIX receipt verification result.
+ */
 export interface VerificationResult {
   isValid: boolean;
   amountFound: number | null;
   dateFound: string | null;
   reason: string;
 }
+
+/**
+ * Interface for tracking pending profile or data updates.
+ */
+export interface PendingUpdate {
+  id: string;
+  requesterId: string;
+  targetId: string;
+  entityType: 'USER' | 'FIELD' | 'MATCH_SLOT';
+  jsonData: any;
+  status: 'pending' | 'approved' | 'rejected';
+  createdAt: string;
+}
+
+/**
+ * Interface for teams registered at a specific field (mensalistas).
+ */
+export interface RegisteredTeam {
+  id: string;
+  name: string;
+  fieldId: string;
+  fixedDay: string;
+  fixedTime: string;
+  categories: string[];
+  logoUrl?: string;
+  createdAt: string;
+}
+
+export const CATEGORY_ORDER = [
+  "Sub-7", "Sub-9", "Sub-11", "Sub-13", "Sub-15", "Sub-17", "Sub-20", "Principal", "Veterano", "Master"
+];
