@@ -199,6 +199,7 @@ export const api = {
     if (data.allowedOpponentCategories !== undefined) payload.allowed_opponent_categories = data.allowedOpponentCategories;
     if (data.courtName !== undefined) payload.court_name = data.courtName;
     if (data.sport !== undefined) payload.sport = data.sport;
+    if (data.bookedByUserId !== undefined) payload.booked_by_user_id = data.bookedByUserId;
     
     const { error } = await supabase.from('match_slot').update(payload).eq('id', slotId);
     if (error) throw error;
@@ -215,6 +216,7 @@ export const api = {
       local_team_name: s.localTeamName || null,
       local_team_category: s.localTeamCategory || null,
       local_team_phone: s.localTeamPhone || null,
+      // Fix: Changed s.allowed_opponent_categories to s.allowedOpponentCategories to match the MatchSlot interface.
       allowed_opponent_categories: s.allowedOpponentCategories || [],
       price: s.price || 0,
       status: s.status || 'available',
@@ -222,15 +224,12 @@ export const api = {
       sport: s.sport || 'Futebol'
     }));
     const { error } = await supabase.from('match_slot').insert(payload);
-    if (error) {
-      console.error("Supabase Insertion Error:", error);
-      throw error;
-    }
+    if (error) throw error;
   },
 
   deleteSlot: async (id: string) => { await supabase.from('match_slot').delete().eq('id', id); },
 
-  getCategories: async () => ["Sub-7", "Sub-8", "Sub-9", "Sub-10", "Sub-11", "Sub-12", "Sub-13", "Sub-14", "Sub-15", "Sub-16", "Sub-17", "Sub-20", "Principal", "Veterano", "Master"],
+  getCategories: async () => ["Sub-8", "Sub-9", "Sub-10", "Sub-11", "Sub-12", "Sub-13", "Sub-14", "Sub-15", "Sub-16", "Sub-17", "Sport", "35+", "40+", "45+", "50+"],
   
   getRegisteredTeams: async (fieldId: string): Promise<RegisteredTeam[]> => {
     const { data } = await supabase.from('registered_team').select('*').eq('field_id', fieldId);
@@ -271,7 +270,7 @@ export const api = {
     if (updates.captainName !== undefined) payload.captain_name = updates.captainName;
     if (updates.captainPhone !== undefined) payload.captain_phone = updates.captainPhone;
     
-    const { error } = await supabase.from('registered_team').update(payload).eq('id', teamId);
+    const { error } = await supabase.from('user').update(payload).eq('id', teamId);
     if (error) throw error;
   },
 

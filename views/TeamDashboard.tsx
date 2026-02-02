@@ -27,14 +27,11 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
     const field = fields.find(f => f.id === slot.fieldId);
     if (!field) return false;
 
-    // Não mostrar meus próprios campos na busca (se for dono de arena)
     if (viewMode === 'EXPLORE' && field.ownerId === currentUser.id) return false;
 
     if (viewMode === 'EXPLORE') {
-      // Mostrar apenas slots futuros e disponíveis
       return slot.date >= todayStr && slot.status === 'available';
     } else {
-      // Meus agendamentos
       return slot.bookedByUserId === currentUser.id || slot.opponentTeamPhone === currentUser.phoneNumber;
     }
   }).sort((a,b) => new Date(`${a.date}T${a.time}`).getTime() - new Date(`${b.date}T${b.time}`).getTime());
@@ -42,16 +39,30 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
   const handleBookingConfirm = async () => {
     if (!selectedSlot || !selectedCategory) return;
     const team = currentUser.teams[selectedTeamIdx];
+    const field = fields.find(f => f.id === selectedSlot.fieldId);
+    
     try {
       await api.updateSlot(selectedSlot.id, {
         opponentTeamName: team.name,
         opponentTeamCategory: selectedCategory,
         opponentTeamPhone: currentUser.phoneNumber,
+        bookedByUserId: currentUser.id,
         status: 'pending_verification'
       });
+
+      // Notificar o dono da arena
+      if (field) {
+        await api.createNotification({
+          userId: field.ownerId,
+          title: "Novo Desafio Recebido!",
+          description: `O time ${team.name} (${selectedCategory}) solicitou o horário de ${selectedSlot.time} no dia ${selectedSlot.date.split('-').reverse().join('/')}.`,
+          type: 'info'
+        });
+      }
+
       setSelectedSlot(null);
       onRefresh();
-      alert("Solicitação enviada! Aguarde a confirmação da arena.");
+      alert("Solicitação enviada! Aguarde a confirmação da arena na sua aba de Histórico.");
     } catch (e) { alert("Erro ao solicitar agendamento."); }
   };
 
@@ -67,11 +78,6 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
         const field = fields.find(f => f.id === slot.fieldId);
         const isChallenge = slot.hasLocalTeam;
         
-        // Verificar se algum time do usuário pode jogar neste slot (pelo menos 1 categoria compatível)
-        const canMyTeamsPlay = !isChallenge || currentUser.teams.some(t => 
-          t.categories.some(cat => slot.allowedOpponentCategories.length === 0 || slot.allowedOpponentCategories.includes(cat))
-        );
-
         return (
           <div key={slot.id} className="bg-white rounded-[2.5rem] border shadow-sm overflow-hidden group hover:border-pitch transition-all">
             <div className="p-6 flex gap-5">

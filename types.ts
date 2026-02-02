@@ -36,7 +36,6 @@ export interface User {
   longitude?: number;
   teamRating?: number;
   teamRatingCount?: number;
-  // Fix: Adding missing properties used in App.tsx and services/api.ts
   teamName?: string;
   teamCategories?: string[];
   teamLogoUrl?: string;
@@ -65,7 +64,7 @@ export interface Field {
   contactPhone: string;
   latitude: number;
   longitude: number;
-  courts: string[]; // List of available courts/spaces
+  courts: string[];
 }
 
 export interface MatchSlot {
@@ -93,8 +92,8 @@ export interface MatchSlot {
   receiptUrl?: string;
   fieldRating?: number;
   fieldRatingComment?: string;
-  courtName?: string; // Which court this belongs to
-  sport: string;     // Soccer, Volleyball, etc.
+  courtName?: string;
+  sport: string;
 }
 
 export interface RegisteredTeam {
@@ -110,7 +109,6 @@ export interface RegisteredTeam {
   captainPhone?: string;
 }
 
-// Fix: Adding VerificationResult interface to satisfy aiService.ts import
 export interface VerificationResult {
   isValid: boolean;
   amountFound: number | null;
@@ -118,7 +116,6 @@ export interface VerificationResult {
   reason: string;
 }
 
-// Fix: Adding PendingUpdate interface to satisfy App.tsx and api.ts imports
 export interface PendingUpdate {
   id: string;
   requesterId: string;
@@ -130,7 +127,7 @@ export interface PendingUpdate {
 }
 
 export const CATEGORY_ORDER = [
-  "Sub-7", "Sub-8", "Sub-9", "Sub-10", "Sub-11", "Sub-12", "Sub-13", "Sub-14", "Sub-15", "Sub-16", "Sub-17", "Sub-20", "Principal", "Veterano", "Master"
+  "Sub-8", "Sub-9", "Sub-10", "Sub-11", "Sub-12", "Sub-13", "Sub-14", "Sub-15", "Sub-16", "Sub-17", "Sport", "35+", "40+", "45+", "50+"
 ];
 
 export const SPORTS = ["Futebol", "Vôlei", "Handball", "Basquete", "Futsal", "Tênis", "Beach Tennis"];
