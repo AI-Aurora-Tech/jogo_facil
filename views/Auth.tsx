@@ -55,8 +55,8 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, onCancel }) => {
         setError('O nome do time é obrigatório.');
         return;
       }
-      if (teamCategories.length === 0 || teamCategories.length > 2) {
-        setError('O time deve ter entre 1 e 2 categorias.');
+      if (teamCategories.length === 0) {
+        setError('Adicione pelo menos uma categoria ao seu time.');
         return;
       }
       if (role === UserRole.FIELD_OWNER && (!arenaName || !address)) {
@@ -68,6 +68,7 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, onCancel }) => {
     setIsLoading(true);
     try {
       if (isRegistering) {
+        // Correção BUG 1: Enviando a estrutura correta de 'teams' para a API
         const payload = {
           email: email.toLowerCase().trim(),
           password,
@@ -75,8 +76,7 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, onCancel }) => {
           name,
           phoneNumber: phone,
           subscription: SubscriptionPlan.FREE,
-          teamName: teamName,
-          teamCategories: teamCategories,
+          teams: [{ name: teamName, categories: teamCategories }],
           fieldData: role === UserRole.FIELD_OWNER ? {
             name: arenaName,
             location: address,
