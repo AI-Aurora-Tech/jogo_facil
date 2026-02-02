@@ -163,9 +163,9 @@ export const api = {
       matchType: s.match_type,
       isBooked: s.is_booked,
       hasLocalTeam: s.has_local_team,
-      localTeamName: s.local_team_name,
-      localTeamCategory: s.local_team_category,
-      localTeamPhone: s.local_team_phone,
+      local_team_name: s.local_team_name,
+      local_team_category: s.local_team_category,
+      local_team_phone: s.local_team_phone,
       bookedByUserId: s.booked_by_user_id,
       bookedByTeamName: s.booked_by_team_name,
       bookedByTeamCategory: s.booked_by_team_category,
@@ -200,6 +200,9 @@ export const api = {
     if (data.courtName !== undefined) payload.court_name = data.courtName;
     if (data.sport !== undefined) payload.sport = data.sport;
     if (data.bookedByUserId !== undefined) payload.booked_by_user_id = data.bookedByUserId;
+    if (data.date) payload.date = data.date;
+    if (data.time) payload.time = data.time;
+    if (data.hasLocalTeam !== undefined) payload.has_local_team = data.hasLocalTeam;
     
     const { error } = await supabase.from('match_slot').update(payload).eq('id', slotId);
     if (error) throw error;
@@ -216,7 +219,7 @@ export const api = {
       local_team_name: s.localTeamName || null,
       local_team_category: s.localTeamCategory || null,
       local_team_phone: s.localTeamPhone || null,
-      // Fix: Changed s.allowed_opponent_categories to s.allowedOpponentCategories to match the MatchSlot interface.
+      // Fix: Correctly access allowedOpponentCategories (camelCase) from the Partial<MatchSlot> parameter.
       allowed_opponent_categories: s.allowedOpponentCategories || [],
       price: s.price || 0,
       status: s.status || 'available',
@@ -270,7 +273,8 @@ export const api = {
     if (updates.captainName !== undefined) payload.captain_name = updates.captainName;
     if (updates.captainPhone !== undefined) payload.captain_phone = updates.captainPhone;
     
-    const { error } = await supabase.from('user').update(payload).eq('id', teamId);
+    // Fix: Corrected table target to 'registered_team' as intended for registered team updates.
+    const { error } = await supabase.from('registered_team').update(payload).eq('id', teamId);
     if (error) throw error;
   },
 

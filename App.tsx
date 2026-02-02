@@ -15,6 +15,7 @@ const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'EXPLORE' | 'MY_GAMES' | 'ADMIN' | 'PROFILE' | 'SUPER'>('EXPLORE');
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
+  const [fieldDashForceTab, setFieldDashForceTab] = useState<'AGENDA' | 'SOLICITACOES' | 'MENSALISTAS' | 'HISTORICO' | undefined>(undefined);
   
   const [fields, setFields] = useState<Field[]>([]);
   const [slots, setSlots] = useState<MatchSlot[]>([]);
@@ -84,6 +85,20 @@ const App: React.FC = () => {
     };
     init();
   }, [refreshData]);
+
+  const handleNotificationClick = async (n: Notification) => {
+    if (!n.read) await api.markNotificationAsRead(n.id);
+    setShowNotifications(false);
+    await refreshData();
+    
+    // Se for desafio, levar para a aba de solicitações
+    if (user?.role === UserRole.FIELD_OWNER && n.title.toLowerCase().includes('desafio')) {
+      setActiveTab('ADMIN');
+      setFieldDashForceTab('SOLICITACOES');
+      // Limpa o sinal após um tempo para permitir troca manual depois
+      setTimeout(() => setFieldDashForceTab(undefined), 100);
+    }
+  };
 
   const handleUpdateProfile = async (updatedUser: User, updatedField?: Partial<Field>) => {
     setIsLoading(true);
@@ -223,7 +238,7 @@ const App: React.FC = () => {
                   notifications.map(n => (
                     <div 
                       key={n.id} 
-                      onClick={() => !n.read && api.markNotificationAsRead(n.id).then(refreshData)}
+                      onClick={() => handleNotificationClick(n)}
                       className={`p-4 rounded-2xl border flex gap-3 transition-all cursor-pointer ${n.read ? 'bg-white opacity-60' : 'bg-grass-50 border-grass-100 shadow-sm'}`}
                     >
                        <div className="w-10 h-10 bg-white rounded-xl border flex items-center justify-center text-grass-500 shadow-sm">
@@ -301,6 +316,7 @@ const App: React.FC = () => {
                 onRejectBooking={async id => { await api.updateSlot(id, { status: 'available', receiptUrl: null as any }); refreshData(); }}
                 onUpdateField={async (id, u) => { await api.updateField(id, u); refreshData(); return true; }}
                 onRateTeam={() => {}}
+                forceTab={fieldDashForceTab}
             />
           ) : (
             <div className="p-20 text-center flex flex-col items-center">

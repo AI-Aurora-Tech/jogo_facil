@@ -17,10 +17,11 @@ interface FieldDashboardProps {
   onRejectBooking: (slotId: string) => void;
   onUpdateField: (fieldId: string, updates: Partial<Field>) => Promise<boolean>;
   onRateTeam: () => void;
+  forceTab?: 'AGENDA' | 'SOLICITACOES' | 'MENSALISTAS' | 'HISTORICO';
 }
 
 export const FieldDashboard: React.FC<FieldDashboardProps> = ({ 
-  field, slots, onAddSlot, onRefreshData, onDeleteSlot, onConfirmBooking, onRejectBooking, currentUser, categories, onUpdateField, onRateTeam
+  field, slots, onAddSlot, onRefreshData, onDeleteSlot, onConfirmBooking, onRejectBooking, currentUser, categories, onUpdateField, onRateTeam, forceTab
 }) => {
   const [activeTab, setActiveTab] = useState<'AGENDA' | 'SOLICITACOES' | 'MENSALISTAS' | 'HISTORICO'>('AGENDA');
   const [isLoading, setIsLoading] = useState(false);
@@ -51,6 +52,10 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
   const [mensalistaCategory, setMensalistaCategory] = useState('');
 
   useEffect(() => {
+    if (forceTab) setActiveTab(forceTab);
+  }, [forceTab]);
+
+  useEffect(() => {
     loadMensalistas();
   }, [field.id]);
 
@@ -75,6 +80,28 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
     range.push(CATEGORY_ORDER[idx]);
     if (idx < CATEGORY_ORDER.length - 1) range.push(CATEGORY_ORDER[idx + 1]);
     return range;
+  };
+
+  const openEditSlot = (slot: MatchSlot) => {
+    setEditingSlot(slot);
+    setNewSlotDate(slot.date);
+    setNewSlotTime(slot.time);
+    setNewSlotType(slot.matchType);
+    setNewSlotPrice(slot.price);
+    setIsLocalTeamChecked(slot.hasLocalTeam);
+    setSelectedCategory(slot.localTeamCategory || '');
+    setSelectedCourt(slot.courtName || field.courts?.[0] || 'Principal');
+    setSelectedSport(slot.sport || 'Futebol');
+    setShowAddSlotModal(true);
+  };
+
+  const openEditMensalista = (m: RegisteredTeam) => {
+    setEditingMensalista(m);
+    setMensalistaName(m.name);
+    setMensalistaDay(Number(m.fixedDay));
+    setMensalistaTime(m.fixedTime);
+    setMensalistaCategory(m.categories[0] || '');
+    setShowAddMensalistaModal(true);
   };
 
   const handleSaveSlot = async () => {
@@ -103,11 +130,13 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
 
       if (editingSlot) {
         await api.updateSlot(editingSlot.id, {
+          date: newSlotDate,
+          time: newSlotTime,
           matchType: newSlotType,
           price: Number(newSlotPrice),
-          localTeamCategory: isLocalTeamChecked ? selectedCategory : undefined,
-          localTeamName: isLocalTeamChecked ? teamName : undefined,
-          localTeamPhone: isLocalTeamChecked ? teamPhone : undefined,
+          localTeamCategory: isLocalTeamChecked ? selectedCategory : '',
+          localTeamName: isLocalTeamChecked ? teamName : '',
+          localTeamPhone: isLocalTeamChecked ? teamPhone : '',
           allowedOpponentCategories: allowedCats,
           hasLocalTeam: isLocalTeamChecked,
           courtName: selectedCourt,
@@ -162,6 +191,35 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
     }
   };
 
+  const handleSaveMensalista = async () => {
+    setIsLoading(true);
+    try {
+      if (editingMensalista) {
+        await api.updateRegisteredTeam(editingMensalista.id, {
+          name: mensalistaName,
+          fixedDay: String(mensalistaDay),
+          fixedTime: mensalistaTime,
+          categories: [mensalistaCategory]
+        });
+        setEditingMensalista(null);
+      } else {
+        await api.addRegisteredTeam({
+          fieldId: field.id,
+          name: mensalistaName,
+          fixedDay: String(mensalistaDay),
+          fixedTime: mensalistaTime,
+          categories: [mensalistaCategory]
+        });
+      }
+      setShowAddMensalistaModal(false);
+      loadMensalistas();
+    } catch (e) {
+      alert("Erro ao salvar mensalista.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const getDayName = (dateStr: string) => ['Dom','Seg','Ter','Qua','Qui','Sex','Sab'][new Date(`${dateStr}T00:00:00`).getDay()];
 
   const today = new Date().toISOString().split('T')[0];
@@ -186,7 +244,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
           </div>
           <div className="flex gap-2">
             <button onClick={() => onRefreshData()} className="p-3 bg-gray-100 rounded-xl active:rotate-180 transition-transform"><RefreshCcw className="w-5 h-5"/></button>
-            <button onClick={() => { setEditingSlot(null); setShowAddSlotModal(true); }} className="p-3 bg-pitch text-white rounded-xl active:scale-95 shadow-md">
+            <button onClick={() => { setEditingSlot(null); setIsLocalTeamChecked(false); setSelectedCategory(''); setShowAddSlotModal(true); }} className="p-3 bg-pitch text-white rounded-xl active:scale-95 shadow-md">
               <Plus className="w-5 h-5"/>
             </button>
           </div>
@@ -231,6 +289,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                    </div>
                 </div>
                 <div className="flex gap-2">
+                   <button onClick={() => openEditSlot(s)} className="p-2 text-gray-300 hover:text-pitch"><Edit3 className="w-4 h-4"/></button>
                    <button onClick={() => onDeleteSlot(s.id)} className="p-2 text-gray-300 hover:text-red-500"><Trash2 className="w-4 h-4"/></button>
                 </div>
               </div>
@@ -314,11 +373,12 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                      </div>
                   </div>
                   <div className="flex gap-2">
+                     <button onClick={() => openEditMensalista(t)} className="p-3 text-gray-300 hover:text-pitch"><Edit className="w-5 h-5"/></button>
                      <button onClick={() => { if(confirm("Remover mensalista?")) api.deleteRegisteredTeam(t.id).then(loadMensalistas); }} className="p-3 text-gray-300 hover:text-red-500"><Trash2 className="w-5 h-5"/></button>
                   </div>
                </div>
              ))}
-             <button onClick={() => { setEditingMensalista(null); setShowAddMensalistaModal(true); }} className="w-full py-4 border-2 border-dashed border-gray-200 rounded-[2rem] text-gray-400 font-black uppercase text-[10px] hover:border-pitch transition-all">Adicionar Novo Mensalista</button>
+             <button onClick={() => { setEditingMensalista(null); setMensalistaName(''); setMensalistaCategory(''); setShowAddMensalistaModal(true); }} className="w-full py-4 border-2 border-dashed border-gray-200 rounded-[2rem] text-gray-400 font-black uppercase text-[10px] hover:border-pitch transition-all">Adicionar Novo Mensalista</button>
           </div>
         )}
 
@@ -355,16 +415,16 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
            <div className="bg-white w-full rounded-t-[3rem] p-10 animate-in slide-in-from-bottom duration-500 max-h-[90vh] overflow-y-auto">
              <div className="flex justify-between items-center mb-8">
                <h2 className="text-2xl font-black italic uppercase text-pitch">{editingSlot ? 'Editar Horário' : 'Novo Horário'}</h2>
-               <button onClick={() => setShowAddSlotModal(false)} className="p-2 bg-gray-100 rounded-full"><X className="w-6 h-6"/></button>
+               <button onClick={() => { setShowAddSlotModal(false); setEditingSlot(null); }} className="p-2 bg-gray-100 rounded-full"><X className="w-6 h-6"/></button>
              </div>
              
              <div className="space-y-4">
                 <div className="grid grid-cols-2 gap-4">
-                   <div className={`bg-gray-50 p-4 rounded-2xl border ${editingSlot ? 'opacity-50 pointer-events-none' : ''}`}>
+                   <div className="bg-gray-50 p-4 rounded-2xl border">
                       <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Data</label>
                       <input type="date" className="w-full bg-transparent font-black outline-none" value={newSlotDate} onChange={e => setNewSlotDate(e.target.value)} />
                    </div>
-                   <div className={`bg-gray-50 p-4 rounded-2xl border ${editingSlot ? 'opacity-50 pointer-events-none' : ''}`}>
+                   <div className="bg-gray-50 p-4 rounded-2xl border">
                       <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Hora</label>
                       <input type="time" className="w-full bg-transparent font-black outline-none" value={newSlotTime} onChange={e => setNewSlotTime(e.target.value)} />
                    </div>
@@ -444,7 +504,9 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                    <input type="number" className="w-full bg-transparent font-black text-2xl outline-none text-pitch" value={newSlotPrice} onChange={e => setNewSlotPrice(Number(e.target.value))} />
                 </div>
 
-                <Button onClick={handleSaveSlot} isLoading={isLoading} className="w-full py-6 rounded-[2.5rem] font-black uppercase text-xs shadow-xl active:scale-95">Publicar Horário</Button>
+                <Button onClick={handleSaveSlot} isLoading={isLoading} className="w-full py-6 rounded-[2.5rem] font-black uppercase text-xs shadow-xl active:scale-95">
+                  {editingSlot ? 'Atualizar Horário' : 'Publicar Horário'}
+                </Button>
              </div>
            </div>
         </div>
@@ -456,7 +518,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
            <div className="bg-white w-full rounded-t-[3rem] p-10 animate-in slide-in-from-bottom duration-500 max-h-[90vh] overflow-y-auto">
               <div className="flex justify-between items-center mb-8">
                  <h2 className="text-2xl font-black italic uppercase text-pitch">{editingMensalista ? 'Editar Mensalista' : 'Novo Mensalista'}</h2>
-                 <button onClick={() => setShowAddMensalistaModal(false)} className="p-2 bg-gray-100 rounded-full"><X className="w-6 h-6"/></button>
+                 <button onClick={() => { setShowAddMensalistaModal(false); setEditingMensalista(null); }} className="p-2 bg-gray-100 rounded-full"><X className="w-6 h-6"/></button>
               </div>
               <div className="space-y-4">
                  <div className="bg-gray-50 p-4 rounded-2xl border">
@@ -486,7 +548,9 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                     </div>
                  </div>
                  
-                 <Button onClick={() => { setIsLoading(true); api.addRegisteredTeam({ fieldId: field.id, name: mensalistaName, fixedDay: String(mensalistaDay), fixedTime: mensalistaTime, categories: [mensalistaCategory] }).then(() => { setShowAddMensalistaModal(false); loadMensalistas(); setIsLoading(false); }) }} isLoading={isLoading} className="w-full py-6 rounded-[2.5rem] font-black uppercase text-xs shadow-xl">Salvar Mensalista</Button>
+                 <Button onClick={handleSaveMensalista} isLoading={isLoading} className="w-full py-6 rounded-[2.5rem] font-black uppercase text-xs shadow-xl">
+                   {editingMensalista ? 'Atualizar Mensalista' : 'Salvar Mensalista'}
+                 </Button>
               </div>
            </div>
         </div>
