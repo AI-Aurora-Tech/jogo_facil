@@ -163,9 +163,9 @@ export const api = {
       matchType: s.match_type,
       isBooked: s.is_booked,
       hasLocalTeam: s.has_local_team,
-      local_team_name: s.local_team_name,
-      local_team_category: s.local_team_category,
-      local_team_phone: s.local_team_phone,
+      localTeamName: s.local_team_name,
+      localTeamCategory: s.local_team_category,
+      localTeamPhone: s.local_team_phone,
       bookedByUserId: s.booked_by_user_id,
       bookedByTeamName: s.booked_by_team_name,
       bookedByTeamCategory: s.booked_by_team_category,
@@ -219,7 +219,6 @@ export const api = {
       local_team_name: s.localTeamName || null,
       local_team_category: s.localTeamCategory || null,
       local_team_phone: s.localTeamPhone || null,
-      // Fix: Correctly access allowedOpponentCategories (camelCase) from the Partial<MatchSlot> parameter.
       allowed_opponent_categories: s.allowedOpponentCategories || [],
       price: s.price || 0,
       status: s.status || 'available',
@@ -273,7 +272,6 @@ export const api = {
     if (updates.captainName !== undefined) payload.captain_name = updates.captainName;
     if (updates.captainPhone !== undefined) payload.captain_phone = updates.captainPhone;
     
-    // Fix: Corrected table target to 'registered_team' as intended for registered team updates.
     const { error } = await supabase.from('registered_team').update(payload).eq('id', teamId);
     if (error) throw error;
   },

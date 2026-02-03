@@ -223,9 +223,9 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
   const getDayName = (dateStr: string) => ['Dom','Seg','Ter','Qua','Qui','Sex','Sab'][new Date(`${dateStr}T00:00:00`).getDay()];
 
   const today = new Date().toISOString().split('T')[0];
-  const agendaSlots = slots.filter(s => s.status === 'available' && s.date >= today);
+  // Mudança: Agenda agora inclui disponíveis E confirmados para o dono ver quem joga
+  const agendaSlots = slots.filter(s => (s.status === 'available' || s.status === 'confirmed') && s.date >= today);
   const pendingSlots = slots.filter(s => s.status === 'pending_verification' && s.date >= today);
-  const confirmedSlots = slots.filter(s => s.status === 'confirmed' && s.date >= today);
   const pastSlots = slots.filter(s => s.date < today);
 
   return (
@@ -271,30 +271,49 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
         {activeTab === 'AGENDA' && (
           <div className="space-y-4">
             <h3 className="text-[10px] font-black text-gray-400 uppercase tracking-widest flex items-center gap-2">
-              <Calendar className="w-4 h-4" /> Horários em Aberto
+              <Calendar className="w-4 h-4" /> Horários Programados
             </h3>
             {agendaSlots.map(s => (
-              <div key={s.id} className="bg-white p-5 rounded-[2.5rem] border shadow-sm flex items-center justify-between group hover:border-pitch transition-all">
+              <div key={s.id} className={`bg-white p-5 rounded-[2.5rem] border shadow-sm flex items-center justify-between group hover:border-pitch transition-all ${s.status === 'confirmed' ? 'border-grass-200 bg-grass-50/20' : ''}`}>
                 <div className="flex items-center gap-4">
-                   <div className="w-14 h-14 bg-gray-50 rounded-2xl flex flex-col items-center justify-center border text-center">
-                      <span className="text-[8px] font-black uppercase opacity-60 leading-none">{getDayName(s.date)}</span>
+                   <div className={`w-14 h-14 rounded-2xl flex flex-col items-center justify-center border text-center transition-colors ${s.status === 'confirmed' ? 'bg-grass-500 text-white border-grass-500' : 'bg-gray-50'}`}>
+                      <span className={`text-[8px] font-black uppercase leading-none opacity-60 ${s.status === 'confirmed' ? 'opacity-100' : ''}`}>{getDayName(s.date)}</span>
                       <span className="text-[11px] font-black">{s.time}</span>
                    </div>
                    <div>
                       <div className="flex items-center gap-2">
-                        <span className={`text-[8px] font-black px-1.5 py-0.5 rounded uppercase ${s.matchType === 'FIXO' ? 'bg-orange-100 text-orange-600' : s.matchType === 'FESTIVAL' ? 'bg-blue-100 text-blue-600' : 'bg-grass-100 text-grass-600'}`}>{s.matchType}</span>
+                        <span className={`text-[8px] font-black px-1.5 py-0.5 rounded uppercase ${s.status === 'confirmed' ? 'bg-grass-100 text-grass-600' : s.matchType === 'FIXO' ? 'bg-orange-100 text-orange-600' : 'bg-blue-100 text-blue-600'}`}>
+                          {s.status === 'confirmed' ? 'Confirmado' : s.matchType}
+                        </span>
                         <span className="text-[8px] font-black text-gray-400 uppercase italic">{s.courtName || 'Principal'}</span>
                       </div>
-                      <p className="font-black text-pitch text-sm mt-1">{s.localTeamName || 'Vaga Aberta'} ({s.localTeamCategory || 'Livre'})</p>
+                      
+                      <div className="flex items-center gap-2 mt-1">
+                        <p className="font-black text-pitch text-sm">{s.localTeamName || 'Aluguel Avulso'}</p>
+                        {s.opponentTeamName && (
+                          <>
+                            <Swords className="w-3 h-3 text-gray-300" />
+                            <p className="font-black text-grass-600 text-sm">{s.opponentTeamName}</p>
+                          </>
+                        )}
+                        {!s.opponentTeamName && s.status === 'available' && (
+                           <span className="text-[8px] font-black text-orange-400 uppercase italic ml-1">(Aguardando Adversário)</span>
+                        )}
+                      </div>
+                      <p className="text-[9px] font-bold text-gray-400 uppercase">{s.localTeamCategory || 'Livre'}</p>
                    </div>
                 </div>
                 <div className="flex gap-2">
-                   <button onClick={() => openEditSlot(s)} className="p-2 text-gray-300 hover:text-pitch"><Edit3 className="w-4 h-4"/></button>
-                   <button onClick={() => onDeleteSlot(s.id)} className="p-2 text-gray-300 hover:text-red-500"><Trash2 className="w-4 h-4"/></button>
+                   {s.status === 'available' && (
+                     <>
+                        <button onClick={() => openEditSlot(s)} className="p-2 text-gray-300 hover:text-pitch"><Edit3 className="w-4 h-4"/></button>
+                        <button onClick={() => onDeleteSlot(s.id)} className="p-2 text-gray-300 hover:text-red-500"><Trash2 className="w-4 h-4"/></button>
+                     </>
+                   )}
                 </div>
               </div>
             ))}
-            {agendaSlots.length === 0 && <p className="text-center py-20 text-gray-300 font-black uppercase text-[10px]">Nenhum horário aberto</p>}
+            {agendaSlots.length === 0 && <p className="text-center py-20 text-gray-300 font-black uppercase text-[10px]">Nenhum horário aberto ou confirmado</p>}
           </div>
         )}
 
@@ -384,8 +403,8 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
 
         {activeTab === 'HISTORICO' && (
            <div className="space-y-4">
-              {[...confirmedSlots, ...pastSlots].map(s => (
-                <div key={s.id} className={`bg-white p-5 rounded-[2.5rem] border shadow-sm flex items-center justify-between ${s.date < today ? 'opacity-60' : ''}`}>
+              {pastSlots.map(s => (
+                <div key={s.id} className="bg-white p-5 rounded-[2.5rem] border shadow-sm flex items-center justify-between opacity-60">
                   <div className="flex items-center gap-4">
                     <div className="w-14 h-14 bg-gray-50 rounded-2xl flex flex-col items-center justify-center border text-center">
                        <span className="text-[8px] font-black uppercase leading-none">{getDayName(s.date)}</span>
@@ -395,13 +414,13 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                        <div className="flex items-center gap-2">
                           <span className="font-black text-pitch text-sm">{s.localTeamName}</span>
                           <Swords className="w-3 h-3 text-gray-300" />
-                          <span className="font-black text-pitch text-sm">{s.opponentTeamName || 'Aguardando'}</span>
+                          <span className="font-black text-pitch text-sm">{s.opponentTeamName || 'Nenhum'}</span>
                        </div>
                        <p className="text-[9px] font-bold text-gray-400 uppercase mt-1">{s.date.split('-').reverse().join('/')} • R$ {s.price} • {s.courtName}</p>
                     </div>
                   </div>
-                  <div className={`px-3 py-1 rounded-full text-[8px] font-black uppercase ${s.status === 'confirmed' ? 'bg-grass-100 text-grass-600' : 'bg-gray-100 text-gray-500'}`}>
-                    {s.status === 'confirmed' ? 'Confirmado' : 'Encerrado'}
+                  <div className={`px-3 py-1 rounded-full text-[8px] font-black uppercase bg-gray-100 text-gray-500`}>
+                    Encerrado
                   </div>
                 </div>
               ))}

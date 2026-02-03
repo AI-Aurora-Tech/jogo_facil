@@ -100,11 +100,11 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
             <div className="px-6 pb-2">
               <div className="bg-gray-50 rounded-2xl p-4 flex items-center justify-between">
                 <div>
-                   <p className="text-[8px] font-black text-gray-400 uppercase mb-1">Mandante</p>
-                   <p className="text-sm font-black text-pitch">{slot.localTeamName || 'Aluguel Avulso'}</p>
-                   <p className="text-[10px] font-bold text-grass-600">{slot.localTeamCategory || 'Livre'}</p>
+                   <p className="text-[8px] font-black text-gray-400 uppercase mb-1">Mandante (Quem joga)</p>
+                   <p className="text-base font-black text-pitch">{slot.localTeamName || 'Horário para Aluguel'}</p>
+                   <p className="text-[10px] font-bold text-grass-600 uppercase">{slot.localTeamCategory || 'Livre'}</p>
                 </div>
-                <Swords className="w-4 h-4 text-gray-300 mx-2" />
+                {isChallenge && <Swords className="w-5 h-5 text-gray-300 mx-2" />}
                 <div className="text-right flex-1">
                    <p className="text-[8px] font-black text-gray-400 uppercase mb-1">Categorias Aceitas</p>
                    <p className="text-[10px] font-black text-pitch uppercase line-clamp-1">
@@ -124,7 +124,7 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
                 onClick={() => { setSelectedSlot(slot); setSelectedCategory(''); }} 
                 className={`rounded-2xl px-8 py-4 font-black uppercase text-[10px] ${isChallenge ? 'bg-orange-500' : 'bg-pitch'}`}
                >
-                  {isChallenge ? 'Desafiar' : 'Reservar Horário'}
+                  {isChallenge ? 'Desafiar Time' : 'Reservar Horário'}
                </Button>
             </div>
           </div>
@@ -134,7 +134,9 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
       {selectedSlot && (
         <div className="fixed inset-0 bg-pitch/95 backdrop-blur-xl z-[400] flex items-end">
           <div className="bg-white w-full rounded-t-[4rem] p-12 animate-in slide-in-from-bottom duration-500 max-h-[90vh] overflow-y-auto">
-            <h2 className="text-2xl font-black text-pitch uppercase italic mb-8">Confirmar Desafio</h2>
+            <h2 className="text-2xl font-black text-pitch uppercase italic mb-8">
+              {selectedSlot.hasLocalTeam ? 'Confirmar Desafio' : 'Reservar Aluguel'}
+            </h2>
             
             <div className="space-y-6">
                <div>
