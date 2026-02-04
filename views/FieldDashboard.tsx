@@ -63,27 +63,30 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
   };
 
   const handleGenerateRecurringSlots = async (team: RegisteredTeam) => {
-    if (!confirm(`Gerar os próximos 10 jogos para ${team.name}?`)) return;
+    if (!confirm(`Deseja gerar os próximos 10 jogos para ${team.name}?`)) return;
     
     setIsLoading(true);
     try {
       const targetDay = Number(team.fixedDay);
-      const newSlots: Omit<MatchSlot, 'id'>[] = [];
+      const newSlots: Partial<MatchSlot>[] = [];
       
+      // Encontra a data do último jogo desse mensalista
       const teamSlots = slots.filter(s => s.localTeamName === team.name && s.fieldId === field.id).sort((a,b) => b.date.localeCompare(a.date));
       let startDate = new Date();
       if (teamSlots.length > 0) {
-        startDate = new Date(`${teamSlots[0].date}T00:00:00`);
+        startDate = new Date(`${teamSlots[0].date}T12:00:00`);
         startDate.setDate(startDate.getDate() + 1);
       }
 
       let current = new Date(startDate);
+      // Avança até o próximo dia da semana correspondente
       while (current.getDay() !== targetDay) {
         current.setDate(current.getDate() + 1);
       }
 
       for (let i = 0; i < 10; i++) {
         const dateStr = current.toISOString().split('T')[0];
+        // Verifica se já não existe um jogo no mesmo horário/dia/quadra
         const exists = slots.find(s => s.date === dateStr && s.time === team.fixedTime && s.fieldId === field.id && s.courtName === team.courtName);
         
         if (!exists) {
@@ -96,11 +99,11 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
             isBooked: false, 
             hasLocalTeam: true,
             localTeamName: team.name,
-            localTeamCategory: team.categories[0] || 'Livre',
+            localTeamCategory: team.categories?.[0] || 'Livre',
             localTeamPhone: team.captainPhone,
             localTeamLogoUrl: team.logoUrl,
             localTeamGender: team.gender,
-            allowedOpponentCategories: team.categories[0] ? [team.categories[0]] : [],
+            allowedOpponentCategories: team.categories?.[0] ? [team.categories[0]] : [],
             price: field.hourlyRate,
             status: 'available',
             courtName: team.courtName,
@@ -112,13 +115,14 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
 
       if (newSlots.length > 0) {
         await api.createSlots(newSlots);
-        alert(`${newSlots.length} horários adicionados à agenda.`);
+        alert(`${newSlots.length} novos horários foram gerados com sucesso.`);
         onRefreshData();
       } else {
-        alert("Sua agenda para este mensalista já está preenchida.");
+        alert("Não foi necessário gerar novos horários (agenda já preenchida).");
       }
     } catch (e) {
-      alert("Erro ao gerar agenda.");
+      console.error(e);
+      alert("Erro ao gerar agenda. Verifique sua conexão ou se o mensalista tem dados válidos.");
     } finally {
       setIsLoading(false);
     }
@@ -126,7 +130,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
 
   const handleSaveMensalista = async () => {
     if (!mensalistaName || !mensalistaPhone || !mensalistaEmail || !mensalistaCategory) {
-      alert("Preencha todos os campos obrigatórios (Nome, Categoria, Telefone e E-mail).");
+      alert("Campos obrigatórios: Nome do Time, Categoria, Telefone e E-mail.");
       return;
     }
     setIsLoading(true);
@@ -156,7 +160,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
       alert("Mensalista salvo com sucesso!");
     } catch (e) {
       console.error(e);
-      alert("Erro ao salvar mensalista.");
+      alert("Erro ao salvar mensalista. Verifique se todos os campos estão corretos.");
     } finally {
       setIsLoading(false);
     }
@@ -238,7 +242,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                     </div>
                   </div>
 
-                  <Button variant="outline" onClick={() => handleGenerateRecurringSlots(t)} className="w-full py-4 rounded-2xl text-[9px] font-black uppercase flex items-center justify-center gap-2 border-dashed">
+                  <Button variant="outline" onClick={() => handleGenerateRecurringSlots(t)} isLoading={isLoading} className="w-full py-4 rounded-2xl text-[9px] font-black uppercase flex items-center justify-center gap-2 border-dashed">
                     <CalendarPlus className="w-4 h-4" /> Gerar Próximos 10 Jogos
                   </Button>
                </div>

@@ -1,5 +1,4 @@
-
-import React, { ErrorInfo, ReactNode } from 'react';
+import React, { Component, ErrorInfo, ReactNode } from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
 
@@ -15,8 +14,8 @@ interface ErrorBoundaryState {
 /**
  * ErrorBoundary class to catch rendering errors in the component tree.
  */
-// Fix: Use React.Component to ensure 'props' and 'state' are correctly recognized as inherited properties by the TypeScript compiler.
-class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
+// Fix: Explicitly import Component and use it to define the class, ensuring props and state are correctly inherited from the React base class.
+class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
   constructor(props: ErrorBoundaryProps) {
     super(props);
     this.state = {
@@ -39,7 +38,7 @@ class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundarySta
   };
 
   public render(): ReactNode {
-    // Fix: Accessing children through this.props, which is correctly typed via React.Component.
+    // Fix: Access state through this.state, which is defined by extending React.Component.
     if (this.state.hasError) {
       return (
         <div className="min-h-screen bg-[#022c22] flex items-center justify-center p-6 text-center font-sans">
@@ -69,6 +68,7 @@ class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundarySta
         </div>
       );
     }
+    // Fix: Access children via this.props, ensuring they are returned when no error occurred.
     return this.props.children;
   }
 }
