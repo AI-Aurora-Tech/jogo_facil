@@ -40,7 +40,10 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
   const [slotSport, setSlotSport] = useState('Futebol');
   const [hasLocalTeam, setHasLocalTeam] = useState(false);
   const [localTeamSource, setLocalTeamSource] = useState<'MY_TEAMS' | 'MENSALISTAS'>('MENSALISTAS');
-  const [selectedLocalTeamIdx, setSelectedLocalTeamIdx] = useState(0);
+  
+  // Novo estado para seleção precisa (index do time + index da categoria)
+  const [selectedLocalIdentity, setSelectedLocalIdentity] = useState('0-0');
+
   const [allowedCats, setAllowedCats] = useState<string[]>([]);
 
   // Form States Mensalista
@@ -82,20 +85,22 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
       let localGender: Gender = 'MASCULINO';
 
       if (hasLocalTeam) {
+        const [teamIdx, catIdx] = selectedLocalIdentity.split('-').map(Number);
+        
         if (localTeamSource === 'MENSALISTAS') {
-          const t = registeredTeams[selectedLocalTeamIdx];
+          const t = registeredTeams[teamIdx];
           if (t) {
             localName = t.name;
-            localCat = t.categories[0];
+            localCat = t.categories[catIdx] || t.categories[0];
             localPhone = t.captainPhone;
             localLogo = t.logoUrl;
             localGender = t.gender;
           }
         } else {
-          const t = currentUser.teams[selectedLocalTeamIdx];
+          const t = currentUser.teams[teamIdx];
           if (t) {
             localName = t.name;
-            localCat = t.categories[0];
+            localCat = t.categories[catIdx] || t.categories[0];
             localPhone = currentUser.phoneNumber;
             localLogo = t.logoUrl;
             localGender = t.gender;
@@ -399,20 +404,35 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                  <div className="bg-pitch/5 p-6 rounded-[2rem] border border-pitch/10">
                     <div className="flex items-center justify-between mb-4">
                        <label className="text-[10px] font-black text-pitch uppercase italic">Existe Mandante (Time Local)?</label>
-                       <input type="checkbox" className="w-6 h-6 rounded-lg text-pitch" checked={hasLocalTeam} onChange={e => setHasLocalTeam(e.target.checked)} />
+                       <input type="checkbox" className="w-6 h-6 rounded-lg text-pitch" checked={hasLocalTeam} onChange={e => {
+                          setHasLocalTeam(e.target.checked);
+                          setSelectedLocalIdentity('0-0'); // Reset ao alternar
+                       }} />
                     </div>
                     
                     {hasLocalTeam && (
                       <div className="space-y-4 animate-in fade-in duration-300">
                          <div className="flex p-1 bg-white rounded-xl border">
-                            <button onClick={() => setLocalTeamSource('MENSALISTAS')} className={`flex-1 py-2 text-[8px] font-black uppercase rounded-lg ${localTeamSource === 'MENSALISTAS' ? 'bg-pitch text-white' : 'text-gray-400'}`}>Mensalistas</button>
-                            <button onClick={() => setLocalTeamSource('MY_TEAMS')} className={`flex-1 py-2 text-[8px] font-black uppercase rounded-lg ${localTeamSource === 'MY_TEAMS' ? 'bg-pitch text-white' : 'text-gray-400'}`}>Meus Times</button>
+                            <button onClick={() => { setLocalTeamSource('MENSALISTAS'); setSelectedLocalIdentity('0-0'); }} className={`flex-1 py-2 text-[8px] font-black uppercase rounded-lg ${localTeamSource === 'MENSALISTAS' ? 'bg-pitch text-white' : 'text-gray-400'}`}>Mensalistas</button>
+                            <button onClick={() => { setLocalTeamSource('MY_TEAMS'); setSelectedLocalIdentity('0-0'); }} className={`flex-1 py-2 text-[8px] font-black uppercase rounded-lg ${localTeamSource === 'MY_TEAMS' ? 'bg-pitch text-white' : 'text-gray-400'}`}>Meus Times</button>
                          </div>
-                         <select className="w-full p-4 bg-white border rounded-xl font-black text-xs" value={selectedLocalTeamIdx} onChange={e => setSelectedLocalTeamIdx(Number(e.target.value))}>
+                         <select className="w-full p-4 bg-white border rounded-xl font-black text-xs" value={selectedLocalIdentity} onChange={e => setSelectedLocalIdentity(e.target.value)}>
                             {localTeamSource === 'MENSALISTAS' ? (
-                              registeredTeams.map((t, i) => <option key={t.id} value={i}>{t.name} ({t.categories[0]})</option>)
+                              registeredTeams.flatMap((t, teamIdx) => 
+                                t.categories.map((cat, catIdx) => (
+                                  <option key={`${t.id}-${cat}`} value={`${teamIdx}-${catIdx}`}>
+                                    {t.name} ({cat})
+                                  </option>
+                                ))
+                              )
                             ) : (
-                              currentUser.teams.map((t, i) => <option key={i} value={i}>{t.name} ({t.categories[0]})</option>)
+                              currentUser.teams.flatMap((t, teamIdx) => 
+                                t.categories.map((cat, catIdx) => (
+                                  <option key={`${t.name}-${cat}`} value={`${teamIdx}-${catIdx}`}>
+                                    {t.name} ({cat})
+                                  </option>
+                                ))
+                              )
                             )}
                          </select>
                       </div>
@@ -518,6 +538,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                  <div className="bg-pitch/5 p-6 rounded-[2.5rem] border border-pitch/10 space-y-4">
                     <p className="text-[10px] font-black text-pitch uppercase italic mb-2">Dados de Acesso do Capitão</p>
                     <input className="w-full p-4 bg-white rounded-xl border text-xs font-bold" placeholder="E-mail do Capitão" type="email" value={mensalistaEmail} onChange={e => setMensalistaEmail(e.target.value)} />
+                    {/* Fix: Replace undefined setPhone with setMensalistaPhone */}
                     <input className="w-full p-4 bg-white rounded-xl border text-xs font-bold" placeholder="WhatsApp (Senha)" value={mensalistaPhone} onChange={e => setMensalistaPhone(e.target.value)} />
                     <input className="w-full p-4 bg-white rounded-xl border text-xs font-bold" placeholder="Nome do Capitão" value={mensalistaCaptain} onChange={e => setMensalistaCaptain(e.target.value)} />
                  </div>
