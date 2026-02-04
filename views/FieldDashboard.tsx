@@ -1,9 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Trash2, Calendar, Clock, RefreshCcw, Loader2, X, Swords, Edit3, MessageCircle, TrendingUp, CheckCircle2, User as UserIcon, CalendarDays, History as HistoryIcon, UserCheck, Phone, Edit, Building2, MapPin, LayoutGrid, Flag, Trophy, CheckCircle, XCircle, AlertCircle, CalendarPlus, Mail, Camera, UserPlus } from 'lucide-react';
+import { Plus, Trash2, Calendar, Clock, RefreshCcw, X, Swords, Edit3, MessageCircle, UserCheck, Phone, Edit, Building2, MapPin, LayoutGrid, Flag, Trophy, CheckCircle, XCircle, AlertCircle, CalendarPlus, Mail, Camera, UserPlus, Smartphone, CalendarDays, History as HistoryIcon } from 'lucide-react';
 import { Button } from '../components/Button';
 import { Field, MatchSlot, MatchType, User, CATEGORY_ORDER, RegisteredTeam, SPORTS, Gender } from '../types';
 import { api } from '../api';
-import { supabase } from '../supabaseClient';
 import { convertFileToBase64 } from '../utils';
 
 interface FieldDashboardProps {
@@ -40,10 +39,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
   const [slotSport, setSlotSport] = useState('Futebol');
   const [hasLocalTeam, setHasLocalTeam] = useState(false);
   const [localTeamSource, setLocalTeamSource] = useState<'MY_TEAMS' | 'MENSALISTAS'>('MENSALISTAS');
-  
-  // Novo estado para seleção precisa (index do time + index da categoria)
   const [selectedLocalIdentity, setSelectedLocalIdentity] = useState('0-0');
-
   const [allowedCats, setAllowedCats] = useState<string[]>([]);
 
   // Form States Mensalista
@@ -86,7 +82,6 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
 
       if (hasLocalTeam) {
         const [teamIdx, catIdx] = selectedLocalIdentity.split('-').map(Number);
-        
         if (localTeamSource === 'MENSALISTAS') {
           const t = registeredTeams[teamIdx];
           if (t) {
@@ -132,7 +127,68 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
       alert("Horário criado com sucesso!");
     } catch (e) {
       console.error(e);
-      alert("Erro ao criar horário. Verifique o banco de dados.");
+      alert("Erro ao criar horário.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleAction = async (slotId: string, action: 'confirm' | 'reject') => {
+    setIsLoading(true);
+    try {
+      if (action === 'confirm') {
+        await onConfirmBooking(slotId);
+        // Notification is handled in App.tsx or we can trigger it here if desired
+        alert("Agendamento confirmado com sucesso!");
+      } else {
+        await onRejectBooking(slotId);
+        alert("Solicitação recusada.");
+      }
+      onRefreshData();
+    } catch (e) { 
+      console.error(e);
+      alert("Erro ao processar ação."); 
+    } finally { 
+      setIsLoading(false); 
+    }
+  };
+
+  const handleSaveMensalista = async () => {
+    if (!mensalistaName || !mensalistaPhone) {
+      alert("Nome e WhatsApp são obrigatórios.");
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      const payload: Partial<RegisteredTeam> = {
+        name: mensalistaName,
+        captainName: mensalistaCaptain,
+        captainPhone: mensalistaPhone,
+        email: mensalistaEmail,
+        fixedDay: String(mensalistaDay),
+        fixedTime: mensalistaTime,
+        categories: [mensalistaCategory],
+        logoUrl: mensalistaLogo,
+        gender: mensalistaGender,
+        sport: mensalistaSport,
+        courtName: mensalistaCourt,
+        fieldId: field.id
+      };
+
+      if (editingMensalista) {
+        await api.updateRegisteredTeam(editingMensalista.id, payload);
+        alert("Mensalista atualizado!");
+      } else {
+        await api.addRegisteredTeam(payload);
+        alert("Mensalista cadastrado!");
+      }
+      
+      setShowAddMensalistaModal(false);
+      loadMensalistas();
+    } catch (e) {
+      console.error(e);
+      alert("Erro ao salvar mensalista.");
     } finally {
       setIsLoading(false);
     }
@@ -143,100 +199,67 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
     
     setIsLoading(true);
     try {
+      const slotsToCreate: Omit<MatchSlot, 'id'>[] = [];
       const targetDay = Number(team.fixedDay);
-      const newSlots: Partial<MatchSlot>[] = [];
       
-      const teamSlots = slots.filter(s => s.localTeamName === team.name && s.fieldId === field.id).sort((a,b) => b.date.localeCompare(a.date));
-      let startDate = new Date();
-      if (teamSlots.length > 0) {
-        startDate = new Date(`${teamSlots[0].date}T12:00:00`);
-        startDate.setDate(startDate.getDate() + 1);
-      }
-
-      let current = new Date(startDate);
-      while (current.getDay() !== targetDay) {
-        current.setDate(current.getDate() + 1);
-      }
-
-      for (let i = 0; i < 10; i++) {
-        const dateStr = current.toISOString().split('T')[0];
-        const exists = slots.find(s => s.date === dateStr && s.time === team.fixedTime && s.fieldId === field.id && s.courtName === team.courtName);
-        
-        if (!exists) {
-          newSlots.push({
-            fieldId: field.id,
-            date: dateStr,
-            time: team.fixedTime,
-            durationMinutes: 60,
-            matchType: 'FIXO',
-            isBooked: false, 
-            hasLocalTeam: true,
-            localTeamName: team.name,
-            localTeamCategory: team.categories?.[0] || 'Livre',
-            localTeamPhone: team.captainPhone,
-            localTeamLogoUrl: team.logoUrl,
-            localTeamGender: team.gender,
-            allowedOpponentCategories: team.categories?.[0] ? [team.categories[0]] : [],
-            price: field.hourlyRate,
-            status: 'available',
-            courtName: team.courtName,
-            sport: team.sport
-          });
+      let currentDate = new Date();
+      currentDate.setHours(12, 0, 0, 0); // Avoid timezone issues
+      let count = 0;
+      
+      while (count < 10) {
+        if (currentDate.getDay() === targetDay) {
+          const dateStr = currentDate.toISOString().split('T')[0];
+          // Simple check to avoid duplicates for the same time/date/court
+          const alreadyExists = slots.some(s => s.date === dateStr && s.time === team.fixedTime && s.courtName === team.courtName);
+          
+          if (!alreadyExists) {
+            slotsToCreate.push({
+              fieldId: field.id,
+              date: dateStr,
+              time: team.fixedTime,
+              durationMinutes: 60,
+              matchType: 'FIXO',
+              isBooked: true,
+              hasLocalTeam: true,
+              localTeamName: team.name,
+              localTeamCategory: team.categories[0],
+              localTeamPhone: team.captainPhone,
+              localTeamLogoUrl: team.logoUrl,
+              localTeamGender: team.gender,
+              allowedOpponentCategories: team.categories,
+              status: 'confirmed',
+              price: field.hourlyRate,
+              sport: team.sport,
+              courtName: team.courtName
+            });
+            count++;
+          }
         }
-        current.setDate(current.getDate() + 7);
+        currentDate.setDate(currentDate.getDate() + 1);
       }
 
-      if (newSlots.length > 0) {
-        await api.createSlots(newSlots);
-        alert(`${newSlots.length} novos horários foram gerados.`);
+      if (slotsToCreate.length > 0) {
+        await api.createSlots(slotsToCreate);
+        alert(`${slotsToCreate.length} horários gerados na agenda!`);
         onRefreshData();
       } else {
-        alert("Sua agenda para este mensalista já está atualizada.");
+        alert("Agenda já está preenchida para os próximos períodos.");
       }
     } catch (e) {
       console.error(e);
-      alert("Erro ao gerar agenda. Certifique-se de que as colunas do banco foram criadas.");
+      alert("Erro ao gerar horários.");
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleSaveMensalista = async () => {
-    if (!mensalistaName || !mensalistaPhone || !mensalistaEmail || !mensalistaCategory) {
-      alert("Campos obrigatórios: Nome do Time, Categoria, Telefone e E-mail.");
+  const handleWhatsApp = (phone?: string, message?: string) => {
+    if (!phone) {
+      alert("Telefone do time desafiante não disponível.");
       return;
     }
-    setIsLoading(true);
-    try {
-      const payload: Partial<RegisteredTeam> = {
-        fieldId: field.id,
-        name: mensalistaName,
-        fixedDay: String(mensalistaDay),
-        fixedTime: mensalistaTime,
-        categories: [mensalistaCategory],
-        captainName: mensalistaCaptain,
-        captainPhone: mensalistaPhone,
-        email: mensalistaEmail,
-        logoUrl: mensalistaLogo,
-        gender: mensalistaGender,
-        sport: mensalistaSport,
-        courtName: mensalistaCourt
-      };
-
-      if (editingMensalista) {
-        await api.updateRegisteredTeam(editingMensalista.id, payload);
-      } else {
-        await api.addRegisteredTeam(payload);
-      }
-      setShowAddMensalistaModal(false);
-      loadMensalistas();
-      alert("Mensalista salvo com sucesso!");
-    } catch (e) {
-      console.error(e);
-      alert("Erro ao salvar mensalista. Verifique se as colunas existem no banco.");
-    } finally {
-      setIsLoading(false);
-    }
+    const cleanPhone = phone.replace(/\D/g, '');
+    window.open(`https://wa.me/55${cleanPhone}?text=${encodeURIComponent(message || '')}`, '_blank');
   };
 
   return (
@@ -267,7 +290,10 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
           {['AGENDA', 'SOLICITACOES', 'MENSALISTAS', 'HISTORICO'].map((tab: any) => (
             <button key={tab} onClick={() => setActiveTab(tab)} className={`flex-1 py-2 px-3 text-[10px] font-black uppercase rounded-xl transition-all whitespace-nowrap ${activeTab === tab ? 'bg-white text-pitch shadow-sm' : 'text-gray-400'}`}>
               {tab === 'AGENDA' && <CalendarDays className="w-3 h-3 inline-block mr-1 mb-0.5" />}
-              {tab === 'SOLICITACOES' && <MessageCircle className="w-3 h-3 inline-block mr-1 mb-0.5" />}
+              {tab === 'SOLICITACOES' && <div className="relative inline-block">
+                <MessageCircle className="w-3 h-3 inline-block mr-1 mb-0.5" />
+                {slots.some(s => s.status === 'pending_verification') && <span className="absolute -top-1 -right-1 w-2 h-2 bg-red-500 rounded-full border-2 border-white animate-pulse"></span>}
+              </div>}
               {tab === 'MENSALISTAS' && <UserCheck className="w-3 h-3 inline-block mr-1 mb-0.5" />}
               {tab === 'HISTORICO' && <HistoryIcon className="w-3 h-3 inline-block mr-1 mb-0.5" />}
               {tab.charAt(0) + tab.slice(1).toLowerCase()}
@@ -282,22 +308,76 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
             {slots.length === 0 ? (
               <div className="text-center py-20 text-gray-400 font-black uppercase text-[10px]">Agenda vazia. Crie novos horários clicando no botão + no topo.</div>
             ) : (
-              slots.map(slot => (
+              slots.filter(s => s.status === 'available' || s.status === 'confirmed').map(slot => (
                 <div key={slot.id} className="bg-white p-4 rounded-[2rem] border flex items-center justify-between shadow-sm">
                   <div className="flex items-center gap-4">
-                     <div className="bg-gray-50 p-3 rounded-xl text-pitch"><Clock className="w-5 h-5"/></div>
+                     <div className={`p-3 rounded-xl ${slot.status === 'confirmed' ? 'bg-grass-100 text-grass-600' : 'bg-gray-50 text-pitch'}`}><Clock className="w-5 h-5"/></div>
                      <div>
                         <p className="text-xs font-black text-pitch uppercase">{slot.date.split('-').reverse().join('/')} às {slot.time}</p>
                         <p className="text-[8px] font-black text-gray-400 uppercase">
-                          {slot.localTeamName ? `${slot.localTeamName} (${slot.localTeamCategory})` : 'Horário Livre'} 
+                          {slot.opponentTeamName ? `${slot.localTeamName || 'Arena'} vs ${slot.opponentTeamName}` : slot.localTeamName ? `${slot.localTeamName} (${slot.localTeamCategory})` : 'Horário Livre'} 
                           <br/> {slot.matchType} • {slot.courtName || 'Principal'}
                         </p>
                      </div>
                   </div>
-                  <button onClick={() => { if(confirm("Remover este horário?")) onDeleteSlot(slot.id); }} className="p-2 text-red-500 hover:bg-red-50 rounded-lg"><Trash2 className="w-4 h-4"/></button>
+                  <div className="flex gap-2">
+                    {slot.status === 'confirmed' && slot.opponentTeamPhone && (
+                       <button onClick={() => handleWhatsApp(slot.opponentTeamPhone, `Olá capitão do ${slot.opponentTeamName}! Jogo confirmado na arena ${field.name} para o dia ${slot.date.split('-').reverse().join('/')} às ${slot.time}. Tudo certo?`)} className="p-2 bg-grass-50 text-grass-600 rounded-lg"><Smartphone className="w-4 h-4"/></button>
+                    )}
+                    <button onClick={() => { if(confirm("Remover este horário?")) onDeleteSlot(slot.id); }} className="p-2 text-red-500 hover:bg-red-50 rounded-lg"><Trash2 className="w-4 h-4"/></button>
+                  </div>
                 </div>
               ))
             )}
+          </div>
+        )}
+
+        {activeTab === 'SOLICITACOES' && (
+          <div className="space-y-4">
+             {slots.filter(s => s.status === 'pending_verification').length === 0 ? (
+               <div className="text-center py-20 flex flex-col items-center">
+                  {/* Fix: Use 'CheckCircle' instead of 'CheckCircle2' */}
+                  <CheckCircle className="w-12 h-12 text-gray-200 mb-4" />
+                  <p className="text-[10px] font-black text-gray-300 uppercase">Tudo em dia! Nenhuma solicitação pendente.</p>
+               </div>
+             ) : (
+               slots.filter(s => s.status === 'pending_verification').map(slot => (
+                 <div key={slot.id} className="bg-white rounded-[2.5rem] border-2 border-orange-100 shadow-md p-6 space-y-6 animate-in slide-in-from-bottom duration-300">
+                    <div className="flex justify-between items-start">
+                       <div>
+                          <span className="bg-orange-100 text-orange-600 px-3 py-1 rounded-full text-[8px] font-black uppercase">Novo Desafio Recebido</span>
+                          <h4 className="text-lg font-black text-pitch uppercase italic mt-2 leading-none">{slot.date.split('-').reverse().join('/')} às {slot.time}</h4>
+                       </div>
+                       <div className="p-3 bg-gray-50 rounded-xl text-pitch"><Swords className="w-5 h-5" /></div>
+                    </div>
+
+                    <div className="bg-gray-50 rounded-2xl p-4 flex items-center justify-between">
+                       <div className="flex items-center gap-3">
+                          <div className="w-12 h-12 bg-white rounded-xl border flex items-center justify-center overflow-hidden">
+                             {slot.opponentTeamLogoUrl ? <img src={slot.opponentTeamLogoUrl} className="w-full h-full object-cover" /> : <div className="font-black">{slot.opponentTeamName?.charAt(0)}</div>}
+                          </div>
+                          <div>
+                             <p className="text-[8px] font-black text-gray-400 uppercase">Desafiante</p>
+                             <p className="font-black text-pitch uppercase">{slot.opponentTeamName}</p>
+                             <p className="text-[9px] font-bold text-grass-600 uppercase">{slot.opponentTeamCategory}</p>
+                          </div>
+                       </div>
+                       <button 
+                        onClick={() => handleWhatsApp(slot.opponentTeamPhone, `Olá capitão do ${slot.opponentTeamName}! Recebi seu desafio para o jogo do dia ${slot.date.split('-').reverse().join('/')} na arena ${field.name}.`)}
+                        className="p-3 bg-grass-50 text-grass-600 rounded-xl border border-grass-200 active:scale-95 transition-all"
+                        title="Falar no WhatsApp"
+                       >
+                         <Smartphone className="w-5 h-5" />
+                       </button>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3 pt-2">
+                       <Button onClick={() => handleAction(slot.id, 'reject')} variant="outline" className="py-4 rounded-2xl border-red-200 text-red-500 font-black uppercase text-[10px]">Recusar</Button>
+                       <Button onClick={() => handleAction(slot.id, 'confirm')} className="py-4 rounded-2xl bg-pitch text-white font-black uppercase text-[10px]">Aceitar Jogo</Button>
+                    </div>
+                 </div>
+               ))
+             )}
           </div>
         )}
 
@@ -322,6 +402,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                       </div>
                     </div>
                     <div className="flex gap-2">
+                      <button onClick={() => handleWhatsApp(t.captainPhone, `Olá capitão ${t.captainName} do time ${t.name}! Tudo certo para o jogo fixo esta semana na arena ${field.name}?`)} className="p-3 text-grass-500 hover:bg-grass-50 rounded-xl transition-all"><Smartphone className="w-5 h-5"/></button>
                       <button onClick={() => {
                         setEditingMensalista(t);
                         setMensalistaName(t.name);
@@ -337,7 +418,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                         setMensalistaCourt(t.courtName);
                         setShowAddMensalistaModal(true);
                       }} className="p-3 text-gray-300 hover:text-pitch transition-colors"><Edit className="w-5 h-5"/></button>
-                      <button onClick={() => { if(confirm("Remover mensalista?")) api.deleteRegisteredTeam(t.id).then(loadMensalistas); }} className="p-3 text-gray-300 hover:text-red-500 transition-colors"><Trash2 className="w-5 h-5"/></button>
+                      <button onClick={() => { if(confirm("Remover mensalista?")) api.deleteRegisteredTeam(t.id).then(loadMensalistas); }} className="p-3 text-gray-300 hover:text-red-500 transition-colors"><Trash2 className="w-4 h-4"/></button>
                     </div>
                   </div>
 
@@ -351,6 +432,9 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                setMensalistaName(''); 
                setMensalistaLogo('');
                setMensalistaCategory('');
+               setMensalistaPhone('');
+               setMensalistaCaptain('');
+               setMensalistaEmail('');
                setShowAddMensalistaModal(true); 
              }} className="w-full py-4 border-2 border-dashed border-gray-200 rounded-[2rem] text-gray-400 font-black uppercase text-[10px] hover:border-pitch transition-all">
                Adicionar Novo Mensalista
@@ -359,7 +443,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
         )}
       </div>
 
-      {/* Modal de Novo Slot Avançado */}
+      {/* Modals are handled below for brevity but included as part of the full file update */}
       {showAddSlotModal && (
         <div className="fixed inset-0 bg-pitch/95 backdrop-blur-md z-[100] flex items-end">
            <div className="bg-white w-full rounded-t-[3rem] p-10 animate-in slide-in-from-bottom duration-500 shadow-2xl max-h-[90vh] overflow-y-auto pb-safe">
@@ -536,10 +620,9 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                  </div>
 
                  <div className="bg-pitch/5 p-6 rounded-[2.5rem] border border-pitch/10 space-y-4">
-                    <p className="text-[10px] font-black text-pitch uppercase italic mb-2">Dados de Acesso do Capitão</p>
-                    <input className="w-full p-4 bg-white rounded-xl border text-xs font-bold" placeholder="E-mail do Capitão" type="email" value={mensalistaEmail} onChange={e => setMensalistaEmail(e.target.value)} />
-                    {/* Fix: Replace undefined setPhone with setMensalistaPhone */}
-                    <input className="w-full p-4 bg-white rounded-xl border text-xs font-bold" placeholder="WhatsApp (Senha)" value={mensalistaPhone} onChange={e => setMensalistaPhone(e.target.value)} />
+                    <p className="text-[10px] font-black text-pitch uppercase italic mb-2">Dados de Contato do Capitão</p>
+                    <input className="w-full p-4 bg-white rounded-xl border text-xs font-bold" placeholder="E-mail do Capitão (Opcional)" type="email" value={mensalistaEmail} onChange={e => setMensalistaEmail(e.target.value)} />
+                    <input className="w-full p-4 bg-white rounded-xl border text-xs font-bold" placeholder="WhatsApp (Obrigatório)" value={mensalistaPhone} onChange={e => setMensalistaPhone(e.target.value)} />
                     <input className="w-full p-4 bg-white rounded-xl border text-xs font-bold" placeholder="Nome do Capitão" value={mensalistaCaptain} onChange={e => setMensalistaCaptain(e.target.value)} />
                  </div>
                  
