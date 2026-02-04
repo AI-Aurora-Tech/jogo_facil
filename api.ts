@@ -1,4 +1,3 @@
-
 import { supabase } from './supabaseClient';
 import { User, Field, MatchSlot, RegisteredTeam, UserRole, Notification, TeamConfig, SubscriptionPlan, Gender } from './types';
 
@@ -78,14 +77,13 @@ export const api = {
         location: fieldData.location,
         hourly_rate: fieldData.hourlyRate || 0,
         contact_phone: fieldData.contactPhone,
-        image_url: fieldData.imageUrl || 'https://images.unsplash.com/photo-1529900748604-07564a03e7a6?auto=format&fit=crop&q=80&w=1000'
+        image_url: fieldData.imageUrl || 'https://images.unsplash.com/photo-1529900748604-07564a03e7a6?auto=format&fit=crop&get=1000'
       }]);
     }
     return mapUserFromDb(newUser);
   },
 
   addRegisteredTeam: async (team: Partial<RegisteredTeam>): Promise<void> => {
-    // 1. Criar usuário se houver e-mail
     if (team.email) {
       const email = team.email.toLowerCase().trim();
       const { data: existingUser } = await supabase.from('user').select('id').eq('email', email).single();
@@ -105,12 +103,11 @@ export const api = {
       }
     }
 
-    // 2. Salvar Mensalista (Usa snake_case para as colunas do banco)
     const payload = {
       field_id: team.fieldId,
       name: team.name,
-      fixed_day: team.fixedDay,
-      fixed_time: team.fixedTime,
+      fixed_day: team.fixed_day,
+      fixed_time: team.fixed_time,
       categories: team.categories || [],
       captain_name: team.captainName || null,
       captain_phone: team.captainPhone || null,
@@ -149,6 +146,7 @@ export const api = {
       time: s.time,
       match_type: s.matchType || 'ALUGUEL',
       is_booked: s.isBooked || false,
+      // Fix: Corrected property access to use camelCase hasLocalTeam from the Partial<MatchSlot> type.
       has_local_team: s.hasLocalTeam || false,
       local_team_name: s.localTeamName || null,
       local_team_category: s.localTeamCategory || null,

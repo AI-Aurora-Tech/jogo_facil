@@ -23,7 +23,6 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({ user, field,
   const [arenaPrice, setArenaPrice] = useState(field?.hourlyRate || 0);
   const [arenaPhoto, setArenaPhoto] = useState(field?.imageUrl || '');
   const [courts, setCourts] = useState<string[]>(field?.courts || []);
-  const [newCourt, setNewCourt] = useState('');
 
   const [categoryInputs, setCategoryInputs] = useState<string[]>(['', '']);
   const [error, setError] = useState('');
@@ -121,7 +120,7 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({ user, field,
 
             <div className="grid gap-6">
               {teams.map((team, idx) => (
-                <div key={idx} className="bg-gray-50 p-6 rounded-[2.5rem] border border-gray-200 relative space-y-4 group">
+                <div key={idx} className="bg-gray-50 p-6 rounded-[2.5rem] border border-gray-200 relative space-y-4 group shadow-sm">
                   {teams.length > 1 && (
                     <button type="button" onClick={() => handleRemoveTeam(idx)} className="absolute top-4 right-4 text-red-400 hover:text-red-600 transition-colors">
                       <Trash2 className="w-5 h-5"/>
