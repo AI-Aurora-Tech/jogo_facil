@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { User, UserRole, Field, TeamConfig } from '../types';
+import { User, UserRole, Field, TeamConfig, Gender } from '../types';
 import { Button } from './Button';
 import { X, User as UserIcon, Shield, Check, Plus, AlertCircle, Building2, MapPin, Smartphone, Camera, Trash2, LayoutGrid } from 'lucide-react';
 import { formatCategory, convertFileToBase64 } from '../utils';
@@ -21,6 +21,7 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({ user, field,
   const [arenaName, setArenaName] = useState(field?.name || '');
   const [arenaLocation, setArenaLocation] = useState(field?.location || '');
   const [arenaPrice, setArenaPrice] = useState(field?.hourlyRate || 0);
+  const [arenaPhoto, setArenaPhoto] = useState(field?.imageUrl || '');
   const [courts, setCourts] = useState<string[]>(field?.courts || []);
   const [newCourt, setNewCourt] = useState('');
 
@@ -29,33 +30,12 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({ user, field,
 
   const handleAddTeam = () => {
     if (teams.length >= 2) return;
-    setTeams([...teams, { name: 'Novo Time', categories: [] }]);
+    setTeams([...teams, { name: 'Novo Time', categories: [], gender: 'MASCULINO' }]);
   };
 
-  const handleRemoveTeam = (index: number) => {
-    setTeams(teams.filter((_, i) => i !== index));
-  };
-
-  const updateTeamName = (index: number, val: string) => {
+  const handleUpdateTeam = (index: number, updates: Partial<TeamConfig>) => {
     const newTeams = [...teams];
-    newTeams[index].name = val;
-    setTeams(newTeams);
-  };
-
-  const addCategoryToTeam = (index: number) => {
-    const formatted = formatCategory(catInput);
-    if (!formatted) return;
-    const newTeams = [...teams];
-    if (!newTeams[index].categories.includes(formatted)) {
-      newTeams[index].categories.push(formatted);
-      setTeams(newTeams);
-      setCatInput('');
-    }
-  };
-
-  const removeCategoryFromTeam = (teamIndex: number, cat: string) => {
-    const newTeams = [...teams];
-    newTeams[teamIndex].categories = newTeams[teamIndex].categories.filter(c => c !== cat);
+    newTeams[index] = { ...newTeams[index], ...updates };
     setTeams(newTeams);
   };
 
@@ -64,10 +44,6 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({ user, field,
       setCourts([...courts, newCourt.trim()]);
       setNewCourt('');
     }
-  };
-
-  const removeCourt = (val: string) => {
-    setCourts(courts.filter(c => c !== val));
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -79,7 +55,7 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({ user, field,
     const updatedUser = { ...user, name, phoneNumber: phone, teams };
     let updatedField;
     if (user.role === UserRole.FIELD_OWNER && field) {
-      updatedField = { name: arenaName, location: arenaLocation, hourlyRate: arenaPrice, courts };
+      updatedField = { name: arenaName, location: arenaLocation, hourlyRate: arenaPrice, courts, imageUrl: arenaPhoto };
     }
     onUpdate(updatedUser, updatedField);
   };
@@ -92,14 +68,14 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({ user, field,
           <button onClick={onClose} className="p-2 hover:bg-red-500 rounded-xl transition-all"><X className="w-5 h-5"/></button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-8 space-y-8 overflow-y-auto">
+        <form onSubmit={handleSubmit} className="p-8 space-y-8 overflow-y-auto pb-20">
           {error && <div className="bg-red-50 text-red-600 p-4 rounded-2xl text-[10px] font-black uppercase border border-red-100 flex items-center gap-2"><AlertCircle className="w-4 h-4" /> {error}</div>}
 
           <section className="space-y-4">
-            <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest border-b pb-2 flex items-center gap-2"><UserIcon className="w-3 h-3" /> Conta</h4>
+            <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest border-b pb-2 flex items-center gap-2"><UserIcon className="w-3 h-3" /> Sua Conta</h4>
             <div className="grid grid-cols-2 gap-4">
                 <div className="bg-gray-50 p-4 rounded-2xl border">
-                  <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Nome</label>
+                  <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Seu Nome</label>
                   <input className="w-full bg-transparent font-bold outline-none text-pitch" value={name} onChange={e => setName(e.target.value)} />
                 </div>
                 <div className="bg-gray-50 p-4 rounded-2xl border">
@@ -111,11 +87,23 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({ user, field,
 
           {user.role === UserRole.FIELD_OWNER && (
             <section className="space-y-6">
-              <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest border-b pb-2 flex items-center gap-2"><Building2 className="w-3 h-3" /> Gestão da Arena</h4>
+              <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest border-b pb-2 flex items-center gap-2"><Building2 className="w-3 h-3" /> Dados da Arena</h4>
+              
+              <div className="flex flex-col items-center gap-2">
+                 <div className="w-full h-40 bg-gray-100 rounded-[2rem] border-2 border-dashed border-gray-200 flex items-center justify-center relative overflow-hidden">
+                    {arenaPhoto ? <img src={arenaPhoto} className="w-full h-full object-cover" /> : <Camera className="w-8 h-8 text-gray-300" />}
+                    <input type="file" accept="image/*" className="absolute inset-0 opacity-0 cursor-pointer" onChange={async e => {
+                       const f = e.target.files?.[0];
+                       if(f) setArenaPhoto(await convertFileToBase64(f));
+                    }} />
+                 </div>
+                 <span className="text-[8px] font-black text-gray-400 uppercase">Foto da Arena</span>
+              </div>
+
               <div className="grid grid-cols-2 gap-4">
                 <div className="bg-gray-50 p-4 rounded-2xl border">
                    <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Nome da Arena</label>
-                   <input className="w-full bg-transparent font-bold text-pitch outline-none" placeholder="Ex: CDC Ibirapuera" value={arenaName} onChange={e => setArenaName(e.target.value)} />
+                   <input className="w-full bg-transparent font-bold text-pitch outline-none" value={arenaName} onChange={e => setArenaName(e.target.value)} />
                 </div>
                 <div className="bg-gray-50 p-4 rounded-2xl border">
                    <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Preço Base (R$)</label>
@@ -124,59 +112,52 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({ user, field,
               </div>
               <div className="bg-gray-50 p-4 rounded-2xl border">
                  <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Endereço</label>
-                 <input className="w-full bg-transparent font-bold text-pitch outline-none" placeholder="Rua, Número, Bairro" value={arenaLocation} onChange={e => setArenaLocation(e.target.value)} />
-              </div>
-
-              <div className="bg-grass-50 p-6 rounded-[2.5rem] border border-grass-100">
-                <h5 className="text-[9px] font-black text-grass-700 uppercase tracking-widest mb-4 flex items-center gap-2"><LayoutGrid className="w-3 h-3"/> Minhas Quadras / Campos</h5>
-                <div className="flex gap-2 mb-4">
-                   <input className="flex-1 bg-white p-3 rounded-xl border text-xs font-bold" placeholder="Ex: Society 1, Quadra Coberta..." value={newCourt} onChange={e => setNewCourt(e.target.value)} />
-                   <button type="button" onClick={addCourt} className="bg-pitch text-white p-3 rounded-xl active:scale-95"><Plus className="w-4 h-4"/></button>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                   {courts.map(c => (
-                     <div key={c} className="bg-white border border-grass-200 px-3 py-1.5 rounded-full text-[9px] font-black uppercase text-pitch flex items-center gap-2">
-                       {c} <X onClick={() => removeCourt(c)} className="w-3 h-3 cursor-pointer text-red-500" />
-                     </div>
-                   ))}
-                </div>
+                 <input className="w-full bg-transparent font-bold text-pitch outline-none" value={arenaLocation} onChange={e => setArenaLocation(e.target.value)} />
               </div>
             </section>
           )}
 
           <section className="space-y-6">
             <div className="flex justify-between items-center border-b pb-2">
-              <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest flex items-center gap-2"><Shield className="w-3 h-3" /> Meus Times (Mandantes)</h4>
+              <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest flex items-center gap-2"><Shield className="w-3 h-3" /> Configuração do Time</h4>
               {teams.length < 2 && (
-                <button type="button" onClick={handleAddTeam} className="text-[10px] font-black text-grass-500 uppercase flex items-center gap-1"><Plus className="w-3 h-3" /> Adicionar</button>
+                <button type="button" onClick={handleAddTeam} className="text-[10px] font-black text-grass-500 uppercase flex items-center gap-1"><Plus className="w-3 h-3" /> Adicionar Time</button>
               )}
             </div>
 
             <div className="grid gap-4">
               {teams.map((team, idx) => (
-                <div key={idx} className="bg-gray-50 p-6 rounded-[2.5rem] border border-gray-200 relative">
-                  <button type="button" onClick={() => handleRemoveTeam(idx)} className="absolute top-4 right-4 text-red-400 hover:text-red-600"><Trash2 className="w-4 h-4"/></button>
-                  <div className="mb-4">
-                    <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Nome do Time</label>
-                    <input className="w-full bg-transparent border-b-2 font-black text-lg outline-none text-pitch focus:border-pitch" value={team.name} onChange={e => updateTeamName(idx, e.target.value)} />
+                <div key={idx} className="bg-gray-50 p-6 rounded-[2.5rem] border border-gray-200 relative space-y-4">
+                  <button type="button" onClick={() => teams.length > 1 && handleUpdateTeam(idx, {})} className="absolute top-4 right-4 text-red-400 hover:text-red-600"><Trash2 className="w-4 h-4"/></button>
+                  
+                  <div className="flex items-center gap-4">
+                    <div className="w-16 h-16 bg-white rounded-2xl border-2 border-dashed border-gray-200 flex items-center justify-center relative overflow-hidden">
+                       {team.logoUrl ? <img src={team.logoUrl} className="w-full h-full object-cover" /> : <Camera className="w-6 h-6 text-gray-300" />}
+                       <input type="file" accept="image/*" className="absolute inset-0 opacity-0 cursor-pointer" onChange={async e => {
+                          const f = e.target.files?.[0];
+                          if(f) handleUpdateTeam(idx, { logoUrl: await convertFileToBase64(f) });
+                       }} />
+                    </div>
+                    <div className="flex-1">
+                      <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Nome do Time</label>
+                      <input className="w-full bg-transparent border-b-2 font-black text-pitch outline-none focus:border-pitch" value={team.name} onChange={e => handleUpdateTeam(idx, { name: e.target.value })} />
+                    </div>
                   </div>
-                  <div className="flex gap-2">
-                    <input className="flex-1 bg-white p-3 rounded-xl border text-xs font-bold" placeholder="Add Categoria (ex: sub 9)" value={catInput} onChange={e => setCatInput(e.target.value)} />
-                    <button type="button" onClick={() => addCategoryToTeam(idx)} className="bg-pitch text-white p-3 rounded-xl"><Plus className="w-4 h-4"/></button>
-                  </div>
-                  <div className="flex flex-wrap gap-2 mt-4">
-                    {team.categories.map(c => (
-                      <div key={c} className="bg-white border-2 border-pitch px-3 py-1.5 rounded-full text-[10px] font-black uppercase flex items-center gap-2">
-                        {c} <X onClick={() => removeCategoryFromTeam(idx, c)} className="w-3 h-3 cursor-pointer text-red-500" />
-                      </div>
-                    ))}
+
+                  <div className="bg-white p-4 rounded-xl border">
+                    <label className="text-[8px] font-black text-gray-400 uppercase block mb-2">Gênero</label>
+                    <div className="flex gap-2">
+                       {['MASCULINO', 'FEMININO', 'MISTO'].map((g: any) => (
+                         <button key={g} type="button" onClick={() => handleUpdateTeam(idx, { gender: g })} className={`flex-1 py-2 text-[9px] font-black uppercase rounded-lg transition-all ${team.gender === g ? 'bg-pitch text-white' : 'bg-gray-100 text-gray-400'}`}>{g}</button>
+                       ))}
+                    </div>
                   </div>
                 </div>
               ))}
             </div>
           </section>
 
-          <Button type="submit" className="w-full py-5 rounded-[2rem] font-black uppercase text-xs shadow-xl">Salvar Todas as Configurações</Button>
+          <Button type="submit" className="w-full py-5 rounded-[2rem] font-black uppercase text-xs shadow-xl active:scale-95">Salvar Todas as Configurações</Button>
         </form>
       </div>
     </div>

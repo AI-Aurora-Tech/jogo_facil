@@ -10,11 +10,9 @@ const mapUserFromDb = (u: any): User => ({
   role: u.role,
   subscription: u.subscription,
   subscriptionExpiry: u.subscription_expiry,
-  teams: u.teams || [], // Map to the new teams structure
-  teamName: u.team_name,
-  teamCategories: u.team_categories || [],
-  teamLogoUrl: u.team_logo_url,
-  subTeams: u.sub_teams || [],
+  // Fix: The User interface defined in types.ts only has 'teams' (an array of TeamConfig).
+  // The flat fields like 'team_name' are legacy and should not be mapped directly to the User object.
+  teams: u.teams || [], 
   latitude: u.latitude,
   longitude: u.longitude,
   teamRating: u.team_rating,
@@ -75,12 +73,14 @@ export const api = {
   },
 
   updateUser: async (user: User): Promise<User> => {
+    // Fix: Access team properties from the 'teams' array because individual team fields do not exist on the User type.
+    const firstTeam = user.teams && user.teams.length > 0 ? user.teams[0] : null;
     const payload: any = {
       name: user.name,
       phone_number: user.phoneNumber,
-      team_name: user.teamName,
-      team_categories: user.teamCategories,
-      team_logo_url: user.teamLogoUrl,
+      team_name: firstTeam?.name || '',
+      team_categories: firstTeam?.categories || [],
+      team_logo_url: firstTeam?.logoUrl || '',
       teams: user.teams
     };
     if (user.password && user.password.trim() !== '') payload.password = user.password;
@@ -136,7 +136,7 @@ export const api = {
       id: d.id,
       requesterId: d.requester_id,
       targetId: d.target_id,
-      entityType: d.entity_type, // Fix: Map entity_type to entityType to match PendingUpdate interface
+      entityType: d.entity_type,
       jsonData: d.json_data,
       status: d.status,
       createdAt: d.created_at
@@ -208,7 +208,7 @@ export const api = {
       opponentTeamPhone: s.opponent_team_phone,
       status: s.status,
       price: s.price,
-      allowedOpponentCategories: s.allowed_opponent_categories || [], // Map to the correct interface name
+      allowedOpponentCategories: s.allowed_opponent_categories || [],
       receiptUrl: s.receipt_url,
       aiVerificationResult: s.ai_verification_result
     })) as unknown as MatchSlot[];
@@ -225,7 +225,7 @@ export const api = {
       local_team_name: s.localTeamName || null,
       price: s.price,
       status: s.status || 'available',
-      allowed_opponent_categories: s.allowedOpponentCategories || [] // Fix: Use allowedOpponentCategories instead of allowedCategories
+      allowed_opponent_categories: s.allowedOpponentCategories || []
     }));
     await supabase.from('match_slot').insert(payload);
   },

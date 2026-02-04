@@ -1,11 +1,16 @@
 
 import { supabase } from './supabaseClient';
-import { User, Field, MatchSlot, RegisteredTeam, UserRole, Notification, TeamConfig, SubscriptionPlan } from './types';
+import { User, Field, MatchSlot, RegisteredTeam, UserRole, Notification, TeamConfig, SubscriptionPlan, Gender } from './types';
 
 const mapUserFromDb = (u: any): User => {
   const teams: TeamConfig[] = [];
   if (u.team_name) {
-    teams.push({ name: u.team_name, categories: u.team_categories || [] });
+    teams.push({ 
+      name: u.team_name, 
+      categories: u.team_categories || [], 
+      logoUrl: u.team_logo_url,
+      gender: u.team_gender || 'MASCULINO'
+    });
   }
   if (u.sub_teams && Array.isArray(u.sub_teams)) {
     u.sub_teams.forEach((t: any) => {
@@ -45,7 +50,7 @@ export const api = {
   register: async (userData: any): Promise<User> => {
     const { fieldData, ...userFields } = userData;
     const firstTeam = userFields.teams?.[0];
-    const secondTeam = userFields.teams?.[1] ? [userFields.teams[1]] : [];
+    const secondTeam = userFields.teams?.slice(1) || [];
 
     const { data: newUser, error: userError } = await supabase
       .from('user')
@@ -58,6 +63,8 @@ export const api = {
         subscription: userFields.subscription,
         team_name: firstTeam?.name || '',
         team_categories: firstTeam?.categories || [],
+        team_logo_url: firstTeam?.logoUrl || '',
+        team_gender: firstTeam?.gender || 'MASCULINO',
         sub_teams: secondTeam
       }])
       .select().single();
@@ -78,17 +85,11 @@ export const api = {
   },
 
   addRegisteredTeam: async (team: Partial<RegisteredTeam>): Promise<void> => {
-    // 1. Criar ou Vincular Usuário
     if (team.email) {
       const email = team.email.toLowerCase().trim();
-      const { data: existingUser } = await supabase
-        .from('user')
-        .select('id')
-        .eq('email', email)
-        .single();
+      const { data: existingUser } = await supabase.from('user').select('id').eq('email', email).single();
 
       if (!existingUser) {
-        // Criar usuário automático: Senha é o telefone
         await supabase.from('user').insert([{
           email: email,
           password: team.captainPhone,
@@ -97,23 +98,46 @@ export const api = {
           role: UserRole.TEAM_CAPTAIN,
           subscription: SubscriptionPlan.FREE,
           team_name: team.name,
-          team_categories: team.categories || []
+          team_categories: team.categories || [],
+          team_logo_url: team.logoUrl || '',
+          team_gender: team.gender || 'MASCULINO'
         }]);
       }
     }
 
-    // 2. Salvar Mensalista
     const payload = {
       field_id: team.fieldId,
       name: team.name,
-      fixed_day: team.fixed_day,
-      fixed_time: team.fixed_time,
+      fixed_day: team.fixedDay,
+      fixed_time: team.fixedTime,
       categories: team.categories,
-      captain_name: team.captain_name || null,
-      captain_phone: team.captain_phone || null,
-      email: team.email || null
+      captain_name: team.captainName,
+      captain_phone: team.captainPhone,
+      email: team.email,
+      logo_url: team.logoUrl,
+      gender: team.gender,
+      sport: team.sport,
+      court_name: team.courtName
     };
     const { error } = await supabase.from('registered_team').insert([payload]);
+    if (error) throw error;
+  },
+
+  updateRegisteredTeam: async (teamId: string, updates: Partial<RegisteredTeam>): Promise<void> => {
+    const payload: any = {};
+    if (updates.name) payload.name = updates.name;
+    if (updates.fixedDay) payload.fixed_day = updates.fixedDay;
+    if (updates.fixedTime) payload.fixed_time = updates.fixedTime;
+    if (updates.categories) payload.categories = updates.categories;
+    if (updates.captainName !== undefined) payload.captain_name = updates.captainName;
+    if (updates.captainPhone !== undefined) payload.captain_phone = updates.captainPhone;
+    if (updates.email !== undefined) payload.email = updates.email;
+    if (updates.logoUrl !== undefined) payload.logo_url = updates.logoUrl;
+    if (updates.gender !== undefined) payload.gender = updates.gender;
+    if (updates.sport !== undefined) payload.sport = updates.sport;
+    if (updates.courtName !== undefined) payload.court_name = updates.courtName;
+    
+    const { error } = await supabase.from('registered_team').update(payload).eq('id', teamId);
     if (error) throw error;
   },
 
@@ -126,38 +150,13 @@ export const api = {
       phone_number: user.phoneNumber,
       team_name: firstTeam?.name || '',
       team_categories: firstTeam?.categories || [],
+      team_logo_url: firstTeam?.logoUrl || '',
+      team_gender: firstTeam?.gender || 'MASCULINO',
       sub_teams: secondTeam,
       password: user.password
     }).eq('id', user.id).select().single();
     if (error) throw error;
     return mapUserFromDb(data);
-  },
-
-  getNotifications: async (userId: string): Promise<Notification[]> => {
-    const { data, error } = await supabase.from('notification').select('*').eq('user_id', userId).order('created_at', { ascending: false });
-    return (data || []).map(n => ({
-      id: n.id,
-      userId: n.user_id,
-      title: n.title,
-      description: n.description,
-      timestamp: n.created_at,
-      type: n.type,
-      read: n.read
-    }));
-  },
-
-  createNotification: async (n: any) => {
-    await supabase.from('notification').insert([{
-      user_id: n.userId,
-      title: n.title,
-      description: n.description,
-      type: n.type,
-      read: false
-    }]);
-  },
-
-  markNotificationAsRead: async (id: string) => {
-    await supabase.from('notification').update({ read: true }).eq('id', id);
   },
 
   getFields: async (): Promise<Field[]> => {
@@ -179,18 +178,6 @@ export const api = {
     }));
   },
 
-  updateField: async (fieldId: string, updates: Partial<Field>): Promise<Field> => {
-    const payload: any = {};
-    if (updates.name) payload.name = updates.name;
-    if (updates.location) payload.location = updates.location;
-    if (updates.hourlyRate !== undefined) payload.hourly_rate = updates.hourlyRate;
-    if (updates.courts !== undefined) payload.courts = updates.courts;
-    
-    const { data, error } = await supabase.from('field').update(payload).eq('id', fieldId).select().single();
-    if (error) throw error;
-    return data as any;
-  },
-
   getSlots: async (): Promise<MatchSlot[]> => {
     const { data, error } = await supabase.from('match_slot').select('*').order('date').order('time');
     if (error) throw error;
@@ -206,46 +193,25 @@ export const api = {
       localTeamName: s.local_team_name,
       localTeamCategory: s.local_team_category,
       localTeamPhone: s.local_team_phone,
+      localTeamLogoUrl: s.local_team_logo_url,
+      localTeamGender: s.local_team_gender,
       bookedByUserId: s.booked_by_user_id,
       bookedByTeamName: s.booked_by_team_name,
       bookedByTeamCategory: s.booked_by_team_category,
+      bookedByTeamLogoUrl: s.booked_by_team_logo_url,
       bookedByUserPhone: s.booked_by_user_phone,
       opponentTeamName: s.opponent_team_name,
       opponentTeamCategory: s.opponent_team_category,
       opponentTeamPhone: s.opponent_team_phone,
+      opponentTeamLogoUrl: s.opponent_team_logo_url,
+      opponentTeamGender: s.opponent_team_gender,
       allowedOpponentCategories: s.allowed_opponent_categories || [],
       status: s.status,
       price: s.price || 0,
       receiptUrl: s.receipt_url,
-      fieldRating: s.rating_given,
       courtName: s.court_name,
       sport: s.sport || 'Futebol'
-    }));
-  },
-
-  updateSlot: async (slotId: string, data: Partial<MatchSlot>): Promise<void> => {
-    const payload: any = {};
-    if (data.status) payload.status = data.status;
-    if (data.isBooked !== undefined) payload.is_booked = data.isBooked;
-    if (data.receiptUrl !== undefined) payload.receipt_url = data.receiptUrl;
-    if (data.bookedByTeamName !== undefined) payload.booked_by_team_name = data.bookedByTeamName;
-    if (data.opponentTeamName !== undefined) payload.opponent_team_name = data.opponentTeamName;
-    if (data.opponentTeamCategory !== undefined) payload.opponent_team_category = data.opponentTeamCategory;
-    if (data.opponentTeamPhone !== undefined) payload.opponent_team_phone = data.opponentTeamPhone;
-    if (data.matchType) payload.match_type = data.matchType;
-    if (data.price !== undefined) payload.price = data.price;
-    if (data.localTeamName !== undefined) payload.local_team_name = data.localTeamName;
-    if (data.localTeamCategory !== undefined) payload.local_team_category = data.localTeamCategory;
-    if (data.allowedOpponentCategories !== undefined) payload.allowed_opponent_categories = data.allowedOpponentCategories;
-    if (data.courtName !== undefined) payload.court_name = data.courtName;
-    if (data.sport !== undefined) payload.sport = data.sport;
-    if (data.bookedByUserId !== undefined) payload.booked_by_user_id = data.bookedByUserId;
-    if (data.date) payload.date = data.date;
-    if (data.time) payload.time = data.time;
-    if (data.hasLocalTeam !== undefined) payload.has_local_team = data.hasLocalTeam;
-    
-    const { error } = await supabase.from('match_slot').update(payload).eq('id', slotId);
-    if (error) throw error;
+    })) as MatchSlot[];
   },
 
   createSlots: async (slots: Partial<MatchSlot>[]): Promise<void> => {
@@ -259,10 +225,12 @@ export const api = {
       local_team_name: s.localTeamName || null,
       local_team_category: s.localTeamCategory || null,
       local_team_phone: s.localTeamPhone || null,
+      local_team_logo_url: s.localTeamLogoUrl || null,
+      local_team_gender: s.localTeamGender || 'MASCULINO',
       allowed_opponent_categories: s.allowedOpponentCategories || [],
       price: s.price || 0,
       status: s.status || 'available',
-      court_name: s.court_name || null,
+      court_name: s.courtName || null,
       sport: s.sport || 'Futebol',
       booked_by_user_id: s.bookedByUserId || null
     }));
@@ -270,10 +238,31 @@ export const api = {
     if (error) throw error;
   },
 
-  deleteSlot: async (id: string) => { await supabase.from('match_slot').delete().eq('id', id); },
+  updateSlot: async (slotId: string, data: Partial<MatchSlot>): Promise<void> => {
+    const payload: any = {};
+    if (data.status) payload.status = data.status;
+    if (data.isBooked !== undefined) payload.is_booked = data.isBooked;
+    if (data.receiptUrl !== undefined) payload.receipt_url = data.receiptUrl;
+    if (data.bookedByTeamName !== undefined) payload.booked_by_team_name = data.bookedByTeamName;
+    if (data.opponentTeamName !== undefined) payload.opponent_team_name = data.opponentTeamName;
+    if (data.opponentTeamCategory !== undefined) payload.opponent_team_category = data.opponentTeamCategory;
+    if (data.opponentTeamPhone !== undefined) payload.opponent_team_phone = data.opponentTeamPhone;
+    if (data.opponentTeamLogoUrl !== undefined) payload.opponent_team_logo_url = data.opponentTeamLogoUrl;
+    if (data.opponentTeamGender !== undefined) payload.opponent_team_gender = data.opponentTeamGender;
+    if (data.matchType) payload.match_type = data.matchType;
+    if (data.price !== undefined) payload.price = data.price;
+    if (data.localTeamName !== undefined) payload.local_team_name = data.localTeamName;
+    if (data.localTeamCategory !== undefined) payload.local_team_category = data.localTeamCategory;
+    if (data.localTeamLogoUrl !== undefined) payload.local_team_logo_url = data.localTeamLogoUrl;
+    if (data.localTeamGender !== undefined) payload.local_team_gender = data.localTeamGender;
+    if (data.courtName !== undefined) payload.court_name = data.courtName;
+    if (data.sport !== undefined) payload.sport = data.sport;
+    if (data.bookedByUserId !== undefined) payload.booked_by_user_id = data.bookedByUserId;
+    
+    const { error } = await supabase.from('match_slot').update(payload).eq('id', slotId);
+    if (error) throw error;
+  },
 
-  getCategories: async () => ["Sub-8", "Sub-9", "Sub-10", "Sub-11", "Sub-12", "Sub-13", "Sub-14", "Sub-15", "Sub-16", "Sub-17", "Sport", "35+", "40+", "45+", "50+"],
-  
   getRegisteredTeams: async (fieldId: string): Promise<RegisteredTeam[]> => {
     const { data } = await supabase.from('registered_team').select('*').eq('field_id', fieldId);
     return (data || []).map(t => ({
@@ -287,27 +276,38 @@ export const api = {
       createdAt: t.created_at,
       captainName: t.captain_name,
       captainPhone: t.captain_phone,
-      email: t.email
+      email: t.email,
+      gender: t.gender || 'MASCULINO',
+      sport: t.sport || 'Futebol',
+      courtName: t.court_name
     }));
   },
 
-  updateRegisteredTeam: async (teamId: string, updates: Partial<RegisteredTeam>): Promise<void> => {
-    const payload: any = {};
-    if (updates.name) payload.name = updates.name;
-    if (updates.fixedDay) payload.fixed_day = updates.fixedDay;
-    if (updates.fixedTime) payload.fixed_time = updates.fixedTime;
-    if (updates.categories) payload.categories = updates.categories;
-    if (updates.captainName !== undefined) payload.captain_name = updates.captainName;
-    if (updates.captainPhone !== undefined) payload.captain_phone = updates.captainPhone;
-    if (updates.email !== undefined) payload.email = updates.email;
-    
-    const { error } = await supabase.from('registered_team').update(payload).eq('id', teamId);
-    if (error) throw error;
+  deleteSlot: async (id: string) => { await supabase.from('match_slot').delete().eq('id', id); },
+  getCategories: async () => ["Sub-8", "Sub-9", "Sub-10", "Sub-11", "Sub-12", "Sub-13", "Sub-14", "Sub-15", "Sub-16", "Sub-17", "Sport", "35+", "40+", "45+", "50+"],
+  deleteRegisteredTeam: async (teamId: string) => { await supabase.from('registered_team').delete().eq('id', teamId); },
+  getAllUsers: async () => [],
+  createNotification: async (n: any) => {
+    await supabase.from('notification').insert([{
+      user_id: n.userId,
+      title: n.title,
+      description: n.description,
+      type: n.type,
+      read: false
+    }]);
   },
-
-  deleteRegisteredTeam: async (teamId: string): Promise<void> => {
-    await supabase.from('registered_team').delete().eq('id', teamId);
+  getNotifications: async (userId: string): Promise<Notification[]> => {
+    const { data } = await supabase.from('notification').select('*').eq('user_id', userId).order('created_at', { ascending: false });
+    return (data || []).map(n => ({ id: n.id, userId: n.user_id, title: n.title, description: n.description, timestamp: n.created_at, type: n.type, read: n.read }));
   },
-
-  getAllUsers: async () => []
+  markNotificationAsRead: async (id: string) => { await supabase.from('notification').update({ read: true }).eq('id', id); },
+  updateField: async (fieldId: string, updates: Partial<Field>) => {
+     const p: any = {};
+     if (updates.name) p.name = updates.name;
+     if (updates.location) p.location = updates.location;
+     if (updates.hourlyRate) p.hourly_rate = updates.hourlyRate;
+     if (updates.imageUrl) p.image_url = updates.imageUrl;
+     const { data, error } = await supabase.from('field').update(p).eq('id', fieldId).select().single();
+     return data;
+  }
 };

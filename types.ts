@@ -15,11 +15,13 @@ export enum SubscriptionPlan {
 }
 
 export type MatchType = 'AMISTOSO' | 'FESTIVAL' | 'ALUGUEL' | 'FIXO';
+export type Gender = 'MASCULINO' | 'FEMININO' | 'MISTO';
 
 export interface TeamConfig {
   name: string;
   categories: string[];
   logoUrl?: string;
+  gender: Gender;
 }
 
 export interface User {
@@ -36,10 +38,6 @@ export interface User {
   longitude?: number;
   teamRating?: number;
   teamRatingCount?: number;
-  teamName?: string;
-  teamCategories?: string[];
-  teamLogoUrl?: string;
-  subTeams?: TeamConfig[];
 }
 
 export interface Notification {
@@ -79,19 +77,23 @@ export interface MatchSlot {
   localTeamName?: string;
   localTeamCategory?: string;
   localTeamPhone?: string;
+  localTeamLogoUrl?: string;
+  localTeamGender?: Gender;
   bookedByUserId?: string;
   bookedByTeamName?: string;
   bookedByTeamCategory?: string;
+  bookedByTeamLogoUrl?: string;
   bookedByUserPhone?: string;
   opponentTeamName?: string;
   opponentTeamCategory?: string;
   opponentTeamPhone?: string;
+  opponentTeamLogoUrl?: string;
+  opponentTeamGender?: Gender;
   allowedOpponentCategories: string[];
   status: 'available' | 'pending_verification' | 'confirmed';
   price: number;
   receiptUrl?: string;
   fieldRating?: number;
-  fieldRatingComment?: string;
   courtName?: string;
   sport: string;
 }
@@ -108,6 +110,9 @@ export interface RegisteredTeam {
   captainName?: string;
   captainPhone?: string;
   email?: string;
+  gender: Gender;
+  sport: string;
+  courtName: string;
 }
 
 export interface VerificationResult {

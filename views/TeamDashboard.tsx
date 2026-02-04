@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { Search, MapPin, Clock, Swords, CalendarCheck, XCircle, Loader2, MessageCircle, Info, Star, AlertCircle } from 'lucide-react';
+import { Search, MapPin, Clock, Swords, CalendarCheck, XCircle, Loader2, MessageCircle, Info, Star, AlertCircle, Phone } from 'lucide-react';
 import { Button } from '../components/Button';
 import { Field, MatchSlot, User } from '../types';
 import { api } from '../api';
@@ -36,6 +36,12 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
     }
   }).sort((a,b) => new Date(`${a.date}T${a.time}`).getTime() - new Date(`${b.date}T${b.time}`).getTime());
 
+  const handleWhatsApp = (phone?: string, message?: string) => {
+    if (!phone) return;
+    const cleanPhone = phone.replace(/\D/g, '');
+    window.open(`https://wa.me/55${cleanPhone}?text=${encodeURIComponent(message || '')}`, '_blank');
+  };
+
   const handleBookingConfirm = async () => {
     if (!selectedSlot || !selectedCategory) return;
     const team = currentUser.teams[selectedTeamIdx];
@@ -46,11 +52,12 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
         opponentTeamName: team.name,
         opponentTeamCategory: selectedCategory,
         opponentTeamPhone: currentUser.phoneNumber,
+        opponentTeamLogoUrl: team.logoUrl,
+        opponentTeamGender: team.gender,
         bookedByUserId: currentUser.id,
         status: 'pending_verification'
       });
 
-      // Notificar o dono da arena
       if (field) {
         await api.createNotification({
           userId: field.ownerId,
@@ -62,7 +69,7 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
 
       setSelectedSlot(null);
       onRefresh();
-      alert("Solicitação enviada! Aguarde a confirmação da arena na sua aba de Histórico.");
+      alert("Solicitação enviada! O dono da arena foi notificado.");
     } catch (e) { alert("Erro ao solicitar agendamento."); }
   };
 
@@ -99,33 +106,61 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
 
             <div className="px-6 pb-2">
               <div className="bg-gray-50 rounded-2xl p-4 flex items-center justify-between">
-                <div>
-                   <p className="text-[8px] font-black text-gray-400 uppercase mb-1">Mandante (Quem joga)</p>
-                   <p className="text-base font-black text-pitch">{slot.localTeamName || 'Horário para Aluguel'}</p>
-                   <p className="text-[10px] font-bold text-grass-600 uppercase">{slot.localTeamCategory || 'Livre'}</p>
+                <div className="flex items-center gap-3">
+                   <div className="w-10 h-10 bg-white rounded-xl border flex items-center justify-center overflow-hidden">
+                      {slot.localTeamLogoUrl ? <img src={slot.localTeamLogoUrl} className="w-full h-full object-cover" /> : <div className="font-black text-pitch text-xs">{slot.localTeamName?.charAt(0) || 'H'}</div>}
+                   </div>
+                   <div>
+                      <p className="text-[8px] font-black text-gray-400 uppercase">Mandante</p>
+                      <p className="text-sm font-black text-pitch leading-tight">{slot.localTeamName || 'Horário Livre'}</p>
+                      <span className="text-[8px] font-bold text-grass-600 uppercase">{slot.localTeamCategory || 'Livre'} • {slot.localTeamGender || 'MASC'}</span>
+                   </div>
                 </div>
                 {isChallenge && <Swords className="w-5 h-5 text-gray-300 mx-2" />}
-                <div className="text-right flex-1">
-                   <p className="text-[8px] font-black text-gray-400 uppercase mb-1">Categorias Aceitas</p>
-                   <p className="text-[10px] font-black text-pitch uppercase line-clamp-1">
-                     {slot.allowedOpponentCategories.length > 0 ? slot.allowedOpponentCategories.join(', ') : 'Qualquer uma'}
-                   </p>
-                </div>
+                {slot.opponentTeamName && (
+                  <div className="text-right flex items-center gap-3">
+                     <div>
+                        <p className="text-[8px] font-black text-gray-400 uppercase">Desafiante</p>
+                        <p className="text-sm font-black text-pitch leading-tight">{slot.opponentTeamName}</p>
+                        <span className="text-[8px] font-bold text-orange-600 uppercase">{slot.opponentTeamCategory}</span>
+                     </div>
+                     <div className="w-10 h-10 bg-white rounded-xl border flex items-center justify-center overflow-hidden">
+                        {slot.opponentTeamLogoUrl ? <img src={slot.opponentTeamLogoUrl} className="w-full h-full object-cover" /> : <div className="font-black text-pitch text-xs">{slot.opponentTeamName.charAt(0)}</div>}
+                     </div>
+                  </div>
+                )}
               </div>
             </div>
 
             <div className="p-6 flex items-center justify-between border-t mt-2">
-               <div>
-                  <p className="text-xl font-black text-pitch leading-none italic">R$ {slot.price}</p>
-                  <p className="text-[8px] font-black text-gray-400 uppercase">Valor da Partida</p>
+               <div className="flex gap-2">
+                  <button 
+                    onClick={() => handleWhatsApp(field?.contactPhone, `Olá! Vi o horário de ${slot.time} no dia ${slot.date} na arena ${field?.name} e gostaria de mais informações.`)}
+                    className="p-3 bg-grass-50 text-grass-600 rounded-xl active:scale-95"
+                  >
+                    <MessageCircle className="w-5 h-5"/>
+                  </button>
+                  {slot.opponentTeamPhone && (
+                    <button 
+                      onClick={() => handleWhatsApp(slot.opponentTeamPhone, `Olá ${slot.opponentTeamName}! Sou o mandante do jogo na arena ${field?.name} no dia ${slot.date}. Bora pro jogo?`)}
+                      className="p-3 bg-blue-50 text-blue-600 rounded-xl active:scale-95"
+                    >
+                      <Phone className="w-5 h-5"/>
+                    </button>
+                  )}
                </div>
                
-               <Button 
-                onClick={() => { setSelectedSlot(slot); setSelectedCategory(''); }} 
-                className={`rounded-2xl px-8 py-4 font-black uppercase text-[10px] ${isChallenge ? 'bg-orange-500' : 'bg-pitch'}`}
-               >
-                  {isChallenge ? 'Desafiar Time' : 'Reservar Horário'}
-               </Button>
+               {viewMode === 'EXPLORE' ? (
+                 <Button onClick={() => { setSelectedSlot(slot); setSelectedCategory(''); }} className="rounded-2xl px-8 py-4 font-black uppercase text-[10px] bg-pitch">
+                    {isChallenge ? 'Desafiar Time' : 'Reservar Horário'}
+                 </Button>
+               ) : (
+                 <div className="flex items-center gap-2">
+                    <span className={`px-3 py-1.5 rounded-full text-[8px] font-black uppercase ${slot.status === 'confirmed' ? 'bg-grass-500 text-pitch' : 'bg-orange-100 text-orange-600'}`}>
+                      {slot.status === 'confirmed' ? 'Confirmado' : 'Pendente'}
+                    </span>
+                 </div>
+               )}
             </div>
           </div>
         );
@@ -143,34 +178,30 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
                   <label className="text-[10px] font-black text-gray-400 uppercase mb-3 block">Qual dos seus times vai jogar?</label>
                   <div className="flex flex-wrap gap-3">
                      {currentUser.teams.map((t, i) => (
-                        <button key={i} onClick={() => { setSelectedTeamIdx(i); setSelectedCategory(''); }} className={`flex-1 min-w-[120px] py-4 rounded-2xl font-black uppercase text-[10px] transition-all ${selectedTeamIdx === i ? 'bg-pitch text-white border-pitch' : 'bg-gray-50 border text-gray-400'}`}>{t.name}</button>
+                        <button key={i} onClick={() => { setSelectedTeamIdx(i); setSelectedCategory(''); }} className={`flex-1 min-w-[120px] py-4 rounded-2xl font-black uppercase text-[10px] transition-all flex flex-col items-center gap-2 ${selectedTeamIdx === i ? 'bg-pitch text-white border-pitch' : 'bg-gray-50 border text-gray-400'}`}>
+                           {t.logoUrl && <img src={t.logoUrl} className="w-8 h-8 rounded-lg object-cover mb-1" />}
+                           {t.name}
+                        </button>
                      ))}
                   </div>
                </div>
                
                <div>
-                  <label className="text-[10px] font-black text-gray-400 uppercase mb-3 block">Escolha a Categoria do Time</label>
+                  <label className="text-[10px] font-black text-gray-400 uppercase mb-3 block">Escolha a Categoria</label>
                   <div className="flex flex-wrap gap-2">
-                     {currentUser.teams[selectedTeamIdx]?.categories.map(cat => {
-                        const isAllowed = selectedSlot.allowedOpponentCategories.length === 0 || selectedSlot.allowedOpponentCategories.includes(cat);
-                        return (
-                          <button 
-                            key={cat} 
-                            disabled={!isAllowed}
-                            onClick={() => setSelectedCategory(cat)} 
-                            className={`px-4 py-2 rounded-full font-black uppercase text-[10px] transition-all ${!isAllowed ? 'opacity-20 grayscale border-dashed' : selectedCategory === cat ? 'bg-grass-500 text-pitch border-grass-500' : 'bg-gray-50 border text-gray-400'}`}
-                          >
-                             {cat}
-                          </button>
-                        );
-                     })}
+                     {currentUser.teams[selectedTeamIdx]?.categories.map(cat => (
+                        <button 
+                          key={cat} 
+                          onClick={() => setSelectedCategory(cat)} 
+                          className={`px-4 py-2 rounded-full font-black uppercase text-[10px] transition-all ${selectedCategory === cat ? 'bg-grass-500 text-pitch border-grass-500' : 'bg-gray-50 border text-gray-400'}`}
+                        >
+                           {cat}
+                        </button>
+                     ))}
                   </div>
-                  {selectedSlot.hasLocalTeam && selectedSlot.allowedOpponentCategories.length > 0 && (
-                    <p className="mt-3 text-[9px] font-bold text-gray-400 flex items-center gap-1 uppercase italic"><Info className="w-3 h-3"/> Categorias permitidas: {selectedSlot.allowedOpponentCategories.join(', ')}</p>
-                  )}
                </div>
 
-               <div className="flex flex-col gap-4 pt-6">
+               <div className="flex flex-col gap-4 pt-6 pb-safe">
                   <Button onClick={handleBookingConfirm} disabled={!selectedCategory} className="w-full py-5 rounded-[2.5rem] font-black uppercase text-xs shadow-xl active:scale-95">Confirmar e Solicitar</Button>
                   <button onClick={() => setSelectedSlot(null)} className="w-full font-black uppercase text-[10px] text-gray-400 py-2">Cancelar</button>
                </div>
