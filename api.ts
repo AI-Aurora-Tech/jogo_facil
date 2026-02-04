@@ -77,37 +77,18 @@ export const api = {
         location: fieldData.location,
         hourly_rate: fieldData.hourlyRate || 0,
         contact_phone: fieldData.contactPhone,
-        image_url: fieldData.imageUrl || 'https://images.unsplash.com/photo-1529900748604-07564a03e7a6?auto=format&fit=crop&get=1000'
+        image_url: fieldData.imageUrl || 'https://images.unsplash.com/photo-1529900748604-07564a03e7a6?auto=format&fit=crop&q=80&w=1000'
       }]);
     }
     return mapUserFromDb(newUser);
   },
 
   addRegisteredTeam: async (team: Partial<RegisteredTeam>): Promise<void> => {
-    if (team.email) {
-      const email = team.email.toLowerCase().trim();
-      const { data: existingUser } = await supabase.from('user').select('id').eq('email', email).single();
-      if (!existingUser) {
-        await supabase.from('user').insert([{
-          email: email,
-          password: team.captainPhone,
-          name: team.captainName || team.name,
-          phone_number: team.captainPhone,
-          role: UserRole.TEAM_CAPTAIN,
-          subscription: SubscriptionPlan.FREE,
-          team_name: team.name,
-          team_categories: team.categories || [],
-          team_logo_url: team.logoUrl || '',
-          team_gender: team.gender || 'MASCULINO'
-        }]);
-      }
-    }
-
     const payload = {
       field_id: team.fieldId,
       name: team.name,
-      fixed_day: team.fixed_day,
-      fixed_time: team.fixed_time,
+      fixed_day: team.fixedDay,
+      fixed_time: team.fixedTime,
       categories: team.categories || [],
       captain_name: team.captainName || null,
       captain_phone: team.captainPhone || null,
@@ -115,7 +96,7 @@ export const api = {
       logo_url: team.logoUrl || null,
       gender: team.gender || 'MASCULINO',
       sport: team.sport || 'Futebol',
-      court_name: team.courtName || null
+      court_name: team.courtName || 'Principal'
     };
     const { error } = await supabase.from('registered_team').insert([payload]);
     if (error) throw error;
@@ -146,7 +127,6 @@ export const api = {
       time: s.time,
       match_type: s.matchType || 'ALUGUEL',
       is_booked: s.isBooked || false,
-      // Fix: Corrected property access to use camelCase hasLocalTeam from the Partial<MatchSlot> type.
       has_local_team: s.hasLocalTeam || false,
       local_team_name: s.localTeamName || null,
       local_team_category: s.localTeamCategory || null,
@@ -156,7 +136,7 @@ export const api = {
       allowed_opponent_categories: s.allowedOpponentCategories || [],
       price: s.price || 0,
       status: s.status || 'available',
-      court_name: s.courtName || null,
+      court_name: s.courtName || 'Principal',
       sport: s.sport || 'Futebol',
       booked_by_user_id: s.bookedByUserId || null
     }));
