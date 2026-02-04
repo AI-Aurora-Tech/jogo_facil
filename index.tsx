@@ -1,6 +1,5 @@
 
-
-import React, { ErrorInfo, ReactNode } from 'react';
+import React, { Component, ErrorInfo, ReactNode } from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
 
@@ -16,15 +15,13 @@ interface ErrorBoundaryState {
 /**
  * ErrorBoundary class to catch rendering errors in the component tree.
  */
-// Fix: Explicitly extend React.Component with generics to ensure 'state' and 'props' properties are properly recognized by TypeScript.
+// Fix: Use React.Component directly to ensure 'props' and 'state' are correctly inherited and recognized by the TypeScript compiler.
 class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
-  // Fix: Use a property initializer for state to ensure it is correctly typed and initialized before access.
+  // Fix: Explicitly initialize state. Property declaration here is standard for typing in class components.
   public state: ErrorBoundaryState = {
     hasError: false,
     error: null
   };
-
-  // Constructor is omitted as 'super(props)' is handled by default and state is initialized via property.
 
   public static getDerivedStateFromError(error: Error): ErrorBoundaryState {
     return { hasError: true, error };
@@ -40,7 +37,7 @@ class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundarySta
   };
 
   public render(): ReactNode {
-    // Fix: 'this.state' is now correctly typed and accessible through the React.Component base class.
+    // Fix: 'this.state' is now correctly typed and accessible through the Component base class.
     if (this.state.hasError) {
       return (
         <div className="min-h-screen bg-[#022c22] flex items-center justify-center p-6 text-center font-sans">
@@ -70,7 +67,7 @@ class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundarySta
         </div>
       );
     }
-    // Fix: Inherit 'this.props' correctly from React.Component by using the explicit React namespace and generics.
+    // Fix: Access children from this.props which is correctly inherited from the Component base class.
     return this.props.children;
   }
 }

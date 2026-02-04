@@ -107,6 +107,7 @@ export interface RegisteredTeam {
   createdAt: string;
   captainName?: string;
   captainPhone?: string;
+  email?: string;
 }
 
 export interface VerificationResult {

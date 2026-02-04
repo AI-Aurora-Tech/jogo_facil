@@ -1,6 +1,6 @@
 
 import { supabase } from './supabaseClient';
-import { User, Field, MatchSlot, RegisteredTeam, UserRole, Notification, TeamConfig } from './types';
+import { User, Field, MatchSlot, RegisteredTeam, UserRole, Notification, TeamConfig, SubscriptionPlan } from './types';
 
 const mapUserFromDb = (u: any): User => {
   const teams: TeamConfig[] = [];
@@ -75,6 +75,46 @@ export const api = {
       }]);
     }
     return mapUserFromDb(newUser);
+  },
+
+  addRegisteredTeam: async (team: Partial<RegisteredTeam>): Promise<void> => {
+    // 1. Criar ou Vincular Usuário
+    if (team.email) {
+      const email = team.email.toLowerCase().trim();
+      const { data: existingUser } = await supabase
+        .from('user')
+        .select('id')
+        .eq('email', email)
+        .single();
+
+      if (!existingUser) {
+        // Criar usuário automático: Senha é o telefone
+        await supabase.from('user').insert([{
+          email: email,
+          password: team.captainPhone,
+          name: team.captainName || team.name,
+          phone_number: team.captainPhone,
+          role: UserRole.TEAM_CAPTAIN,
+          subscription: SubscriptionPlan.FREE,
+          team_name: team.name,
+          team_categories: team.categories || []
+        }]);
+      }
+    }
+
+    // 2. Salvar Mensalista
+    const payload = {
+      field_id: team.fieldId,
+      name: team.name,
+      fixed_day: team.fixed_day,
+      fixed_time: team.fixed_time,
+      categories: team.categories,
+      captain_name: team.captain_name || null,
+      captain_phone: team.captain_phone || null,
+      email: team.email || null
+    };
+    const { error } = await supabase.from('registered_team').insert([payload]);
+    if (error) throw error;
   },
 
   updateUser: async (user: User): Promise<User> => {
@@ -222,8 +262,9 @@ export const api = {
       allowed_opponent_categories: s.allowedOpponentCategories || [],
       price: s.price || 0,
       status: s.status || 'available',
-      court_name: s.courtName || null,
-      sport: s.sport || 'Futebol'
+      court_name: s.court_name || null,
+      sport: s.sport || 'Futebol',
+      booked_by_user_id: s.bookedByUserId || null
     }));
     const { error } = await supabase.from('match_slot').insert(payload);
     if (error) throw error;
@@ -245,22 +286,9 @@ export const api = {
       logoUrl: t.logo_url,
       createdAt: t.created_at,
       captainName: t.captain_name,
-      captainPhone: t.captain_phone
+      captainPhone: t.captain_phone,
+      email: t.email
     }));
-  },
-
-  addRegisteredTeam: async (team: Partial<RegisteredTeam>): Promise<void> => {
-    const payload = {
-      field_id: team.fieldId,
-      name: team.name,
-      fixed_day: team.fixedDay,
-      fixed_time: team.fixedTime,
-      categories: team.categories,
-      captain_name: team.captainName || null,
-      captain_phone: team.captainPhone || null
-    };
-    const { error } = await supabase.from('registered_team').insert([payload]);
-    if (error) throw error;
   },
 
   updateRegisteredTeam: async (teamId: string, updates: Partial<RegisteredTeam>): Promise<void> => {
@@ -271,6 +299,7 @@ export const api = {
     if (updates.categories) payload.categories = updates.categories;
     if (updates.captainName !== undefined) payload.captain_name = updates.captainName;
     if (updates.captainPhone !== undefined) payload.captain_phone = updates.captainPhone;
+    if (updates.email !== undefined) payload.email = updates.email;
     
     const { error } = await supabase.from('registered_team').update(payload).eq('id', teamId);
     if (error) throw error;
