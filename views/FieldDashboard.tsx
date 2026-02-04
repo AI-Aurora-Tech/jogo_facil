@@ -31,11 +31,17 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
   const [showAddSlotModal, setShowAddSlotModal] = useState(false);
   const [showAddMensalistaModal, setShowAddMensalistaModal] = useState(false);
   
-  // Form States para Novo Slot
+  // Advanced Slot Creator States
   const [slotDate, setSlotDate] = useState(new Date().toISOString().split('T')[0]);
   const [slotTime, setSlotTime] = useState('19:00');
   const [slotType, setSlotType] = useState<MatchType>('ALUGUEL');
   const [slotCourt, setSlotCourt] = useState(field.courts?.[0] || 'Principal');
+  const [slotPrice, setSlotPrice] = useState(field.hourlyRate);
+  const [slotSport, setSlotSport] = useState('Futebol');
+  const [hasLocalTeam, setHasLocalTeam] = useState(false);
+  const [localTeamSource, setLocalTeamSource] = useState<'MY_TEAMS' | 'MENSALISTAS'>('MENSALISTAS');
+  const [selectedLocalTeamIdx, setSelectedLocalTeamIdx] = useState(0);
+  const [allowedCats, setAllowedCats] = useState<string[]>([]);
 
   // Form States Mensalista
   const [editingMensalista, setEditingMensalista] = useState<RegisteredTeam | null>(null);
@@ -69,19 +75,53 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
   const handleCreateSlot = async () => {
     setIsLoading(true);
     try {
+      let localName = null;
+      let localCat = null;
+      let localPhone = null;
+      let localLogo = null;
+      let localGender: Gender = 'MASCULINO';
+
+      if (hasLocalTeam) {
+        if (localTeamSource === 'MENSALISTAS') {
+          const t = registeredTeams[selectedLocalTeamIdx];
+          if (t) {
+            localName = t.name;
+            localCat = t.categories[0];
+            localPhone = t.captainPhone;
+            localLogo = t.logoUrl;
+            localGender = t.gender;
+          }
+        } else {
+          const t = currentUser.teams[selectedLocalTeamIdx];
+          if (t) {
+            localName = t.name;
+            localCat = t.categories[0];
+            localPhone = currentUser.phoneNumber;
+            localLogo = t.logoUrl;
+            localGender = t.gender;
+          }
+        }
+      }
+
       await api.createSlots([{
         fieldId: field.id,
         date: slotDate,
         time: slotTime,
         matchType: slotType,
         isBooked: false,
-        hasLocalTeam: false,
-        price: field.hourlyRate,
+        hasLocalTeam: hasLocalTeam,
+        localTeamName: localName,
+        localTeamCategory: localCat,
+        localTeamPhone: localPhone,
+        localTeamLogoUrl: localLogo,
+        localTeamGender: localGender,
+        price: slotPrice,
         status: 'available',
         courtName: slotCourt,
-        sport: 'Futebol',
-        allowedOpponentCategories: []
+        sport: slotSport,
+        allowedOpponentCategories: allowedCats
       }]);
+
       setShowAddSlotModal(false);
       onRefreshData();
       alert("Horário criado com sucesso!");
@@ -150,7 +190,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
       }
     } catch (e) {
       console.error(e);
-      alert("Erro ao gerar agenda. Certifique-se de que as colunas do banco foram criadas conforme o script SQL.");
+      alert("Erro ao gerar agenda. Certifique-se de que as colunas do banco foram criadas.");
     } finally {
       setIsLoading(false);
     }
@@ -209,7 +249,10 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
           </div>
           <div className="flex gap-2">
             <button onClick={() => onRefreshData()} className="p-3 bg-gray-100 rounded-xl active:rotate-180 transition-transform"><RefreshCcw className="w-5 h-5"/></button>
-            <button onClick={() => setShowAddSlotModal(true)} className="p-3 bg-pitch text-white rounded-xl active:scale-95 shadow-md">
+            <button onClick={() => {
+              setSlotDate(new Date().toISOString().split('T')[0]);
+              setShowAddSlotModal(true);
+            }} className="p-3 bg-pitch text-white rounded-xl active:scale-95 shadow-md">
               <Plus className="w-5 h-5"/>
             </button>
           </div>
@@ -240,7 +283,10 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                      <div className="bg-gray-50 p-3 rounded-xl text-pitch"><Clock className="w-5 h-5"/></div>
                      <div>
                         <p className="text-xs font-black text-pitch uppercase">{slot.date.split('-').reverse().join('/')} às {slot.time}</p>
-                        <p className="text-[8px] font-black text-gray-400 uppercase">{slot.matchType} • {slot.courtName || 'Principal'}</p>
+                        <p className="text-[8px] font-black text-gray-400 uppercase">
+                          {slot.localTeamName ? `${slot.localTeamName} (${slot.localTeamCategory})` : 'Horário Livre'} 
+                          <br/> {slot.matchType} • {slot.courtName || 'Principal'}
+                        </p>
                      </div>
                   </div>
                   <button onClick={() => { if(confirm("Remover este horário?")) onDeleteSlot(slot.id); }} className="p-2 text-red-500 hover:bg-red-50 rounded-lg"><Trash2 className="w-4 h-4"/></button>
@@ -308,30 +354,99 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
         )}
       </div>
 
-      {/* Modal de Novo Slot - CORRIGIDO PARA APARECER */}
+      {/* Modal de Novo Slot Avançado */}
       {showAddSlotModal && (
         <div className="fixed inset-0 bg-pitch/95 backdrop-blur-md z-[100] flex items-end">
-           <div className="bg-white w-full rounded-t-[3rem] p-10 animate-in slide-in-from-bottom duration-500 shadow-2xl">
+           <div className="bg-white w-full rounded-t-[3rem] p-10 animate-in slide-in-from-bottom duration-500 shadow-2xl max-h-[90vh] overflow-y-auto pb-safe">
               <div className="flex justify-between items-center mb-8">
-                 <h2 className="text-xl font-black italic uppercase text-pitch">Novo Horário</h2>
+                 <h2 className="text-xl font-black italic uppercase text-pitch">Novo Agendamento</h2>
                  <button onClick={() => setShowAddSlotModal(false)} className="p-2 bg-gray-100 rounded-full hover:bg-red-50 transition-colors"><X className="w-6 h-6"/></button>
               </div>
-              <div className="space-y-4">
-                 <div className="bg-gray-50 p-4 rounded-2xl border">
-                    <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Data</label>
-                    <input type="date" className="w-full bg-transparent font-black outline-none" value={slotDate} onChange={e => setSlotDate(e.target.value)} />
+
+              <div className="space-y-6">
+                 {/* Seção Básica */}
+                 <div className="grid grid-cols-2 gap-4">
+                    <div className="bg-gray-50 p-4 rounded-2xl border">
+                       <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Data</label>
+                       <input type="date" className="w-full bg-transparent font-black outline-none" value={slotDate} onChange={e => setSlotDate(e.target.value)} />
+                    </div>
+                    <div className="bg-gray-50 p-4 rounded-2xl border">
+                       <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Hora</label>
+                       <input type="time" className="w-full bg-transparent font-black outline-none" value={slotTime} onChange={e => setSlotTime(e.target.value)} />
+                    </div>
                  </div>
-                 <div className="bg-gray-50 p-4 rounded-2xl border">
-                    <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Hora</label>
-                    <input type="time" className="w-full bg-transparent font-black outline-none" value={slotTime} onChange={e => setSlotTime(e.target.value)} />
+
+                 {/* Tipo e Esporte */}
+                 <div className="grid grid-cols-2 gap-4">
+                    <div className="bg-gray-50 p-4 rounded-2xl border">
+                       <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Tipo de Jogo</label>
+                       <select className="w-full bg-transparent font-black outline-none text-[10px]" value={slotType} onChange={e => setSlotType(e.target.value as MatchType)}>
+                          <option value="ALUGUEL">ALUGUEL (LIVRE)</option>
+                          <option value="AMISTOSO">AMISTOSO</option>
+                          <option value="FESTIVAL">FESTIVAL</option>
+                          <option value="FIXO">MENSALISTA (FIXO)</option>
+                       </select>
+                    </div>
+                    <div className="bg-gray-50 p-4 rounded-2xl border">
+                       <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Esporte</label>
+                       <select className="w-full bg-transparent font-black outline-none text-[10px]" value={slotSport} onChange={e => setSlotSport(e.target.value)}>
+                          {SPORTS.map(s => <option key={s} value={s}>{s}</option>)}
+                       </select>
+                    </div>
                  </div>
-                 <div className="bg-gray-50 p-4 rounded-2xl border">
-                    <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Quadra/Campo</label>
-                    <select className="w-full bg-transparent font-black outline-none" value={slotCourt} onChange={e => setSlotCourt(e.target.value)}>
-                        {field.courts?.length > 0 ? field.courts.map(c => <option key={c} value={c}>{c}</option>) : <option value="Principal">Campo Principal</option>}
-                    </select>
+
+                 {/* Mandante */}
+                 <div className="bg-pitch/5 p-6 rounded-[2rem] border border-pitch/10">
+                    <div className="flex items-center justify-between mb-4">
+                       <label className="text-[10px] font-black text-pitch uppercase italic">Existe Mandante (Time Local)?</label>
+                       <input type="checkbox" className="w-6 h-6 rounded-lg text-pitch" checked={hasLocalTeam} onChange={e => setHasLocalTeam(e.target.checked)} />
+                    </div>
+                    
+                    {hasLocalTeam && (
+                      <div className="space-y-4 animate-in fade-in duration-300">
+                         <div className="flex p-1 bg-white rounded-xl border">
+                            <button onClick={() => setLocalTeamSource('MENSALISTAS')} className={`flex-1 py-2 text-[8px] font-black uppercase rounded-lg ${localTeamSource === 'MENSALISTAS' ? 'bg-pitch text-white' : 'text-gray-400'}`}>Mensalistas</button>
+                            <button onClick={() => setLocalTeamSource('MY_TEAMS')} className={`flex-1 py-2 text-[8px] font-black uppercase rounded-lg ${localTeamSource === 'MY_TEAMS' ? 'bg-pitch text-white' : 'text-gray-400'}`}>Meus Times</button>
+                         </div>
+                         <select className="w-full p-4 bg-white border rounded-xl font-black text-xs" value={selectedLocalTeamIdx} onChange={e => setSelectedLocalTeamIdx(Number(e.target.value))}>
+                            {localTeamSource === 'MENSALISTAS' ? (
+                              registeredTeams.map((t, i) => <option key={t.id} value={i}>{t.name} ({t.categories[0]})</option>)
+                            ) : (
+                              currentUser.teams.map((t, i) => <option key={i} value={i}>{t.name} ({t.categories[0]})</option>)
+                            )}
+                         </select>
+                      </div>
+                    )}
                  </div>
-                 <Button onClick={handleCreateSlot} isLoading={isLoading} className="w-full py-5 rounded-[2rem] font-black uppercase shadow-lg">Criar Horário na Agenda</Button>
+
+                 {/* Categorias Aceitas */}
+                 <div className="bg-gray-50 p-4 rounded-2xl border">
+                    <label className="text-[8px] font-black text-gray-400 uppercase block mb-3">Categorias Aceitas para Desafio</label>
+                    <div className="flex flex-wrap gap-2">
+                       {CATEGORY_ORDER.map(c => (
+                          <button key={c} onClick={() => {
+                             if(allowedCats.includes(c)) setAllowedCats(allowedCats.filter(x => x !== c));
+                             else setAllowedCats([...allowedCats, c]);
+                          }} className={`px-3 py-1.5 rounded-full text-[8px] font-black uppercase transition-all ${allowedCats.includes(c) ? 'bg-pitch text-white shadow-sm' : 'bg-white border text-gray-300'}`}>{c}</button>
+                       ))}
+                    </div>
+                 </div>
+
+                 {/* Preço e Quadra */}
+                 <div className="grid grid-cols-2 gap-4">
+                    <div className="bg-gray-50 p-4 rounded-2xl border">
+                       <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Preço (R$)</label>
+                       <input type="number" className="w-full bg-transparent font-black outline-none text-pitch" value={slotPrice} onChange={e => setSlotPrice(Number(e.target.value))} />
+                    </div>
+                    <div className="bg-gray-50 p-4 rounded-2xl border">
+                       <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Quadra/Campo</label>
+                       <select className="w-full bg-transparent font-black outline-none text-xs" value={slotCourt} onChange={e => setSlotCourt(e.target.value)}>
+                          {field.courts?.length > 0 ? field.courts.map(c => <option key={c} value={c}>{c}</option>) : <option value="Principal">Campo Principal</option>}
+                       </select>
+                    </div>
+                 </div>
+
+                 <Button onClick={handleCreateSlot} isLoading={isLoading} className="w-full py-6 rounded-[2.5rem] font-black uppercase shadow-xl active:scale-95">Criar Horário na Agenda</Button>
               </div>
            </div>
         </div>
@@ -373,7 +488,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                     <label className="text-[8px] font-black text-gray-400 uppercase block mb-2">Categoria</label>
                     <div className="flex flex-wrap gap-2">
                        {CATEGORY_ORDER.map(c => (
-                          <button key={c} onClick={() => setMensalistaCategory(c)} className={`px-3 py-2 rounded-full text-[9px] font-black uppercase transition-all ${mensalistaCategory === c ? 'bg-pitch text-white' : 'bg-white border text-gray-400'}`}>{c}</button>
+                          <button key={c} onClick={() => setMensalistaCategory(c)} className={`px-3 py-2 rounded-full text-[9px] font-black uppercase transition-all ${mensalistaCategory === c ? 'bg-pitch text-white' : 'bg-white border text-gray-300'}`}>{c}</button>
                        ))}
                     </div>
                  </div>
