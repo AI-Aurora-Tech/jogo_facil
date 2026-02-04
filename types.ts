@@ -115,6 +115,9 @@ export interface RegisteredTeam {
   courtName: string;
 }
 
+/**
+ * Result of the AI verification process for payment receipts.
+ */
 export interface VerificationResult {
   isValid: boolean;
   amountFound: number | null;
@@ -122,6 +125,9 @@ export interface VerificationResult {
   reason: string;
 }
 
+/**
+ * Represents a pending update for administrative approval.
+ */
 export interface PendingUpdate {
   id: string;
   requesterId: string;

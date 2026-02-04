@@ -141,41 +141,48 @@ export const api = {
     if (error) throw error;
   },
 
-  updateUser: async (user: User): Promise<User> => {
-    const firstTeam = user.teams?.[0];
-    const secondTeam = user.teams?.slice(1) || [];
-
-    const { data, error } = await supabase.from('user').update({
-      name: user.name,
-      phone_number: user.phoneNumber,
-      team_name: firstTeam?.name || '',
-      team_categories: firstTeam?.categories || [],
-      team_logo_url: firstTeam?.logoUrl || '',
-      team_gender: firstTeam?.gender || 'MASCULINO',
-      sub_teams: secondTeam,
-      password: user.password
-    }).eq('id', user.id).select().single();
-    if (error) throw error;
-    return mapUserFromDb(data);
+  getRegisteredTeams: async (fieldId: string): Promise<RegisteredTeam[]> => {
+    const { data } = await supabase.from('registered_team').select('*').eq('field_id', fieldId);
+    return (data || []).map(t => ({
+      id: t.id,
+      name: t.name,
+      fieldId: t.field_id,
+      fixedDay: t.fixed_day,
+      fixedTime: t.fixed_time,
+      categories: t.categories,
+      logoUrl: t.logo_url,
+      createdAt: t.created_at,
+      captainName: t.captain_name,
+      captainPhone: t.captain_phone,
+      email: t.email,
+      gender: t.gender || 'MASCULINO',
+      sport: t.sport || 'Futebol',
+      courtName: t.court_name
+    }));
   },
 
-  getFields: async (): Promise<Field[]> => {
-    const { data, error } = await supabase.from('field').select('*');
-    if (error) throw error;
-    return (data || []).map(f => ({
-        id: f.id,
-        ownerId: f.owner_id,
-        name: f.name,
-        location: f.location,
-        hourlyRate: f.hourly_rate || 0,
-        cancellationFeePercent: f.cancellation_fee_percent,
-        pixConfig: { key: f.pix_key || '', name: f.pix_name || '' },
-        imageUrl: f.image_url,
-        contactPhone: f.contact_phone,
-        latitude: f.latitude,
-        longitude: f.longitude,
-        courts: f.courts || []
+  createSlots: async (slots: Partial<MatchSlot>[]): Promise<void> => {
+    const payload = slots.map(s => ({
+      field_id: s.fieldId,
+      date: s.date,
+      time: s.time,
+      match_type: s.matchType || 'ALUGUEL',
+      is_booked: s.isBooked || false,
+      has_local_team: s.hasLocalTeam || false,
+      local_team_name: s.localTeamName || null,
+      local_team_category: s.localTeamCategory || null,
+      local_team_phone: s.localTeamPhone || null,
+      local_team_logo_url: s.localTeamLogoUrl || null,
+      local_team_gender: s.localTeamGender || 'MASCULINO',
+      allowed_opponent_categories: s.allowedOpponentCategories || [],
+      price: s.price || 0,
+      status: s.status || 'available',
+      court_name: s.courtName || null,
+      sport: s.sport || 'Futebol',
+      booked_by_user_id: s.bookedByUserId || null
     }));
+    const { error } = await supabase.from('match_slot').insert(payload);
+    if (error) throw error;
   },
 
   getSlots: async (): Promise<MatchSlot[]> => {
@@ -214,30 +221,6 @@ export const api = {
     })) as MatchSlot[];
   },
 
-  createSlots: async (slots: Partial<MatchSlot>[]): Promise<void> => {
-    const payload = slots.map(s => ({
-      field_id: s.fieldId,
-      date: s.date,
-      time: s.time,
-      match_type: s.matchType || 'ALUGUEL',
-      is_booked: s.isBooked || false,
-      has_local_team: s.hasLocalTeam || false,
-      local_team_name: s.localTeamName || null,
-      local_team_category: s.localTeamCategory || null,
-      local_team_phone: s.localTeamPhone || null,
-      local_team_logo_url: s.localTeamLogoUrl || null,
-      local_team_gender: s.localTeamGender || 'MASCULINO',
-      allowed_opponent_categories: s.allowedOpponentCategories || [],
-      price: s.price || 0,
-      status: s.status || 'available',
-      court_name: s.courtName || null,
-      sport: s.sport || 'Futebol',
-      booked_by_user_id: s.bookedByUserId || null
-    }));
-    const { error } = await supabase.from('match_slot').insert(payload);
-    if (error) throw error;
-  },
-
   updateSlot: async (slotId: string, data: Partial<MatchSlot>): Promise<void> => {
     const payload: any = {};
     if (data.status) payload.status = data.status;
@@ -263,23 +246,40 @@ export const api = {
     if (error) throw error;
   },
 
-  getRegisteredTeams: async (fieldId: string): Promise<RegisteredTeam[]> => {
-    const { data } = await supabase.from('registered_team').select('*').eq('field_id', fieldId);
-    return (data || []).map(t => ({
-      id: t.id,
-      name: t.name,
-      fieldId: t.field_id,
-      fixedDay: t.fixed_day,
-      fixedTime: t.fixed_time,
-      categories: t.categories,
-      logoUrl: t.logo_url,
-      createdAt: t.created_at,
-      captainName: t.captain_name,
-      captainPhone: t.captain_phone,
-      email: t.email,
-      gender: t.gender || 'MASCULINO',
-      sport: t.sport || 'Futebol',
-      courtName: t.court_name
+  updateUser: async (user: User): Promise<User> => {
+    const firstTeam = user.teams?.[0];
+    const secondTeam = user.teams?.slice(1) || [];
+
+    const { data, error } = await supabase.from('user').update({
+      name: user.name,
+      phone_number: user.phoneNumber,
+      team_name: firstTeam?.name || '',
+      team_categories: firstTeam?.categories || [],
+      team_logo_url: firstTeam?.logoUrl || '',
+      team_gender: firstTeam?.gender || 'MASCULINO',
+      sub_teams: secondTeam,
+      password: user.password
+    }).eq('id', user.id).select().single();
+    if (error) throw error;
+    return mapUserFromDb(data);
+  },
+
+  getFields: async (): Promise<Field[]> => {
+    const { data, error } = await supabase.from('field').select('*');
+    if (error) throw error;
+    return (data || []).map(f => ({
+        id: f.id,
+        ownerId: f.owner_id,
+        name: f.name,
+        location: f.location,
+        hourlyRate: f.hourly_rate || 0,
+        cancellationFeePercent: f.cancellation_fee_percent,
+        pixConfig: { key: f.pix_key || '', name: f.pix_name || '' },
+        imageUrl: f.image_url,
+        contactPhone: f.contact_phone,
+        latitude: f.latitude,
+        longitude: f.longitude,
+        courts: f.courts || []
     }));
   },
 

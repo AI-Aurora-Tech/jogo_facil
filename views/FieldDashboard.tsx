@@ -34,7 +34,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
   const [editingSlot, setEditingSlot] = useState<MatchSlot | null>(null);
   const [editingMensalista, setEditingMensalista] = useState<RegisteredTeam | null>(null);
 
-  // Form States
+  // Form States Mensalista
   const [mensalistaName, setMensalistaName] = useState('');
   const [mensalistaCaptain, setMensalistaCaptain] = useState('');
   const [mensalistaPhone, setMensalistaPhone] = useState('');
@@ -63,19 +63,18 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
   };
 
   const handleGenerateRecurringSlots = async (team: RegisteredTeam) => {
-    if (!confirm(`Deseja gerar os próximos 10 jogos para ${team.name}? O sistema verificará se já existem agendas futuras.`)) return;
+    if (!confirm(`Gerar os próximos 10 jogos para ${team.name}?`)) return;
     
     setIsLoading(true);
     try {
       const targetDay = Number(team.fixedDay);
       const newSlots: Omit<MatchSlot, 'id'>[] = [];
       
-      // Encontrar a data do último slot agendado para esse mensalista
       const teamSlots = slots.filter(s => s.localTeamName === team.name && s.fieldId === field.id).sort((a,b) => b.date.localeCompare(a.date));
       let startDate = new Date();
       if (teamSlots.length > 0) {
         startDate = new Date(`${teamSlots[0].date}T00:00:00`);
-        startDate.setDate(startDate.getDate() + 1); // Começar no dia seguinte ao último
+        startDate.setDate(startDate.getDate() + 1);
       }
 
       let current = new Date(startDate);
@@ -94,7 +93,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
             time: team.fixedTime,
             durationMinutes: 60,
             matchType: 'FIXO',
-            isBooked: false, // Disponível para adversários
+            isBooked: false, 
             hasLocalTeam: true,
             localTeamName: team.name,
             localTeamCategory: team.categories[0] || 'Livre',
@@ -113,10 +112,10 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
 
       if (newSlots.length > 0) {
         await api.createSlots(newSlots);
-        alert(`${newSlots.length} novos horários adicionados!`);
+        alert(`${newSlots.length} horários adicionados à agenda.`);
         onRefreshData();
       } else {
-        alert("Sua agenda já está atualizada para as próximas semanas.");
+        alert("Sua agenda para este mensalista já está preenchida.");
       }
     } catch (e) {
       alert("Erro ao gerar agenda.");
@@ -126,13 +125,13 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
   };
 
   const handleSaveMensalista = async () => {
-    if (!mensalistaName || !mensalistaPhone || !mensalistaEmail) {
-      alert("Nome, Telefone e E-mail são obrigatórios.");
+    if (!mensalistaName || !mensalistaPhone || !mensalistaEmail || !mensalistaCategory) {
+      alert("Preencha todos os campos obrigatórios (Nome, Categoria, Telefone e E-mail).");
       return;
     }
     setIsLoading(true);
     try {
-      const payload = {
+      const payload: Partial<RegisteredTeam> = {
         fieldId: field.id,
         name: mensalistaName,
         fixedDay: String(mensalistaDay),
@@ -149,21 +148,19 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
 
       if (editingMensalista) {
         await api.updateRegisteredTeam(editingMensalista.id, payload);
-        alert("Dados do mensalista atualizados!");
       } else {
         await api.addRegisteredTeam(payload);
-        alert("Mensalista cadastrado com sucesso!");
       }
       setShowAddMensalistaModal(false);
       loadMensalistas();
+      alert("Mensalista salvo com sucesso!");
     } catch (e) {
+      console.error(e);
       alert("Erro ao salvar mensalista.");
     } finally {
       setIsLoading(false);
     }
   };
-
-  const getDayName = (dateStr: string) => ['Dom','Seg','Ter','Qua','Qui','Sex','Sab'][new Date(`${dateStr}T00:00:00`).getDay()];
 
   return (
     <div className="bg-gray-50 min-h-screen pb-32">
@@ -250,14 +247,13 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                setEditingMensalista(null); 
                setMensalistaName(''); 
                setMensalistaLogo('');
+               setMensalistaCategory('');
                setShowAddMensalistaModal(true); 
              }} className="w-full py-4 border-2 border-dashed border-gray-200 rounded-[2rem] text-gray-400 font-black uppercase text-[10px] hover:border-pitch transition-all">
                Adicionar Novo Mensalista
              </button>
           </div>
         )}
-        
-        {/* Outras abas (Agenda, Solicitações, Histórico) permanecem conforme a lógica anterior, apenas garantindo os novos campos */}
       </div>
 
       {/* Modal Mensalista Revitalizado */}
@@ -294,6 +290,24 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                     <input className="w-full bg-transparent font-black outline-none text-pitch" value={mensalistaName} onChange={e => setMensalistaName(e.target.value)} placeholder="Ex: Galácticos FC" />
                  </div>
 
+                 <div className="bg-gray-50 p-4 rounded-2xl border">
+                    <label className="text-[8px] font-black text-gray-400 uppercase block mb-2">Categoria</label>
+                    <div className="flex flex-wrap gap-2">
+                       {CATEGORY_ORDER.map(c => (
+                          <button key={c} onClick={() => setMensalistaCategory(c)} className={`px-3 py-2 rounded-full text-[9px] font-black uppercase transition-all ${mensalistaCategory === c ? 'bg-pitch text-white' : 'bg-white border text-gray-400'}`}>{c}</button>
+                       ))}
+                    </div>
+                 </div>
+
+                 <div className="bg-gray-50 p-4 rounded-2xl border">
+                    <label className="text-[8px] font-black text-gray-400 uppercase block mb-2">Gênero</label>
+                    <div className="flex p-1 bg-white rounded-xl border">
+                       {['MASCULINO', 'FEMININO', 'MISTO'].map((g: any) => (
+                         <button key={g} onClick={() => setMensalistaGender(g)} className={`flex-1 py-2 text-[9px] font-black uppercase rounded-lg transition-all ${mensalistaGender === g ? 'bg-pitch text-white' : 'text-gray-400'}`}>{g}</button>
+                       ))}
+                    </div>
+                 </div>
+
                  <div className="grid grid-cols-2 gap-4">
                     <div className="bg-gray-50 p-4 rounded-2xl border">
                        <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Dia Fixo</label>
@@ -319,15 +333,6 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                        <select className="w-full bg-transparent font-black outline-none text-[10px] uppercase" value={mensalistaCourt} onChange={e => setMensalistaCourt(e.target.value)}>
                           {field.courts?.length > 0 ? field.courts.map(c => <option key={c} value={c}>{c}</option>) : <option value="Principal">Campo Principal</option>}
                        </select>
-                    </div>
-                 </div>
-
-                 <div className="bg-gray-50 p-4 rounded-2xl border">
-                    <label className="text-[8px] font-black text-gray-400 uppercase block mb-2">Gênero</label>
-                    <div className="flex p-1 bg-white rounded-xl border">
-                       {['MASCULINO', 'FEMININO', 'MISTO'].map((g: any) => (
-                         <button key={g} onClick={() => setMensalistaGender(g)} className={`flex-1 py-2 text-[9px] font-black uppercase rounded-lg transition-all ${mensalistaGender === g ? 'bg-pitch text-white' : 'text-gray-400'}`}>{g}</button>
-                       ))}
                     </div>
                  </div>
 
