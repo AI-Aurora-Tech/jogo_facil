@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback } from 'react';
 import { UserRole, Field, MatchSlot, User, Notification } from './types';
 import { Landing } from './views/Landing';
@@ -6,7 +7,7 @@ import { FieldDashboard } from './views/FieldDashboard';
 import { TeamDashboard } from './views/TeamDashboard';
 import { EditProfileModal } from './components/EditProfileModal';
 import { api } from './api';
-import { RefreshCw, Settings, Building2, Shield, Search, Loader2, Bell, X, Info, History } from 'lucide-react';
+import { RefreshCw, Settings, Building2, Shield, Search, Loader2, Bell, X, Info, History, KeyRound, Eye, LogOut } from 'lucide-react';
 
 const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
@@ -93,7 +94,6 @@ const App: React.FC = () => {
     if (confirm("Deseja realmente cancelar este agendamento? Ele voltará a ficar disponível para outros times.")) {
       setIsLoading(true);
       try {
-        // Reset slot to available
         await api.updateSlot(slotId, { 
           status: 'available', 
           isBooked: false, 
@@ -107,7 +107,6 @@ const App: React.FC = () => {
           receiptUrl: null as any 
         });
 
-        // Notify Field Owner
         if (field) {
           await api.createNotification({
             userId: field.ownerId,
@@ -117,7 +116,6 @@ const App: React.FC = () => {
           });
         }
 
-        // Notify Team Captain (if someone else canceled it or for record)
         if (slot.bookedByUserId) {
           await api.createNotification({
             userId: slot.bookedByUserId,
@@ -181,6 +179,21 @@ const App: React.FC = () => {
     window.location.href = '/';
   };
 
+  const handleAdminResetPassword = async (userId: string) => {
+    const newPass = prompt("Digite a nova senha para este usuário:");
+    if (!newPass) return;
+    
+    try {
+      setIsLoading(true);
+      await api.adminUpdatePassword(userId, newPass);
+      alert("Senha alterada com sucesso!");
+    } catch (e: any) {
+      alert("Erro ao alterar senha: " + e.message);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   if (isInitialLoading) {
     return (
       <div className="min-h-screen bg-[#022c22] flex flex-col items-center justify-center text-white">
@@ -215,10 +228,18 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col pb-safe relative">
+      {/* Impersonation Banner */}
+      {impersonatingUser && (
+        <div className="bg-red-500 text-white text-xs font-black uppercase tracking-widest p-2 text-center flex justify-between items-center px-4">
+           <span>Acessando como: {impersonatingUser.name}</span>
+           <button onClick={() => { setImpersonatingUser(null); setActiveTab('SUPER'); }} className="bg-white/20 px-3 py-1 rounded-lg hover:bg-white/30"><LogOut className="w-4 h-4" /></button>
+        </div>
+      )}
+
       <header className="bg-white/80 backdrop-blur-md px-6 py-4 flex justify-between items-center sticky top-0 z-50 border-b">
           <div className="flex flex-col">
               <span className="text-xl font-black text-[#022c22] italic uppercase leading-none">JOGO FÁCIL</span>
-              {user && <span className="text-[8px] font-bold text-gray-400 uppercase tracking-widest mt-1">Olá, {user.name.split(' ')[0]}</span>}
+              {user && <span className="text-[8px] font-bold text-gray-400 uppercase tracking-widest mt-1">Olá, {currentUserContext?.name.split(' ')[0]}</span>}
           </div>
           <div className="flex items-center gap-2">
             <button 
@@ -277,27 +298,40 @@ const App: React.FC = () => {
 
       <main className="flex-grow overflow-y-auto pb-24">
         {activeTab === 'SUPER' && user?.role === UserRole.SUPER_ADMIN && (
-          <div className="p-6 space-y-4">
+          <div className="p-6 space-y-6">
              <div className="bg-[#022c22] rounded-[2.5rem] p-8 text-white shadow-xl">
                 <h2 className="text-2xl font-black italic uppercase tracking-tighter">Super Admin</h2>
                 <p className="text-xs text-grass-500 font-bold uppercase tracking-widest mt-1">Gerenciamento de Contas</p>
              </div>
-             <div className="grid gap-3">
+             
+             <div className="space-y-4">
                {allUsers.filter(u => u.id !== user.id).map(u => (
-                 <div key={u.id} className="bg-white p-4 rounded-[2rem] border flex items-center justify-between">
+                 <div key={u.id} className="bg-white p-5 rounded-[2rem] border flex flex-col gap-4 shadow-sm hover:border-pitch transition-all">
                     <div className="flex items-center gap-4">
-                      <div className="w-12 h-12 bg-gray-100 rounded-2xl flex items-center justify-center font-black text-pitch">{u.name.charAt(0)}</div>
-                      <div>
-                        <h4 className="font-black text-pitch text-sm">{u.name}</h4>
-                        <p className="text-[9px] font-bold text-gray-400 uppercase">{u.role}</p>
+                      <div className={`w-12 h-12 rounded-2xl flex items-center justify-center font-black text-white ${u.role === UserRole.FIELD_OWNER ? 'bg-indigo-500' : 'bg-grass-500'}`}>
+                         {u.role === UserRole.FIELD_OWNER ? <Building2 className="w-6 h-6"/> : <Shield className="w-6 h-6"/>}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <h4 className="font-black text-pitch text-sm truncate">{u.name}</h4>
+                        <p className="text-[9px] font-bold text-gray-400 uppercase truncate">{u.email}</p>
+                        <span className="text-[8px] font-black bg-gray-100 px-2 py-0.5 rounded-md mt-1 inline-block uppercase">{u.role}</span>
                       </div>
                     </div>
-                    <button 
-                      onClick={() => { setImpersonatingUser(u); setActiveTab('PROFILE'); }} 
-                      className="bg-[#10b981] text-[#022c22] px-4 py-2 rounded-xl text-[10px] font-black uppercase"
-                    >
-                      Gerenciar
-                    </button>
+                    
+                    <div className="flex gap-2 border-t pt-3">
+                      <button 
+                        onClick={() => { setImpersonatingUser(u); setActiveTab('EXPLORE'); }} 
+                        className="flex-1 py-3 bg-gray-50 rounded-xl text-[10px] font-black uppercase text-gray-600 flex items-center justify-center gap-2 hover:bg-gray-100"
+                      >
+                        <Eye className="w-4 h-4" /> Acessar Conta
+                      </button>
+                      <button 
+                        onClick={() => handleAdminResetPassword(u.id)} 
+                        className="flex-1 py-3 bg-gray-50 rounded-xl text-[10px] font-black uppercase text-gray-600 flex items-center justify-center gap-2 hover:bg-red-50 hover:text-red-500"
+                      >
+                        <KeyRound className="w-4 h-4" /> Resetar Senha
+                      </button>
+                    </div>
                  </div>
                ))}
              </div>
@@ -369,7 +403,7 @@ const App: React.FC = () => {
             <span className="text-[8px] font-black uppercase">Explorar</span>
           </button>
           
-          {user?.role === UserRole.TEAM_CAPTAIN ? (
+          {currentUserContext?.role === UserRole.TEAM_CAPTAIN ? (
             <button onClick={() => setActiveTab('MY_GAMES')} className={`flex flex-col items-center gap-1 ${activeTab === 'MY_GAMES' ? 'text-[#10b981]' : 'text-gray-300'}`}>
               <History className="w-6 h-6" />
               <span className="text-[8px] font-black uppercase">Meus Jogos</span>

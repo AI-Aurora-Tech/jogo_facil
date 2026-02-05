@@ -1,5 +1,6 @@
+
 import React, { useState, useEffect } from 'react';
-import { Search, MapPin, Clock, Swords, Filter, X, Check, MessageCircle, Phone, Navigation, Trophy, ChevronDown, Smartphone } from 'lucide-react';
+import { Search, MapPin, Clock, Swords, Filter, X, Check, MessageCircle, Phone, Navigation, Trophy, ChevronDown, Smartphone, Settings, AlertTriangle } from 'lucide-react';
 import { Button } from '../components/Button';
 import { Field, MatchSlot, User, CATEGORY_ORDER, SPORTS, Gender } from '../types';
 import { api } from '../api';
@@ -40,21 +41,37 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
 
   const todayStr = new Date().toISOString().split('T')[0];
 
+  // MATCHMAKING: Obter todas as categorias do usuário logado
+  const userAllCategories = currentUser.teams?.flatMap(t => t.categories) || [];
+  const hasRegisteredCategories = userAllCategories.length > 0;
+
   const filteredSlots = slots.filter(slot => {
     const field = fields.find(f => f.id === slot.fieldId);
     if (!field) return false;
 
-    // Filter rules
+    // View Mode Filters
     if (viewMode === 'EXPLORE') {
       if (slot.date < todayStr || slot.status !== 'available') return false;
-      // Don't show your own field's slots in explore
       if (field.ownerId === currentUser.id) return false;
+
+      // LÓGICA RÍGIDA DE MATCHMAKING:
+      if (hasRegisteredCategories) {
+         // Se for "Desafio" (tem time local/mensalista), o usuário precisa ter a categoria exata aceita
+         if (slot.hasLocalTeam) {
+            const matches = slot.allowedOpponentCategories.some(allowed => userAllCategories.includes(allowed));
+            if (!matches) return false;
+         }
+         // Se for "Aluguel" (sem time local), qualquer time cadastrado pode alugar
+      } else {
+        // Se não tem categorias cadastradas, não mostramos nada na lista (será tratado no render com a tela de aviso)
+        return false;
+      }
     } else {
       const isMyBooking = slot.bookedByUserId === currentUser.id || slot.opponentTeamPhone === currentUser.phoneNumber;
       if (!isMyBooking) return false;
     }
 
-    // Active Filters
+    // Active UI Filters
     if (filterCat && !slot.allowedOpponentCategories.includes(filterCat) && slot.localTeamCategory !== filterCat) return false;
     if (filterSport && slot.sport !== filterSport) return false;
     if (filterGender && slot.localTeamGender !== filterGender) return false;
@@ -110,12 +127,25 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
     }
   };
 
-  // Validation: filter user teams that have AT LEAST ONE category allowed by the slot host
-  const eligibleTeams = currentUser.teams.filter(t => {
-    if (!selectedSlot || !selectedSlot.hasLocalTeam) return true; // Friendly matches (aluguel) are open to all
-    // Challenge matches (desafio) require category matching
-    return t.categories.some(cat => selectedSlot.allowedOpponentCategories.includes(cat));
-  });
+  // Se for modo Explorar e o usuário não tiver categorias, bloqueia e pede cadastro.
+  if (viewMode === 'EXPLORE' && !hasRegisteredCategories) {
+    return (
+      <div className="flex flex-col items-center justify-center h-[70vh] p-8 text-center animate-in fade-in zoom-in duration-500">
+        <div className="bg-red-50 p-8 rounded-full text-red-500 mb-6 shadow-xl shadow-red-100">
+          <AlertTriangle className="w-16 h-16" />
+        </div>
+        <h2 className="text-2xl font-black text-pitch uppercase tracking-tight">Perfil Incompleto</h2>
+        <p className="text-sm text-gray-500 mt-4 max-w-xs mx-auto leading-relaxed">
+          Para garantir partidas justas, você precisa informar quais <strong>categorias</strong> (ex: Sub-20, Veterano) seu time joga.
+        </p>
+        
+        <div className="mt-8 p-6 bg-white border border-gray-100 rounded-3xl w-full max-w-sm shadow-sm">
+           <p className="text-[10px] font-black uppercase text-gray-400 mb-2 tracking-widest">Como resolver?</p>
+           <p className="text-xs text-pitch font-bold">Vá em Perfil {'>'} Configurações e adicione as categorias ao seu time.</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col h-full bg-gray-50 pb-20">
@@ -157,7 +187,7 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
                   <label className="text-[8px] font-black text-gray-400 uppercase">Categoria</label>
                   <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
                       <button onClick={() => setFilterCat('')} className={`px-4 py-2 rounded-full text-[9px] font-black uppercase whitespace-nowrap transition-all ${filterCat === '' ? 'bg-pitch text-white shadow-md' : 'bg-gray-100 text-gray-400'}`}>Todas</button>
-                      {CATEGORY_ORDER.map(c => (
+                      {userAllCategories.map(c => (
                         <button key={c} onClick={() => setFilterCat(c)} className={`px-4 py-2 rounded-full text-[9px] font-black uppercase whitespace-nowrap transition-all ${filterCat === c ? 'bg-pitch text-white shadow-md' : 'bg-gray-100 text-gray-400'}`}>{c}</button>
                       ))}
                   </div>
@@ -179,7 +209,8 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
         {filteredSlots.length === 0 ? (
           <div className="py-20 text-center flex flex-col items-center">
              <Search className="w-12 h-12 text-gray-200 mb-4" />
-             <p className="text-gray-300 font-black uppercase text-[10px]">Nenhum horário encontrado para sua busca</p>
+             <p className="text-gray-300 font-black uppercase text-[10px]">Nenhum jogo compatível encontrado</p>
+             <p className="text-gray-300 text-[9px] mt-1">Não encontramos jogos ou horários que aceitem as categorias do seu time.</p>
           </div>
         ) : (
           filteredSlots.map(slot => {
@@ -290,11 +321,12 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
                  </div>
                )}
 
-               {eligibleTeams.length === 0 ? (
+               {/* Filtra times do usuário que tenham intersecção de categoria com o slot */}
+               {currentUser.teams.filter(t => !selectedSlot.hasLocalTeam || t.categories.some(c => selectedSlot.allowedOpponentCategories.includes(c))).length === 0 ? (
                  <div className="p-10 text-center border-2 border-dashed rounded-[2rem] bg-red-50 border-red-100">
                     <Trophy className="w-12 h-12 text-red-200 mx-auto mb-4" />
-                    <p className="text-xs font-black text-red-600 uppercase">Seu time não é elegível para este desafio.</p>
-                    <p className="text-[10px] text-gray-400 font-bold uppercase mt-2">A categoria cadastrada no seu perfil deve coincidir com as aceitas pelo mandante.</p>
+                    <p className="text-xs font-black text-red-600 uppercase">Nenhum dos seus times é compatível.</p>
+                    <p className="text-[10px] text-gray-400 font-bold uppercase mt-2">Suas categorias não coincidem com as exigidas pelo mandante.</p>
                     <Button onClick={() => setSelectedSlot(null)} variant="outline" className="mt-6 w-full py-4 rounded-2xl border-red-200 text-red-600 uppercase font-black">Fechar</Button>
                  </div>
                ) : (
@@ -302,7 +334,9 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
                    <div>
                       <label className="text-[10px] font-black text-gray-400 uppercase mb-3 block tracking-widest">Escolha seu Time</label>
                       <div className="flex gap-4 overflow-x-auto pb-4 scrollbar-hide">
-                         {eligibleTeams.map((t, i) => (
+                         {currentUser.teams
+                            .filter(t => !selectedSlot.hasLocalTeam || t.categories.some(c => selectedSlot.allowedOpponentCategories.includes(c)))
+                            .map((t, i) => (
                             <button key={i} onClick={() => { setSelectedTeamIdx(currentUser.teams.indexOf(t)); setSelectedCategory(''); }} className={`flex-shrink-0 w-32 py-6 rounded-[2rem] font-black uppercase text-[10px] transition-all flex flex-col items-center gap-3 border-2 ${selectedTeamIdx === currentUser.teams.indexOf(t) ? 'bg-pitch text-white border-pitch shadow-lg scale-105' : 'bg-gray-50 border-gray-100 text-gray-300'}`}>
                                <div className="w-12 h-12 rounded-2xl bg-white/10 flex items-center justify-center overflow-hidden">
                                   {t.logoUrl ? <img src={t.logoUrl} className="w-full h-full object-cover" /> : <div className="text-xl">{t.name.charAt(0)}</div>}
@@ -317,6 +351,7 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
                       <label className="text-[10px] font-black text-gray-400 uppercase mb-3 block tracking-widest">Categoria para o Jogo</label>
                       <div className="flex flex-wrap gap-2">
                          {currentUser.teams[selectedTeamIdx]?.categories.map(cat => {
+                           // Verifica se a categoria do time é aceita no slot
                            const isAllowed = !selectedSlot.hasLocalTeam || selectedSlot.allowedOpponentCategories.includes(cat);
                            return (
                             <button 

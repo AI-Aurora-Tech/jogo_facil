@@ -1,8 +1,8 @@
 
 import React, { useState } from 'react';
-import { UserRole, SubscriptionPlan } from '../types';
+import { UserRole, SubscriptionPlan, CATEGORY_ORDER } from '../types';
 import { Button } from '../components/Button';
-import { Mail, Lock, User as UserIcon, ArrowRight, Phone, MapPin, Shield, Tag, X, Plus, AlertCircle } from 'lucide-react';
+import { Mail, Lock, User as UserIcon, ArrowRight, Phone, MapPin, Shield, Tag, X, Plus, AlertCircle, Check } from 'lucide-react';
 import { api } from '../api';
 import { formatCategory } from '../utils';
 
@@ -26,24 +26,18 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, onCancel }) => {
   const [address, setAddress] = useState('');
   const [teamName, setTeamName] = useState('');
   const [teamCategories, setTeamCategories] = useState<string[]>([]);
-  const [categoryInput, setCategoryInput] = useState('');
 
-  const addCategory = () => {
-    const formatted = formatCategory(categoryInput);
-    if (!formatted) return;
-    if (teamCategories.length >= 2) {
-      setError('O time pode ter no máximo 2 categorias.');
-      return;
-    }
-    if (!teamCategories.includes(formatted)) {
-      setTeamCategories([...teamCategories, formatted]);
-      setCategoryInput('');
+  const toggleCategory = (cat: string) => {
+    if (teamCategories.includes(cat)) {
+      setTeamCategories(teamCategories.filter(c => c !== cat));
+    } else {
+      if (teamCategories.length >= 5) { // Aumentei um pouco o limite para flexibilidade
+        setError('Máximo de 5 categorias por time.');
+        return;
+      }
+      setTeamCategories([...teamCategories, cat]);
       setError('');
     }
-  };
-
-  const removeCategory = (cat: string) => {
-    setTeamCategories(teamCategories.filter(c => c !== cat));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -51,14 +45,24 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, onCancel }) => {
     setError('');
 
     if (isRegistering) {
-      if (!teamName) {
-        setError('O nome do time é obrigatório.');
-        return;
+      if (!name || !email || !password || !phone) {
+         setError('Preencha todos os dados pessoais.');
+         return;
       }
-      if (teamCategories.length === 0) {
-        setError('Adicione pelo menos uma categoria ao seu time.');
-        return;
+
+      // Validação específica para DONO DE TIME (Capitão)
+      if (role === UserRole.TEAM_CAPTAIN) {
+        if (!teamName) {
+          setError('O nome do time é obrigatório.');
+          return;
+        }
+        if (teamCategories.length === 0) {
+          setError('Selecione pelo menos uma categoria para o time.');
+          return;
+        }
       }
+
+      // Validação específica para DONO DE CAMPO
       if (role === UserRole.FIELD_OWNER && (!arenaName || !address)) {
         setError('Os dados da arena são obrigatórios.');
         return;
@@ -68,7 +72,6 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, onCancel }) => {
     setIsLoading(true);
     try {
       if (isRegistering) {
-        // Correção BUG 1: Enviando a estrutura correta de 'teams' para a API
         const payload = {
           email: email.toLowerCase().trim(),
           password,
@@ -76,7 +79,7 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, onCancel }) => {
           name,
           phoneNumber: phone,
           subscription: SubscriptionPlan.FREE,
-          teams: [{ name: teamName, categories: teamCategories }],
+          teams: role === UserRole.TEAM_CAPTAIN ? [{ name: teamName, categories: teamCategories }] : [],
           fieldData: role === UserRole.FIELD_OWNER ? {
             name: arenaName,
             location: address,
@@ -98,13 +101,13 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, onCancel }) => {
 
   return (
     <div className="min-h-screen bg-pitch flex items-center justify-center p-6 font-sans">
-      <div className="bg-white rounded-[3.5rem] w-full max-w-lg overflow-hidden shadow-2xl animate-in zoom-in-95">
+      <div className="bg-white rounded-[3.5rem] w-full max-w-lg overflow-hidden shadow-2xl animate-in zoom-in-95 my-10">
         <div className="bg-pitch p-10 text-center text-white">
           <h2 className="text-3xl font-black italic uppercase tracking-tighter leading-none">{isRegistering ? 'Nova Conta' : 'Jogo Fácil'}</h2>
           <p className="text-[10px] font-black uppercase tracking-widest text-grass-500 mt-2">{isRegistering ? 'Faça parte do futuro do futebol' : 'Bem-vindo de volta, craque'}</p>
         </div>
         
-        <form onSubmit={handleSubmit} className="p-10 space-y-5">
+        <form onSubmit={handleSubmit} className="p-8 space-y-5">
           {error && <div className="bg-red-50 text-red-600 p-4 rounded-2xl text-[10px] font-black uppercase flex items-center gap-2 border border-red-100"><AlertCircle className="w-4 h-4"/> {error}</div>}
 
           {isRegistering ? (
@@ -126,33 +129,34 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, onCancel }) => {
                 <input className="w-full p-4 bg-gray-50 rounded-2xl border font-bold outline-none" placeholder="E-mail" type="email" value={email} onChange={e => setEmail(e.target.value)} required />
                 <input className="w-full p-4 bg-gray-50 rounded-2xl border font-bold outline-none" placeholder="Senha" type="password" value={password} onChange={e => setPassword(e.target.value)} required />
                 
-                <div className="bg-gray-50 p-5 rounded-[2rem] border-2 border-dashed border-gray-200 mt-4">
-                  <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3">Dados da Equipe</p>
-                  <input className="w-full bg-transparent border-b-2 border-gray-100 p-2 font-black text-lg outline-none focus:border-pitch transition-colors mb-4" placeholder="Nome do seu Time" value={teamName} onChange={e => setTeamName(e.target.value)} required />
-                  
-                  <div className="flex gap-2">
-                     <input 
-                      className="flex-1 bg-white p-3 rounded-xl border text-[10px] font-black uppercase" 
-                      placeholder="Categoria (ex: sub 10)"
-                      value={categoryInput} 
-                      onChange={e => setCategoryInput(e.target.value)} 
-                     />
-                     <button type="button" onClick={addCategory} className="bg-pitch text-white p-3 rounded-xl active:scale-95"><Plus className="w-4 h-4"/></button>
+                {/* Campos para Capitão do Time */}
+                {role === UserRole.TEAM_CAPTAIN && (
+                  <div className="bg-gray-50 p-5 rounded-[2rem] border-2 border-dashed border-gray-200 mt-4 animate-in slide-in-from-top-2">
+                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3">Dados da Equipe</p>
+                    <input className="w-full bg-transparent border-b-2 border-gray-100 p-2 font-black text-lg outline-none focus:border-pitch transition-colors mb-4" placeholder="Nome do seu Time" value={teamName} onChange={e => setTeamName(e.target.value)} required />
+                    
+                    <p className="text-[9px] font-bold text-gray-400 uppercase mb-2">Quais categorias seu time joga?</p>
+                    <div className="grid grid-cols-4 gap-2">
+                       {CATEGORY_ORDER.map(cat => (
+                         <button
+                           key={cat}
+                           type="button"
+                           onClick={() => toggleCategory(cat)}
+                           className={`px-1 py-2 rounded-xl text-[8px] font-black uppercase transition-all border ${teamCategories.includes(cat) ? 'bg-pitch text-white border-pitch shadow-md' : 'bg-white text-gray-300 border-gray-100 hover:border-gray-300'}`}
+                         >
+                           {cat}
+                         </button>
+                       ))}
+                    </div>
                   </div>
-                  <div className="flex flex-wrap gap-2 mt-4">
-                    {teamCategories.map(c => (
-                      <div key={c} className="bg-white border-2 border-pitch px-3 py-1.5 rounded-full text-[10px] font-black uppercase flex items-center gap-2">
-                        {c} <X onClick={() => removeCategory(c)} className="w-3 h-3 cursor-pointer text-red-500" />
-                      </div>
-                    ))}
-                  </div>
-                </div>
+                )}
 
+                {/* Campos para Dono da Arena */}
                 {role === UserRole.FIELD_OWNER && (
-                  <div className="bg-gray-50 p-5 rounded-[2rem] border-2 border-dashed border-gray-200 mt-4 space-y-3">
+                  <div className="bg-gray-50 p-5 rounded-[2rem] border-2 border-dashed border-gray-200 mt-4 space-y-3 animate-in slide-in-from-top-2">
                     <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3">Dados da Arena</p>
                     <input className="w-full bg-transparent border-b-2 border-gray-100 p-2 font-black text-lg outline-none" placeholder="Nome da Arena" value={arenaName} onChange={e => setArenaName(e.target.value)} required />
-                    <input className="w-full bg-transparent border-b-2 border-gray-100 p-2 font-bold text-sm outline-none" placeholder="Endereço Completo (Rua, Nº, Bairro, Cidade)" value={address} onChange={e => setAddress(e.target.value)} required />
+                    <input className="w-full bg-transparent border-b-2 border-gray-100 p-2 font-bold text-sm outline-none" placeholder="Endereço Completo" value={address} onChange={e => setAddress(e.target.value)} required />
                   </div>
                 )}
               </div>

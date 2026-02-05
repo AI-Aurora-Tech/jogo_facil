@@ -1,3 +1,4 @@
+
 import { supabase } from './supabaseClient';
 import { User, Field, MatchSlot, RegisteredTeam, UserRole, Notification, TeamConfig, SubscriptionPlan, Gender } from './types';
 
@@ -163,6 +164,7 @@ export const api = {
     if (data.localTeamGender !== undefined) payload.local_team_gender = data.localTeamGender;
     if (data.courtName !== undefined) payload.court_name = data.courtName;
     if (data.sport !== undefined) payload.sport = data.sport;
+    if (data.bookedByUserId !== undefined) payload.booked_by_user_id = data.bookedByUserId;
     
     const { error } = await supabase.from('match_slot').update(payload).eq('id', slotId);
     if (error) throw error;
@@ -184,6 +186,11 @@ export const api = {
     }).eq('id', user.id).select().single();
     if (error) throw error;
     return mapUserFromDb(data);
+  },
+
+  adminUpdatePassword: async (userId: string, newPassword: string): Promise<void> => {
+    const { error } = await supabase.from('user').update({ password: newPassword }).eq('id', userId);
+    if (error) throw error;
   },
 
   getRegisteredTeams: async (fieldId: string): Promise<RegisteredTeam[]> => {
@@ -264,7 +271,11 @@ export const api = {
   deleteSlot: async (id: string) => { await supabase.from('match_slot').delete().eq('id', id); },
   getCategories: async () => ["Sub-8", "Sub-9", "Sub-10", "Sub-11", "Sub-12", "Sub-13", "Sub-14", "Sub-15", "Sub-16", "Sub-17", "Sport", "35+", "40+", "45+", "50+"],
   deleteRegisteredTeam: async (teamId: string) => { await supabase.from('registered_team').delete().eq('id', teamId); },
-  getAllUsers: async () => [],
+  getAllUsers: async () => {
+    const { data, error } = await supabase.from('user').select('*').order('name');
+    if (error) throw error;
+    return (data || []).map(mapUserFromDb);
+  },
   createNotification: async (n: any) => {
     await supabase.from('notification').insert([{
       user_id: n.userId,
