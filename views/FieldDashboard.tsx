@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Trash2, Calendar, Clock, RefreshCcw, X, Swords, Edit3, MessageCircle, UserCheck, Phone, Edit, Building2, MapPin, LayoutGrid, Flag, Trophy, CheckCircle, XCircle, AlertCircle, CalendarPlus, Mail, Camera, UserPlus, Smartphone, CalendarDays, History as HistoryIcon, BadgeCheck, Ban } from 'lucide-react';
+import { Plus, Trash2, Calendar, Clock, RefreshCcw, X, Swords, Edit3, MessageCircle, UserCheck, Phone, Edit, Building2, MapPin, LayoutGrid, Flag, Trophy, CheckCircle, XCircle, AlertCircle, CalendarPlus, Mail, Camera, UserPlus, Smartphone, CalendarDays, History as HistoryIcon, BadgeCheck, Ban, Lock } from 'lucide-react';
 import { Button } from '../components/Button';
 import { Field, MatchSlot, MatchType, User, CATEGORY_ORDER, RegisteredTeam, SPORTS, Gender } from '../types';
 import { api } from '../api';
@@ -248,6 +248,25 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
   const agendaSlots = slots.filter(s => s.date >= todayStr && (s.status === 'available' || s.status === 'confirmed'));
   const historySlots = slots.filter(s => s.date < todayStr);
 
+  // Helper para Status Visual
+  const getSlotStatusDisplay = (slot: MatchSlot) => {
+    if (slot.status === 'confirmed') {
+      if (slot.opponentTeamName) {
+        return { label: 'JOGO FECHADO', color: 'bg-blue-100 text-blue-700', icon: <BadgeCheck className="w-6 h-6"/> };
+      }
+      if (slot.matchType === 'FIXO') {
+        return { label: 'MENSALISTA', color: 'bg-purple-100 text-purple-700', icon: <UserCheck className="w-6 h-6"/> };
+      }
+      return { label: 'ALUGADO / OCUPADO', color: 'bg-gray-100 text-gray-600', icon: <Lock className="w-6 h-6"/> };
+    }
+    
+    // Available
+    if (slot.localTeamName) {
+      return { label: 'DESAFIO ABERTO', color: 'bg-yellow-100 text-yellow-700', icon: <Swords className="w-6 h-6"/> };
+    }
+    return { label: 'LIVRE', color: 'bg-grass-100 text-grass-700', icon: <Clock className="w-6 h-6"/> };
+  };
+
   return (
     <div className="bg-gray-50 min-h-screen pb-32">
       <div className="p-6 bg-white border-b sticky top-0 z-20 glass">
@@ -289,33 +308,40 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
             {agendaSlots.length === 0 ? (
               <div className="text-center py-20 text-gray-400 font-black uppercase text-[10px]">Nenhum horário futuro na agenda.</div>
             ) : (
-              agendaSlots.map(slot => (
-                <div key={slot.id} className="bg-white p-5 rounded-[2.5rem] border flex items-center justify-between shadow-sm hover:border-pitch transition-all">
-                  <div className="flex items-center gap-4">
-                     <div className={`p-4 rounded-2xl ${slot.status === 'confirmed' ? 'bg-pitch text-white' : 'bg-grass-50 text-grass-600'}`}>
-                        {slot.status === 'confirmed' ? <BadgeCheck className="w-6 h-6"/> : <Clock className="w-6 h-6"/>}
-                     </div>
-                     <div>
-                        <div className="flex items-center gap-2">
-                           <p className="text-sm font-black text-pitch uppercase">{slot.date.split('-').reverse().join('/')} às {slot.time}</p>
-                           <span className={`text-[8px] font-black uppercase px-2 py-0.5 rounded-full ${slot.status === 'confirmed' ? 'bg-blue-100 text-blue-600' : 'bg-grass-100 text-grass-600'}`}>
-                              {slot.status === 'confirmed' ? 'Agendado' : 'Disponível'}
-                           </span>
-                        </div>
-                        <p className="text-[9px] font-black text-gray-400 uppercase mt-1">
-                          {slot.opponentTeamName ? `${slot.localTeamName || 'Arena'} vs ${slot.opponentTeamName}` : slot.localTeamName ? `${slot.localTeamName} (${slot.localTeamCategory})` : 'Horário Livre'} 
-                          <br/> {slot.matchType} • {slot.courtName || 'Principal'}
-                        </p>
-                     </div>
+              agendaSlots.map(slot => {
+                const statusInfo = getSlotStatusDisplay(slot);
+                return (
+                  <div key={slot.id} className="bg-white p-5 rounded-[2.5rem] border flex items-center justify-between shadow-sm hover:border-pitch transition-all">
+                    <div className="flex items-center gap-4">
+                      <div className={`p-4 rounded-2xl ${statusInfo.color}`}>
+                          {statusInfo.icon}
+                      </div>
+                      <div>
+                          <div className="flex items-center gap-2">
+                            <p className="text-sm font-black text-pitch uppercase">{slot.date.split('-').reverse().join('/')} às {slot.time}</p>
+                            <span className={`text-[8px] font-black uppercase px-2 py-0.5 rounded-full ${statusInfo.color}`}>
+                                {statusInfo.label}
+                            </span>
+                          </div>
+                          <p className="text-[9px] font-black text-gray-400 uppercase mt-1">
+                            {slot.opponentTeamName 
+                              ? `${slot.localTeamName || 'Arena'} vs ${slot.opponentTeamName}` 
+                              : slot.localTeamName 
+                                ? `${slot.localTeamName} (${slot.localTeamCategory}) - Aguardando` 
+                                : 'Horário sem time definido'} 
+                            <br/> {slot.matchType} • {slot.courtName || 'Principal'}
+                          </p>
+                      </div>
+                    </div>
+                    <div className="flex gap-2">
+                      {slot.status === 'confirmed' && slot.opponentTeamPhone && (
+                        <button onClick={() => handleWhatsApp(slot.opponentTeamPhone, `Olá capitão do ${slot.opponentTeamName}! Jogo confirmado na arena ${field.name} para o dia ${slot.date.split('-').reverse().join('/')} às ${slot.time}.`)} className="p-3 bg-grass-50 text-grass-600 rounded-xl"><Smartphone className="w-4 h-4"/></button>
+                      )}
+                      <button onClick={() => { if(confirm("Remover este horário?")) onDeleteSlot(slot.id); }} className="p-3 text-red-500 hover:bg-red-50 rounded-xl"><Trash2 className="w-4 h-4"/></button>
+                    </div>
                   </div>
-                  <div className="flex gap-2">
-                    {slot.status === 'confirmed' && slot.opponentTeamPhone && (
-                       <button onClick={() => handleWhatsApp(slot.opponentTeamPhone, `Olá capitão do ${slot.opponentTeamName}! Jogo confirmado na arena ${field.name} para o dia ${slot.date.split('-').reverse().join('/')} às ${slot.time}.`)} className="p-3 bg-grass-50 text-grass-600 rounded-xl"><Smartphone className="w-4 h-4"/></button>
-                    )}
-                    <button onClick={() => { if(confirm("Remover este horário?")) onDeleteSlot(slot.id); }} className="p-3 text-red-500 hover:bg-red-50 rounded-xl"><Trash2 className="w-4 h-4"/></button>
-                  </div>
-                </div>
-              ))
+                );
+              })
             )}
           </div>
         )}
