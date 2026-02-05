@@ -85,6 +85,58 @@ const App: React.FC = () => {
     init();
   }, [refreshData]);
 
+  const handleCancelBooking = async (slotId: string) => {
+    const slot = slots.find(s => s.id === slotId);
+    if (!slot) return;
+    const field = fields.find(f => f.id === slot.fieldId);
+
+    if (confirm("Deseja realmente cancelar este agendamento? Ele voltará a ficar disponível para outros times.")) {
+      setIsLoading(true);
+      try {
+        // Reset slot to available
+        await api.updateSlot(slotId, { 
+          status: 'available', 
+          isBooked: false, 
+          bookedByTeamName: null as any, 
+          bookedByUserId: null as any, 
+          opponentTeamName: null as any, 
+          opponentTeamCategory: null as any,
+          opponentTeamPhone: null as any,
+          opponentTeamLogoUrl: null as any,
+          opponentTeamGender: null as any,
+          receiptUrl: null as any 
+        });
+
+        // Notify Field Owner
+        if (field) {
+          await api.createNotification({
+            userId: field.ownerId,
+            title: "Agendamento Cancelado ⚠️",
+            description: `A partida do dia ${slot.date.split('-').reverse().join('/')} às ${slot.time} foi cancelada e o horário voltou para a agenda.`,
+            type: 'warning'
+          });
+        }
+
+        // Notify Team Captain (if someone else canceled it or for record)
+        if (slot.bookedByUserId) {
+          await api.createNotification({
+            userId: slot.bookedByUserId,
+            title: "Agendamento Removido",
+            description: `Seu agendamento para o dia ${slot.date} na arena ${field?.name} foi cancelado com sucesso.`,
+            type: 'info'
+          });
+        }
+        
+        await refreshData();
+        alert("Agendamento cancelado. O horário está livre novamente!");
+      } catch (e) {
+        alert("Erro ao cancelar.");
+      } finally {
+        setIsLoading(false);
+      }
+    }
+  };
+
   const handleNotificationClick = async (n: Notification) => {
     if (!n.read) await api.markNotificationAsRead(n.id);
     setShowNotifications(false);
@@ -127,48 +179,6 @@ const App: React.FC = () => {
   const handleLogout = () => {
     localStorage.removeItem('jf_session_user');
     window.location.href = '/';
-  };
-
-  const handleCancelBooking = async (slotId: string) => {
-    const slot = slots.find(s => s.id === slotId);
-    if (!slot) return;
-    const field = fields.find(f => f.id === slot.fieldId);
-
-    if (confirm("Deseja realmente cancelar este agendamento? Ele voltará a ficar disponível para outros times.")) {
-      setIsLoading(true);
-      try {
-        await api.updateSlot(slotId, { 
-          status: 'available', 
-          isBooked: false, 
-          bookedByTeamName: null as any, 
-          bookedByUserId: null as any, 
-          bookedByUserPhone: null as any, 
-          opponentTeamName: null as any, 
-          opponentTeamCategory: null as any,
-          opponentTeamPhone: null as any, 
-          opponentTeamLogoUrl: null as any,
-          opponentTeamGender: null as any,
-          receiptUrl: null as any 
-        });
-
-        // Notificar Dono da Arena
-        if (field) {
-          await api.createNotification({
-            userId: field.ownerId,
-            title: "Agendamento Cancelado ⚠️",
-            description: `O desafio para o dia ${slot.date.split('-').reverse().join('/')} às ${slot.time} foi CANCELADO pelo time. O horário voltou a ficar disponível.`,
-            type: 'warning'
-          });
-        }
-        
-        await refreshData();
-        alert("Agendamento cancelado. O horário está livre novamente!");
-      } catch (e) {
-        alert("Erro ao cancelar.");
-      } finally {
-        setIsLoading(false);
-      }
-    }
   };
 
   if (isInitialLoading) {
