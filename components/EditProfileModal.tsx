@@ -13,7 +13,7 @@ interface EditProfileModalProps {
   onClose: () => void;
 }
 
-export const EditProfileModal: React.FC<EditProfileModalProps> = ({ user, field, onUpdate, onClose }) => {
+export const EditProfileModal: React.FC<EditProfileModalProps> = ({ categories, user, field, onUpdate, onClose }) => {
   const [name, setName] = useState(user.name);
   const [phone, setPhone] = useState(user.phoneNumber);
   const [newPassword, setNewPassword] = useState('');
@@ -47,19 +47,23 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({ user, field,
     setTeams(newTeams);
   };
 
-  const addCategoryToTeam = (teamIndex: number) => {
-    const input = categoryInputs[teamIndex];
+  const addCategoryToTeam = (teamIndex: number, catToAdd?: string) => {
+    // Se passar catToAdd, usa ela, senão pega do input
+    const input = catToAdd || categoryInputs[teamIndex];
     const formatted = formatCategory(input);
     if (!formatted) return;
 
     const team = teams[teamIndex];
-    // SEM LIMITE DE CATEGORIAS
     
     if (!team.categories.includes(formatted)) {
       handleUpdateTeam(teamIndex, { categories: [...team.categories, formatted] });
-      const newInputs = [...categoryInputs];
-      newInputs[teamIndex] = '';
-      setCategoryInputs(newInputs);
+      
+      // Se veio do input, limpa o input
+      if (!catToAdd) {
+        const newInputs = [...categoryInputs];
+        newInputs[teamIndex] = '';
+        setCategoryInputs(newInputs);
+      }
       setError('');
     }
   };
@@ -169,10 +173,33 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({ user, field,
 
                     <div className="bg-white p-4 rounded-2xl border">
                       <label className="text-[8px] font-black text-gray-400 uppercase block mb-2">Categorias</label>
+                      
+                      {/* Lista de Sugestões de Categorias (Checklist) */}
+                      <div className="flex flex-wrap gap-1 mb-3 bg-gray-50 p-2 rounded-xl border border-gray-100 max-h-32 overflow-y-auto">
+                         {categories.map(cat => {
+                           const isSelected = team.categories.includes(cat);
+                           return (
+                             <button 
+                               key={cat}
+                               type="button"
+                               onClick={() => {
+                                 if(isSelected) removeCategoryFromTeam(idx, cat);
+                                 else addCategoryToTeam(idx, cat);
+                               }}
+                               className={`px-2 py-1 rounded-lg text-[8px] font-black uppercase transition-all border ${isSelected ? 'bg-pitch text-white border-pitch' : 'bg-white text-gray-300 border-gray-100 hover:border-gray-300'}`}
+                             >
+                               {cat}
+                             </button>
+                           );
+                         })}
+                      </div>
+
+                      {/* Input Manual para Categorias Personalizadas */}
+                      <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Outra Categoria</label>
                       <div className="flex gap-2 mb-2">
                         <input 
                           className="flex-1 bg-gray-50 p-2 rounded-lg text-[9px] font-black uppercase outline-none" 
-                          placeholder="Ex: Sub 15"
+                          placeholder="Digite..."
                           value={categoryInputs[idx]}
                           onChange={e => {
                             const newInputs = [...categoryInputs];
@@ -182,6 +209,8 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({ user, field,
                         />
                         <button type="button" onClick={() => addCategoryToTeam(idx)} className="bg-pitch text-white p-2 rounded-lg"><Plus className="w-4 h-4"/></button>
                       </div>
+
+                      {/* Categorias Selecionadas */}
                       <div className="flex flex-wrap gap-1">
                         {team.categories.map(cat => (
                           <div key={cat} className="bg-gray-100 px-2 py-1 rounded-md text-[8px] font-black uppercase flex items-center gap-1">
