@@ -253,13 +253,18 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
          if (!matchLocal && !matchOpponent) return false;
        }
 
-       // Filtro por Tag (Lógica Rígida Solicitada)
+       // Filtro por Tag (Lógica Simplificada)
        if (filterTag !== 'TODOS') {
-          // MENSALISTA: Apenas se for tipo FIXO
-          if (filterTag === 'MENSALISTA' && s.matchType !== 'FIXO') return false;
-          
-          // TIME LOCAL: Tem time local, MAS NÃO É FIXO (Mensalista não entra aqui)
-          if (filterTag === 'TIME LOCAL' && (s.matchType === 'FIXO' || !s.hasLocalTeam)) return false;
+          // TIME LOCAL: Inclui tanto Mensalistas (FIXO) quanto Times Locais da Arena
+          if (filterTag === 'TIME LOCAL') {
+             if (!s.hasLocalTeam && s.matchType !== 'FIXO') return false;
+          }
+
+          // DISPONÍVEL: Horário sem dono (nem mensalista nem local)
+          if (filterTag === 'DISPONÍVEL') {
+             if (s.hasLocalTeam || s.matchType === 'FIXO') return false;
+             if (s.status !== 'available') return false; // Deve estar livre
+          }
           
           // AGENDADO: Tem que ter adversário confirmado
           if (filterTag === 'AGENDADO' && !s.opponentTeamName) return false;
@@ -289,27 +294,26 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
 
   const historySlots = slots.filter(s => s.date < todayStr);
 
-  // Helper para gerar as Tags (Badges) Múltiplas com Lógica Rigorosa
+  // Helper para gerar as Tags (Badges) Múltiplas com Lógica Unificada
   const getSlotBadges = (slot: MatchSlot) => {
     const badges = [];
 
-    // Tag 1: Origem do Time (Mensalista OU Time Local - Nunca ambos)
-    if (slot.matchType === 'FIXO') {
-      badges.push({ label: 'MENSALISTA', color: 'bg-purple-100 text-purple-700', icon: <UserCheck className="w-3 h-3"/> });
-    } else if (slot.hasLocalTeam) {
+    // Tag 1: Origem do Time (Unificado: Mensalista e Local viram "TIME LOCAL")
+    // Se tiver dono (Mensalista ou Local), mostramos "TIME LOCAL"
+    if (slot.matchType === 'FIXO' || slot.hasLocalTeam) {
       badges.push({ label: 'TIME LOCAL', color: 'bg-indigo-100 text-indigo-700', icon: <Flag className="w-3 h-3"/> });
+    } else if (slot.status === 'available') {
+      // Se não tem dono e está livre -> DISPONÍVEL
+      badges.push({ label: 'DISPONÍVEL', color: 'bg-grass-100 text-grass-700', icon: <Clock className="w-3 h-3"/> });
     }
 
-    // Tag 2: Status do Jogo (Lógica Revisada)
+    // Tag 2: Status do Jogo
     if (slot.opponentTeamName) {
         // Se tem adversário, está FECHADO/AGENDADO
         badges.push({ label: 'AGENDADO', color: 'bg-blue-100 text-blue-700', icon: <BadgeCheck className="w-3 h-3"/> });
-    } else if (slot.hasLocalTeam || slot.matchType === 'FIXO') {
+    } else if (slot.matchType === 'FIXO' || slot.hasLocalTeam) {
         // Se tem dono mas não tem adversário, está PROCURANDO
         badges.push({ label: 'PROCURANDO ADVERSÁRIO', color: 'bg-yellow-100 text-yellow-700', icon: <Swords className="w-3 h-3"/> });
-    } else if (slot.status === 'available') {
-        // Se não tem dono e está livre
-        badges.push({ label: 'LIVRE', color: 'bg-grass-100 text-grass-700', icon: <Clock className="w-3 h-3"/> });
     } else if (slot.status === 'pending_verification') {
         badges.push({ label: 'SOLICITAÇÃO', color: 'bg-orange-100 text-orange-600', icon: <AlertCircle className="w-3 h-3"/> });
     }
@@ -416,9 +420,9 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                       />
                    </div>
 
-                   {/* Tags Simplificadas */}
+                   {/* Tags Simplificadas - Removido MENSALISTA, Adicionado DISPONÍVEL */}
                    <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide pt-2">
-                      {['TODOS', 'TIME LOCAL', 'MENSALISTA', 'AGENDADO', 'PROCURANDO ADVERSÁRIO'].map(tag => (
+                      {['TODOS', 'TIME LOCAL', 'AGENDADO', 'PROCURANDO ADVERSÁRIO', 'DISPONÍVEL'].map(tag => (
                         <button 
                           key={tag}
                           onClick={() => setFilterTag(tag)}
@@ -446,7 +450,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                     
                     <div className="flex items-center justify-between mb-6">
                        <div className="text-center flex-1">
-                          <h3 className="text-2xl font-black italic uppercase leading-none truncate">{nextMatchSlot.localTeamName || 'LIVRE'}</h3>
+                          <h3 className="text-2xl font-black italic uppercase leading-none truncate">{nextMatchSlot.localTeamName || 'DISPONÍVEL'}</h3>
                           <p className="text-[9px] font-bold text-gray-400 uppercase mt-1">{nextMatchSlot.localTeamCategory || 'Quadra'}</p>
                        </div>
                        <div className="bg-white/10 p-3 rounded-full backdrop-blur-md flex flex-col items-center justify-center min-w-[70px]">
@@ -489,7 +493,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                                   {slot.time} • {slot.date.split('-').reverse().slice(0,2).join('/')}
                                </h4>
                                <p className="text-[9px] font-bold text-gray-400 uppercase mt-1 truncate max-w-[150px]">
-                                  {slot.localTeamName || 'Horário Livre'} 
+                                  {slot.localTeamName || 'Horário Disponível'} 
                                   {slot.opponentTeamName ? ` vs ${slot.opponentTeamName}` : ''}
                                </p>
                             </div>
