@@ -284,12 +284,21 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
          if (!matchLocal && !matchOpponent) return false;
        }
 
-       // Filtro por Tag (Simplificado e Específico)
+       // Filtro por Tag (Lógica Rígida Solicitada)
        if (filterTag !== 'TODOS') {
           if (filterTag === 'TIME LOCAL' && (!s.hasLocalTeam && !s.localTeamName)) return false;
           if (filterTag === 'MENSALISTA' && s.matchType !== 'FIXO') return false;
-          if (filterTag === 'AGENDADO' && s.status !== 'confirmed') return false;
-          if (filterTag === 'PROCURANDO ADVERSÁRIO' && (!s.hasLocalTeam || s.status !== 'available')) return false;
+          
+          // "AGENDADO" = Tem que ter adversário
+          if (filterTag === 'AGENDADO' && !s.opponentTeamName) return false;
+          
+          // "PROCURANDO ADVERSÁRIO" = Tem time local/mensalista mas NÃO tem adversário
+          if (filterTag === 'PROCURANDO ADVERSÁRIO') {
+             // Se já tem adversário, não está procurando
+             if (s.opponentTeamName) return false;
+             // Se não tem ninguém (é livre), não está procurando
+             if (!s.hasLocalTeam && s.matchType !== 'FIXO') return false;
+          }
        }
 
        return true;
@@ -302,10 +311,13 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
 
   // Próximo jogo (para a arte de destaque) - Pega o primeiro da lista filtrada
   const nextMatchSlot = agendaSlots[0];
+  
+  // Lista para renderização (Remove o primeiro item se ele for o destaque)
+  const listSlots = nextMatchSlot ? agendaSlots.slice(1) : agendaSlots;
 
   const historySlots = slots.filter(s => s.date < todayStr);
 
-  // Helper para gerar as Tags (Badges) Múltiplas
+  // Helper para gerar as Tags (Badges) Múltiplas com Lógica Rigorosa
   const getSlotBadges = (slot: MatchSlot) => {
     const badges = [];
 
@@ -316,19 +328,16 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
       badges.push({ label: 'TIME LOCAL', color: 'bg-indigo-100 text-indigo-700', icon: <Flag className="w-3 h-3"/> });
     }
 
-    // Tag 2: Status do Jogo
-    if (slot.status === 'confirmed') {
-        if (slot.opponentTeamName) {
-           badges.push({ label: 'JOGO FECHADO', color: 'bg-blue-100 text-blue-700', icon: <BadgeCheck className="w-3 h-3"/> });
-        } else {
-           badges.push({ label: 'AGENDADO', color: 'bg-gray-100 text-gray-600', icon: <Lock className="w-3 h-3"/> });
-        }
+    // Tag 2: Status do Jogo (Lógica Revisada)
+    if (slot.opponentTeamName) {
+        // Se tem adversário, está FECHADO/AGENDADO
+        badges.push({ label: 'AGENDADO', color: 'bg-blue-100 text-blue-700', icon: <BadgeCheck className="w-3 h-3"/> });
+    } else if (slot.hasLocalTeam || slot.matchType === 'FIXO') {
+        // Se tem dono mas não tem adversário, está PROCURANDO
+        badges.push({ label: 'PROCURANDO ADVERSÁRIO', color: 'bg-yellow-100 text-yellow-700', icon: <Swords className="w-3 h-3"/> });
     } else if (slot.status === 'available') {
-        if (slot.hasLocalTeam || slot.localTeamName) {
-           badges.push({ label: 'DESAFIO ABERTO', color: 'bg-yellow-100 text-yellow-700', icon: <Swords className="w-3 h-3"/> });
-        } else {
-           badges.push({ label: 'LIVRE', color: 'bg-grass-100 text-grass-700', icon: <Clock className="w-3 h-3"/> });
-        }
+        // Se não tem dono e está livre
+        badges.push({ label: 'LIVRE', color: 'bg-grass-100 text-grass-700', icon: <Clock className="w-3 h-3"/> });
     } else if (slot.status === 'pending_verification') {
         badges.push({ label: 'SOLICITAÇÃO', color: 'bg-orange-100 text-orange-600', icon: <AlertCircle className="w-3 h-3"/> });
     }
@@ -451,7 +460,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
               )}
             </div>
 
-            {/* Arte Especial: Próximo Jogo */}
+            {/* Arte Especial: Próximo Jogo (Hero) */}
             {nextMatchSlot && (
               <div className="relative overflow-hidden rounded-[2.5rem] bg-gradient-to-br from-pitch via-pitch to-grass-900 text-white shadow-xl p-6 border-2 border-white/10">
                  <div className="absolute top-0 right-0 p-6 opacity-10">
@@ -488,12 +497,12 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
               </div>
             )}
 
-            {/* Lista de Jogos Filtrada */}
+            {/* Lista de Jogos Filtrada (Sem duplicidade) */}
             <div className="grid gap-4">
               {agendaSlots.length === 0 ? (
                 <div className="text-center py-20 text-gray-400 font-black uppercase text-[10px]">Nenhum horário encontrado para os filtros.</div>
               ) : (
-                agendaSlots.map(slot => {
+                listSlots.map(slot => {
                   const badges = getSlotBadges(slot);
                   return (
                     <div key={slot.id} className="bg-white p-5 rounded-[2.5rem] border flex flex-col gap-4 shadow-sm hover:border-pitch transition-all relative">
