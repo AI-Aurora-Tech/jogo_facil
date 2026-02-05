@@ -2,9 +2,8 @@
 import React, { useState } from 'react';
 import { UserRole, SubscriptionPlan, CATEGORY_ORDER } from '../types';
 import { Button } from '../components/Button';
-import { Mail, Lock, User as UserIcon, ArrowRight, Phone, MapPin, Shield, Tag, X, Plus, AlertCircle, Check } from 'lucide-react';
+import { Shield, MapPin, AlertCircle, KeyRound, ChevronLeft } from 'lucide-react';
 import { api } from '../api';
-import { formatCategory } from '../utils';
 
 interface AuthProps {
   categories: string[];
@@ -12,12 +11,16 @@ interface AuthProps {
   onCancel: () => void;
 }
 
+type AuthMode = 'LOGIN' | 'REGISTER' | 'FORGOT_PASSWORD';
+
 export const Auth: React.FC<AuthProps> = ({ onLogin, onCancel }) => {
-  const [isRegistering, setIsRegistering] = useState(false);
+  const [mode, setMode] = useState<AuthMode>('LOGIN');
   const [role, setRole] = useState<UserRole>(UserRole.TEAM_CAPTAIN);
   const [error, setError] = useState('');
+  const [successMsg, setSuccessMsg] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
+  // Form States
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
@@ -31,10 +34,7 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, onCancel }) => {
     if (teamCategories.includes(cat)) {
       setTeamCategories(teamCategories.filter(c => c !== cat));
     } else {
-      if (teamCategories.length >= 5) { // Aumentei um pouco o limite para flexibilidade
-        setError('Máximo de 5 categorias por time.');
-        return;
-      }
+      // SEM LIMITE DE CATEGORIAS
       setTeamCategories([...teamCategories, cat]);
       setError('');
     }
@@ -43,8 +43,9 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, onCancel }) => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setSuccessMsg('');
 
-    if (isRegistering) {
+    if (mode === 'REGISTER') {
       if (!name || !email || !password || !phone) {
          setError('Preencha todos os dados pessoais.');
          return;
@@ -69,9 +70,16 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, onCancel }) => {
       }
     }
 
+    if (mode === 'FORGOT_PASSWORD') {
+      if (!email || !password) {
+        setError('Preencha o e-mail e a nova senha.');
+        return;
+      }
+    }
+
     setIsLoading(true);
     try {
-      if (isRegistering) {
+      if (mode === 'REGISTER') {
         const payload = {
           email: email.toLowerCase().trim(),
           password,
@@ -88,12 +96,16 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, onCancel }) => {
         };
         const newUser = await api.register(payload);
         onLogin(newUser);
-      } else {
+      } else if (mode === 'LOGIN') {
         const user = await api.login(email, password);
         onLogin(user);
+      } else if (mode === 'FORGOT_PASSWORD') {
+        await api.resetPassword(email, password);
+        setSuccessMsg('Senha alterada com sucesso! Faça login agora.');
+        setTimeout(() => setMode('LOGIN'), 3000);
       }
     } catch (err: any) {
-      setError(err.message || 'Erro na autenticação.');
+      setError(err.message || 'Erro na operação.');
     } finally {
       setIsLoading(false);
     }
@@ -102,15 +114,25 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, onCancel }) => {
   return (
     <div className="min-h-screen bg-pitch flex items-center justify-center p-6 font-sans">
       <div className="bg-white rounded-[3.5rem] w-full max-w-lg overflow-hidden shadow-2xl animate-in zoom-in-95 my-10">
-        <div className="bg-pitch p-10 text-center text-white">
-          <h2 className="text-3xl font-black italic uppercase tracking-tighter leading-none">{isRegistering ? 'Nova Conta' : 'Jogo Fácil'}</h2>
-          <p className="text-[10px] font-black uppercase tracking-widest text-grass-500 mt-2">{isRegistering ? 'Faça parte do futuro do futebol' : 'Bem-vindo de volta, craque'}</p>
+        <div className="bg-pitch p-10 text-center text-white relative">
+          {mode !== 'LOGIN' && (
+             <button onClick={() => { setMode('LOGIN'); setError(''); }} className="absolute top-8 left-8 p-2 bg-white/10 rounded-full hover:bg-white/20 transition-colors">
+                <ChevronLeft className="w-6 h-6 text-white" />
+             </button>
+          )}
+          <h2 className="text-3xl font-black italic uppercase tracking-tighter leading-none">
+            {mode === 'REGISTER' ? 'Nova Conta' : mode === 'FORGOT_PASSWORD' ? 'Recuperar Senha' : 'Jogo Fácil'}
+          </h2>
+          <p className="text-[10px] font-black uppercase tracking-widest text-grass-500 mt-2">
+            {mode === 'REGISTER' ? 'Faça parte do futuro do futebol' : mode === 'FORGOT_PASSWORD' ? 'Defina sua nova senha' : 'Bem-vindo de volta, craque'}
+          </p>
         </div>
         
         <form onSubmit={handleSubmit} className="p-8 space-y-5">
           {error && <div className="bg-red-50 text-red-600 p-4 rounded-2xl text-[10px] font-black uppercase flex items-center gap-2 border border-red-100"><AlertCircle className="w-4 h-4"/> {error}</div>}
+          {successMsg && <div className="bg-grass-50 text-grass-600 p-4 rounded-2xl text-[10px] font-black uppercase flex items-center gap-2 border border-grass-100"><KeyRound className="w-4 h-4"/> {successMsg}</div>}
 
-          {isRegistering ? (
+          {mode === 'REGISTER' && (
             <>
               <div className="grid grid-cols-2 gap-3 mb-6">
                 <button type="button" onClick={() => setRole(UserRole.TEAM_CAPTAIN)} className={`p-4 rounded-[1.5rem] border-2 flex flex-col items-center gap-2 transition-all ${role === UserRole.TEAM_CAPTAIN ? 'border-pitch bg-pitch text-white' : 'border-gray-100 text-gray-300'}`}>
@@ -161,22 +183,39 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, onCancel }) => {
                 )}
               </div>
             </>
-          ) : (
+          )}
+
+          {mode === 'LOGIN' && (
             <div className="space-y-4">
               <input className="w-full p-5 bg-gray-50 rounded-2xl border font-bold outline-none" placeholder="Seu e-mail" type="email" value={email} onChange={e => setEmail(e.target.value)} required />
-              <input className="w-full p-5 bg-gray-50 rounded-2xl border font-bold outline-none" placeholder="Sua senha" type="password" value={password} onChange={e => setPassword(e.target.value)} required />
+              <div className="relative">
+                 <input className="w-full p-5 bg-gray-50 rounded-2xl border font-bold outline-none" placeholder="Sua senha" type="password" value={password} onChange={e => setPassword(e.target.value)} required />
+                 <button type="button" onClick={() => { setMode('FORGOT_PASSWORD'); setError(''); }} className="absolute right-4 top-1/2 -translate-y-1/2 text-[9px] font-black text-gray-400 uppercase hover:text-pitch">Esqueci a senha</button>
+              </div>
+            </div>
+          )}
+
+          {mode === 'FORGOT_PASSWORD' && (
+            <div className="space-y-4 animate-in fade-in slide-in-from-right-4">
+              <div className="bg-orange-50 p-4 rounded-2xl border border-orange-100 text-orange-600 text-[10px] font-bold">
+                 Informe seu e-mail cadastrado e a nova senha desejada.
+              </div>
+              <input className="w-full p-5 bg-gray-50 rounded-2xl border font-bold outline-none" placeholder="Seu e-mail cadastrado" type="email" value={email} onChange={e => setEmail(e.target.value)} required />
+              <input className="w-full p-5 bg-gray-50 rounded-2xl border font-bold outline-none" placeholder="Nova senha" type="password" value={password} onChange={e => setPassword(e.target.value)} required />
             </div>
           )}
 
           <Button type="submit" isLoading={isLoading} className="w-full py-6 rounded-[2rem] font-black uppercase tracking-widest mt-6 text-sm shadow-xl active:scale-95">
-            {isRegistering ? 'Finalizar Cadastro' : 'Entrar na Conta'}
+            {mode === 'REGISTER' ? 'Finalizar Cadastro' : mode === 'FORGOT_PASSWORD' ? 'Redefinir Senha' : 'Entrar na Conta'}
           </Button>
 
-          <div className="text-center mt-6">
-            <button type="button" onClick={() => setIsRegistering(!isRegistering)} className="text-[10px] font-black text-gray-400 uppercase tracking-widest hover:text-pitch transition-colors">
-              {isRegistering ? 'Já tem conta? Faça Login' : 'Não tem conta? Crie agora'}
-            </button>
-          </div>
+          {mode === 'LOGIN' && (
+            <div className="text-center mt-6">
+              <button type="button" onClick={() => setMode('REGISTER')} className="text-[10px] font-black text-gray-400 uppercase tracking-widest hover:text-pitch transition-colors">
+                Não tem conta? Crie agora
+              </button>
+            </div>
+          )}
         </form>
       </div>
     </div>

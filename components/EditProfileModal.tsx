@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { User, UserRole, Field, TeamConfig, Gender } from '../types';
 import { Button } from './Button';
-import { X, User as UserIcon, Shield, Check, Plus, AlertCircle, Building2, MapPin, Smartphone, Camera, Trash2, LayoutGrid, Tag } from 'lucide-react';
+import { X, User as UserIcon, Shield, Check, Plus, AlertCircle, Building2, MapPin, Smartphone, Camera, Trash2, LayoutGrid, Tag, Lock } from 'lucide-react';
 import { formatCategory, convertFileToBase64 } from '../utils';
 
 interface EditProfileModalProps {
@@ -16,6 +16,7 @@ interface EditProfileModalProps {
 export const EditProfileModal: React.FC<EditProfileModalProps> = ({ user, field, onUpdate, onClose }) => {
   const [name, setName] = useState(user.name);
   const [phone, setPhone] = useState(user.phoneNumber);
+  const [newPassword, setNewPassword] = useState('');
   const [teams, setTeams] = useState<TeamConfig[]>(user.teams || []);
   
   const [arenaName, setArenaName] = useState(field?.name || '');
@@ -52,11 +53,8 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({ user, field,
     if (!formatted) return;
 
     const team = teams[teamIndex];
-    if (team.categories.length >= 3) {
-      setError('Máximo de 3 categorias por time.');
-      return;
-    }
-
+    // SEM LIMITE DE CATEGORIAS
+    
     if (!team.categories.includes(formatted)) {
       handleUpdateTeam(teamIndex, { categories: [...team.categories, formatted] });
       const newInputs = [...categoryInputs];
@@ -77,7 +75,11 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({ user, field,
       setError('Adicione pelo menos um time.');
       return;
     }
-    const updatedUser = { ...user, name, phoneNumber: phone, teams };
+    const updatedUser: User = { ...user, name, phoneNumber: phone, teams };
+    if (newPassword.trim()) {
+        updatedUser.password = newPassword.trim();
+    }
+
     let updatedField;
     if (user.role === UserRole.FIELD_OWNER && field) {
       updatedField = { name: arenaName, location: arenaLocation, hourlyRate: arenaPrice, courts, imageUrl: arenaPhoto };
@@ -106,6 +108,20 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({ user, field,
                 <div className="bg-gray-50 p-4 rounded-2xl border">
                   <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">WhatsApp</label>
                   <input className="w-full bg-transparent font-bold outline-none text-pitch" value={phone} onChange={e => setPhone(e.target.value)} />
+                </div>
+            </div>
+            
+            <div className="bg-orange-50 p-4 rounded-2xl border border-orange-100 flex items-center gap-2">
+                <Lock className="w-4 h-4 text-orange-400" />
+                <div className="flex-1">
+                    <label className="text-[8px] font-black text-orange-400 uppercase block mb-1">Alterar Senha (Opcional)</label>
+                    <input 
+                        className="w-full bg-transparent font-bold outline-none text-pitch placeholder-orange-200" 
+                        placeholder="Digite a nova senha para alterar" 
+                        type="password"
+                        value={newPassword} 
+                        onChange={e => setNewPassword(e.target.value)} 
+                    />
                 </div>
             </div>
           </section>
