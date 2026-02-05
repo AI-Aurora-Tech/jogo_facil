@@ -1,6 +1,6 @@
 
 import { supabase } from './supabaseClient';
-import { User, Field, MatchSlot, RegisteredTeam, PendingUpdate, UserRole, Notification } from '../types';
+import { User, Field, MatchSlot, RegisteredTeam, PendingUpdate, UserRole, Notification } from './types';
 
 const mapUserFromDb = (u: any): User => ({
   id: u.id,
@@ -224,7 +224,7 @@ export const api = {
       localTeamName: s.local_team_name,
       bookedByUserId: s.booked_by_user_id,
       bookedByTeamName: s.booked_by_team_name,
-      bookedByCategory: s.booked_by_category,
+      bookedByTeamCategory: s.booked_by_category,
       opponentTeamName: s.opponent_team_name,
       opponentTeamCategory: s.opponent_team_category,
       opponentTeamPhone: s.opponent_team_phone,
@@ -266,7 +266,7 @@ export const api = {
     if (data.opponentTeamLogoUrl !== undefined) payload.opponent_team_logo_url = data.opponentTeamLogoUrl;
     if (data.opponentTeamGender !== undefined) payload.opponent_team_gender = data.opponentTeamGender;
     if (data.bookedByUserId !== undefined) payload.booked_by_user_id = data.bookedByUserId;
-    if (data.bookedByCategory !== undefined) payload.booked_by_category = data.bookedByCategory;
+    if (data.bookedByTeamCategory !== undefined) payload.booked_by_category = data.bookedByTeamCategory;
     
     await supabase.from('match_slot').update(payload).eq('id', slotId);
   },
