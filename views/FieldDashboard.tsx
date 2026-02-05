@@ -34,14 +34,14 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
   // States Criação Slot
   const [slotDate, setSlotDate] = useState(new Date().toISOString().split('T')[0]);
   const [slotTime, setSlotTime] = useState('19:00');
-  const [slotType, setSlotType] = useState<MatchType>('ALUGUEL');
   const [slotCourt, setSlotCourt] = useState(field.courts?.[0] || 'Principal');
   const [slotPrice, setSlotPrice] = useState(field.hourlyRate);
   const [slotSport, setSlotSport] = useState('Futebol');
-  const [hasLocalTeam, setHasLocalTeam] = useState(false);
-  const [localTeamSource, setLocalTeamSource] = useState<'MY_TEAMS' | 'MENSALISTAS'>('MENSALISTAS');
-  const [selectedLocalIdentity, setSelectedLocalIdentity] = useState('0-0');
-  const [allowedCats, setAllowedCats] = useState<string[]>([]);
+  
+  // Novos States para Criação Manual de Time Local
+  const [isLocalTeamSlot, setIsLocalTeamSlot] = useState(false);
+  const [manualLocalTeamName, setManualLocalTeamName] = useState(field.name || 'Time da Casa');
+  const [manualLocalCategory, setManualLocalCategory] = useState(categories[0] || 'Livre');
 
   // States Filtros Agenda
   // Padrão: Próximos 7 dias para não ficar vazio, mas sem filtrar estritamente pelo "dia de hoje"
@@ -120,52 +120,22 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
   const handleCreateSlot = async () => {
     setIsLoading(true);
     try {
-      let localName = null;
-      let localCat = null;
-      let localPhone = null;
-      let localLogo = null;
-      let localGender: Gender = 'MASCULINO';
-
-      if (hasLocalTeam) {
-        const [teamIdx, catIdx] = selectedLocalIdentity.split('-').map(Number);
-        if (localTeamSource === 'MENSALISTAS') {
-          const t = registeredTeams[teamIdx];
-          if (t) {
-            localName = t.name;
-            localCat = t.categories[catIdx] || t.categories[0];
-            localPhone = t.captainPhone;
-            localLogo = t.logoUrl;
-            localGender = t.gender;
-          }
-        } else {
-          const t = currentUser.teams[teamIdx];
-          if (t) {
-            localName = t.name;
-            localCat = t.categories[catIdx] || t.categories[0];
-            localPhone = currentUser.phoneNumber;
-            localLogo = t.logoUrl;
-            localGender = t.gender;
-          }
-        }
-      }
-
       await api.createSlots([{
         fieldId: field.id,
         date: slotDate,
         time: slotTime,
-        matchType: slotType,
+        matchType: isLocalTeamSlot ? 'AMISTOSO' : 'ALUGUEL', // Se for time local, é Amistoso/Desafio, senão é Aluguel
         isBooked: false,
-        hasLocalTeam: hasLocalTeam,
-        localTeamName: localName,
-        localTeamCategory: localCat,
-        localTeamPhone: localPhone,
-        localTeamLogoUrl: localLogo,
-        localTeamGender: localGender,
+        hasLocalTeam: isLocalTeamSlot,
+        localTeamName: isLocalTeamSlot ? manualLocalTeamName : null,
+        localTeamCategory: isLocalTeamSlot ? manualLocalCategory : null,
+        localTeamPhone: isLocalTeamSlot ? field.contactPhone : null,
+        localTeamGender: 'MASCULINO',
         price: slotPrice,
         status: 'available',
         courtName: slotCourt,
         sport: slotSport,
-        allowedOpponentCategories: allowedCats
+        allowedOpponentCategories: isLocalTeamSlot ? [manualLocalCategory] : []
       }]);
 
       setShowAddSlotModal(false);
@@ -274,7 +244,6 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
              if (s.date > limitStr) return false;
           }
        }
-       // Se filterRange === 'ALL', não aplicamos limite superior, mostra tudo futuro.
 
        // Filtro por Nome (Busca)
        if (filterTerm) {
@@ -286,17 +255,20 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
 
        // Filtro por Tag (Lógica Rígida Solicitada)
        if (filterTag !== 'TODOS') {
-          if (filterTag === 'TIME LOCAL' && (!s.hasLocalTeam && !s.localTeamName)) return false;
+          // MENSALISTA: Apenas se for tipo FIXO
           if (filterTag === 'MENSALISTA' && s.matchType !== 'FIXO') return false;
           
-          // "AGENDADO" = Tem que ter adversário
+          // TIME LOCAL: Tem time local, MAS NÃO É FIXO (Mensalista não entra aqui)
+          if (filterTag === 'TIME LOCAL' && (s.matchType === 'FIXO' || !s.hasLocalTeam)) return false;
+          
+          // AGENDADO: Tem que ter adversário confirmado
           if (filterTag === 'AGENDADO' && !s.opponentTeamName) return false;
           
-          // "PROCURANDO ADVERSÁRIO" = Tem time local/mensalista mas NÃO tem adversário
+          // PROCURANDO ADVERSÁRIO: Tem time local/mensalista mas NÃO tem adversário
           if (filterTag === 'PROCURANDO ADVERSÁRIO') {
              // Se já tem adversário, não está procurando
              if (s.opponentTeamName) return false;
-             // Se não tem ninguém (é livre), não está procurando
+             // Se não tem ninguém (é livre para aluguel), não está procurando desafio
              if (!s.hasLocalTeam && s.matchType !== 'FIXO') return false;
           }
        }
@@ -321,7 +293,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
   const getSlotBadges = (slot: MatchSlot) => {
     const badges = [];
 
-    // Tag 1: Origem do Time (Mensalista ou Local)
+    // Tag 1: Origem do Time (Mensalista OU Time Local - Nunca ambos)
     if (slot.matchType === 'FIXO') {
       badges.push({ label: 'MENSALISTA', color: 'bg-purple-100 text-purple-700', icon: <UserCheck className="w-3 h-3"/> });
     } else if (slot.hasLocalTeam) {
@@ -690,7 +662,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
         </div>
       )}
 
-      {/* Modal Add Slot (simplificado para o exemplo) */}
+      {/* Modal Add Slot (Atualizado para permitir Time Local) */}
       {showAddSlotModal && (
         <div className="fixed inset-0 bg-pitch/95 backdrop-blur-md z-[100] flex items-end">
            <div className="bg-white w-full rounded-t-[3rem] p-10 animate-in slide-in-from-bottom duration-500 shadow-2xl max-h-[90vh] overflow-y-auto pb-safe">
@@ -709,7 +681,36 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                        <input type="time" className="w-full bg-transparent font-black outline-none" value={slotTime} onChange={e => setSlotTime(e.target.value)} />
                     </div>
                  </div>
-                 <Button onClick={handleCreateSlot} isLoading={isLoading} className="w-full py-6 rounded-[2.5rem] font-black uppercase shadow-xl">Criar Horário</Button>
+
+                 {/* Toggle para Time Local */}
+                 <div className="bg-gray-50 p-4 rounded-2xl border flex items-center justify-between cursor-pointer" onClick={() => setIsLocalTeamSlot(!isLocalTeamSlot)}>
+                    <div>
+                        <h4 className="font-black text-pitch text-xs uppercase">É Time Local?</h4>
+                        <p className="text-[9px] text-gray-400">Marque se o dono do horário é um time da casa.</p>
+                    </div>
+                    <div className={`w-12 h-6 rounded-full p-1 transition-all ${isLocalTeamSlot ? 'bg-pitch' : 'bg-gray-200'}`}>
+                        <div className={`w-4 h-4 rounded-full bg-white shadow-sm transition-all transform ${isLocalTeamSlot ? 'translate-x-6' : ''}`} />
+                    </div>
+                 </div>
+
+                 {isLocalTeamSlot && (
+                    <div className="animate-in fade-in slide-in-from-top-2 space-y-4">
+                        <div className="bg-gray-50 p-4 rounded-2xl border">
+                           <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Nome do Mandante</label>
+                           <input className="w-full bg-transparent font-black outline-none text-pitch" value={manualLocalTeamName} onChange={e => setManualLocalTeamName(e.target.value)} />
+                        </div>
+                        <div className="bg-gray-50 p-4 rounded-2xl border">
+                           <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Categoria</label>
+                           <select className="w-full bg-transparent font-black outline-none text-xs uppercase" value={manualLocalCategory} onChange={e => setManualLocalCategory(e.target.value)}>
+                              {categories.map(c => <option key={c} value={c}>{c}</option>)}
+                           </select>
+                        </div>
+                    </div>
+                 )}
+
+                 <Button onClick={handleCreateSlot} isLoading={isLoading} className="w-full py-6 rounded-[2.5rem] font-black uppercase shadow-xl">
+                   {isLocalTeamSlot ? 'Criar Jogo (Time Local)' : 'Criar Horário para Aluguel'}
+                 </Button>
               </div>
            </div>
         </div>
