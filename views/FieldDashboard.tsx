@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Trash2, Calendar, Clock, RefreshCcw, X, Swords, Edit3, MessageCircle, UserCheck, Phone, Edit, Building2, MapPin, LayoutGrid, Flag, Trophy, CheckCircle, XCircle, AlertCircle, CalendarPlus, Mail, Camera, UserPlus, Smartphone, CalendarDays, History as HistoryIcon, BadgeCheck, Ban, Lock, Search, Filter, Sparkles, ChevronDown } from 'lucide-react';
+import { Plus, Trash2, Calendar, Clock, RefreshCcw, X, Swords, Edit3, MessageCircle, UserCheck, Phone, Edit, Building2, MapPin, LayoutGrid, Flag, Trophy, CheckCircle, XCircle, AlertCircle, CalendarPlus, Mail, Camera, UserPlus, Smartphone, CalendarDays, History as HistoryIcon, BadgeCheck, Ban, Lock, Search, Filter, Sparkles, ChevronDown, CalendarRange } from 'lucide-react';
 import { Button } from '../components/Button';
 import { Field, MatchSlot, MatchType, User, CATEGORY_ORDER, RegisteredTeam, SPORTS, Gender } from '../types';
 import { api } from '../api';
@@ -44,10 +44,12 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
   const [allowedCats, setAllowedCats] = useState<string[]>([]);
 
   // States Filtros Agenda
-  const [filterDate, setFilterDate] = useState(new Date().toISOString().split('T')[0]);
+  // Padrão: Próximos 7 dias para não ficar vazio, mas sem filtrar estritamente pelo "dia de hoje"
+  const [filterRange, setFilterRange] = useState<string>('7'); 
+  const [filterSpecificDate, setFilterSpecificDate] = useState('');
   const [filterTerm, setFilterTerm] = useState('');
   const [filterTag, setFilterTag] = useState('TODOS');
-  const [showFilters, setShowFilters] = useState(false);
+  const [showFilters, setShowFilters] = useState(true); // Começar expandido para facilitar
 
   // States Mensalista
   const [editingMensalista, setEditingMensalista] = useState<RegisteredTeam | null>(null);
@@ -254,14 +256,25 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
 
   // --- LÓGICA DE FILTROS E TAGS ---
 
-  // Filtra slots por data selecionada (para a Agenda) e outros filtros
+  // Filtra slots
   const agendaSlots = slots
     .filter(s => {
-       // Filtro de "Futuro/Hoje"
+       // Filtro Básico: Apenas jogos futuros (Histórico é outra aba)
        if (s.date < todayStr) return false;
        
-       // Filtro de Data Específica (Selecionada pelo usuário)
-       if (filterDate && s.date !== filterDate) return false;
+       // Filtro de PERÍODO (Data Range)
+       if (filterRange === 'SPECIFIC') {
+          if (filterSpecificDate && s.date !== filterSpecificDate) return false;
+       } else if (filterRange !== 'ALL') {
+          const daysToAdd = parseInt(filterRange);
+          if (!isNaN(daysToAdd)) {
+             const limitDate = new Date();
+             limitDate.setDate(limitDate.getDate() + daysToAdd);
+             const limitStr = limitDate.toISOString().split('T')[0];
+             if (s.date > limitStr) return false;
+          }
+       }
+       // Se filterRange === 'ALL', não aplicamos limite superior, mostra tudo futuro.
 
        // Filtro por Nome (Busca)
        if (filterTerm) {
@@ -271,17 +284,21 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
          if (!matchLocal && !matchOpponent) return false;
        }
 
-       // Filtro por Tag (Lógica Simplificada para filtro)
+       // Filtro por Tag (Simplificado e Específico)
        if (filterTag !== 'TODOS') {
+          if (filterTag === 'TIME LOCAL' && (!s.hasLocalTeam && !s.localTeamName)) return false;
           if (filterTag === 'MENSALISTA' && s.matchType !== 'FIXO') return false;
-          if (filterTag === 'DESAFIO' && (!s.localTeamName || s.status !== 'available')) return false;
-          if (filterTag === 'FECHADO' && s.status !== 'confirmed') return false;
-          if (filterTag === 'LIVRE' && (s.status !== 'available' || s.localTeamName)) return false;
+          if (filterTag === 'AGENDADO' && s.status !== 'confirmed') return false;
+          if (filterTag === 'PROCURANDO ADVERSÁRIO' && (!s.hasLocalTeam || s.status !== 'available')) return false;
        }
 
        return true;
     })
-    .sort((a,b) => a.time.localeCompare(b.time));
+    .sort((a,b) => {
+       // Sort by date then time
+       if (a.date !== b.date) return a.date.localeCompare(b.date);
+       return a.time.localeCompare(b.time);
+    });
 
   // Próximo jogo (para a arte de destaque) - Pega o primeiro da lista filtrada
   const nextMatchSlot = agendaSlots[0];
@@ -304,7 +321,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
         if (slot.opponentTeamName) {
            badges.push({ label: 'JOGO FECHADO', color: 'bg-blue-100 text-blue-700', icon: <BadgeCheck className="w-3 h-3"/> });
         } else {
-           badges.push({ label: 'ALUGADO', color: 'bg-gray-100 text-gray-600', icon: <Lock className="w-3 h-3"/> });
+           badges.push({ label: 'AGENDADO', color: 'bg-gray-100 text-gray-600', icon: <Lock className="w-3 h-3"/> });
         }
     } else if (slot.status === 'available') {
         if (slot.hasLocalTeam || slot.localTeamName) {
@@ -371,31 +388,56 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
 
               {showFilters && (
                 <div className="animate-in slide-in-from-top-2 duration-300 space-y-3 pt-2">
-                   {/* Data */}
-                   <div className="bg-gray-50 p-2 rounded-xl flex items-center gap-2 border">
-                      <Calendar className="w-4 h-4 text-gray-400 ml-2" />
-                      <input 
-                        type="date" 
-                        value={filterDate} 
-                        onChange={e => setFilterDate(e.target.value)} 
-                        className="bg-transparent font-bold text-xs outline-none w-full uppercase text-gray-600"
-                      />
+                   {/* Linha de Período e Data */}
+                   <div className="grid grid-cols-2 gap-2">
+                     {/* Seletor de Período */}
+                     <div className="bg-gray-50 p-2 rounded-xl flex items-center gap-2 border">
+                        <CalendarRange className="w-4 h-4 text-gray-400 ml-2" />
+                        <select 
+                          value={filterRange} 
+                          onChange={e => setFilterRange(e.target.value)} 
+                          className="bg-transparent font-bold text-[10px] outline-none w-full uppercase text-gray-600 appearance-none"
+                        >
+                           <option value="7">Próximos 7 Dias</option>
+                           <option value="14">Próximos 14 Dias</option>
+                           <option value="21">Próximos 21 Dias</option>
+                           <option value="30">Próximos 30 Dias</option>
+                           <option value="ALL">Todos os Futuros</option>
+                           <option value="SPECIFIC">Data Específica</option>
+                        </select>
+                     </div>
+
+                     {/* Data Específica (Só aparece se selecionado) */}
+                     {filterRange === 'SPECIFIC' ? (
+                       <div className="bg-gray-50 p-2 rounded-xl flex items-center gap-2 border animate-in fade-in">
+                          <input 
+                            type="date" 
+                            value={filterSpecificDate} 
+                            onChange={e => setFilterSpecificDate(e.target.value)} 
+                            className="bg-transparent font-bold text-[10px] outline-none w-full uppercase text-gray-600"
+                          />
+                       </div>
+                     ) : (
+                       <div className="bg-gray-50 p-2 rounded-xl flex items-center gap-2 border opacity-50 cursor-not-allowed">
+                          <span className="text-[9px] font-black text-gray-400 ml-2 uppercase">Data Automática</span>
+                       </div>
+                     )}
                    </div>
                    
                    {/* Busca por Nome */}
                    <div className="bg-gray-50 p-2 rounded-xl flex items-center gap-2 border">
                       <Search className="w-4 h-4 text-gray-400 ml-2" />
                       <input 
-                        placeholder="Buscar time..." 
+                        placeholder="Buscar por nome do time..." 
                         value={filterTerm} 
                         onChange={e => setFilterTerm(e.target.value)} 
-                        className="bg-transparent font-bold text-xs outline-none w-full uppercase placeholder:text-gray-300"
+                        className="bg-transparent font-bold text-[10px] outline-none w-full uppercase placeholder:text-gray-300"
                       />
                    </div>
 
-                   {/* Tags */}
-                   <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
-                      {['TODOS', 'MENSALISTA', 'DESAFIO', 'FECHADO', 'LIVRE'].map(tag => (
+                   {/* Tags Simplificadas */}
+                   <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide pt-2">
+                      {['TODOS', 'TIME LOCAL', 'MENSALISTA', 'AGENDADO', 'PROCURANDO ADVERSÁRIO'].map(tag => (
                         <button 
                           key={tag}
                           onClick={() => setFilterTag(tag)}
@@ -418,19 +460,19 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                  <div className="relative z-10">
                     <div className="flex items-center gap-2 mb-4">
                        <Sparkles className="w-5 h-5 text-yellow-400 animate-pulse" />
-                       <span className="text-[10px] font-black uppercase tracking-widest text-grass-400">A Seguir • {nextMatchSlot.date.split('-').reverse().join('/')}</span>
+                       <span className="text-[10px] font-black uppercase tracking-widest text-grass-400">Destaque • {nextMatchSlot.date.split('-').reverse().join('/')}</span>
                     </div>
                     
                     <div className="flex items-center justify-between mb-6">
                        <div className="text-center flex-1">
-                          <h3 className="text-2xl font-black italic uppercase leading-none">{nextMatchSlot.localTeamName || 'LIVRE'}</h3>
+                          <h3 className="text-2xl font-black italic uppercase leading-none truncate">{nextMatchSlot.localTeamName || 'LIVRE'}</h3>
                           <p className="text-[9px] font-bold text-gray-400 uppercase mt-1">{nextMatchSlot.localTeamCategory || 'Quadra'}</p>
                        </div>
-                       <div className="bg-white/10 p-3 rounded-full backdrop-blur-md">
+                       <div className="bg-white/10 p-3 rounded-full backdrop-blur-md flex flex-col items-center justify-center min-w-[70px]">
                           <span className="font-black text-xl">{nextMatchSlot.time}</span>
                        </div>
                        <div className="text-center flex-1">
-                          <h3 className="text-2xl font-black italic uppercase leading-none text-gray-300">{nextMatchSlot.opponentTeamName || '?'}</h3>
+                          <h3 className="text-2xl font-black italic uppercase leading-none text-gray-300 truncate">{nextMatchSlot.opponentTeamName || '?'}</h3>
                           <p className="text-[9px] font-bold text-gray-500 uppercase mt-1">Adversário</p>
                        </div>
                     </div>
@@ -463,10 +505,11 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                             </div>
                             <div>
                                <h4 className="font-black text-pitch text-sm uppercase leading-tight">
-                                  {slot.time} • {slot.localTeamName || 'Horário Livre'}
+                                  {slot.time} • {slot.date.split('-').reverse().slice(0,2).join('/')}
                                </h4>
-                               <p className="text-[9px] font-bold text-gray-400 uppercase mt-1">
-                                  {slot.opponentTeamName ? `vs ${slot.opponentTeamName}` : 'Aguardando Adversário'}
+                               <p className="text-[9px] font-bold text-gray-400 uppercase mt-1 truncate max-w-[150px]">
+                                  {slot.localTeamName || 'Horário Livre'} 
+                                  {slot.opponentTeamName ? ` vs ${slot.opponentTeamName}` : ''}
                                </p>
                             </div>
                          </div>
