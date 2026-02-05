@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback } from 'react';
 import { UserRole, Field, MatchSlot, User, Notification } from './types';
 import { Landing } from './views/Landing';
@@ -91,11 +90,9 @@ const App: React.FC = () => {
     setShowNotifications(false);
     await refreshData();
     
-    // Se for desafio, levar para a aba de solicitações
     if (user?.role === UserRole.FIELD_OWNER && n.title.toLowerCase().includes('desafio')) {
       setActiveTab('ADMIN');
       setFieldDashForceTab('SOLICITACOES');
-      // Limpa o sinal após um tempo para permitir troca manual depois
       setTimeout(() => setFieldDashForceTab(undefined), 100);
     }
   };
@@ -137,29 +134,40 @@ const App: React.FC = () => {
     if (!slot) return;
     const field = fields.find(f => f.id === slot.fieldId);
 
-    if (confirm("Deseja realmente cancelar este agendamento?")) {
-      await api.updateSlot(slotId, { 
-        status: 'available', 
-        isBooked: false, 
-        bookedByTeamName: null as any, 
-        bookedByUserId: null as any, 
-        bookedByUserPhone: null as any, 
-        opponentTeamName: null as any, 
-        opponentTeamPhone: null as any, 
-        receiptUrl: null as any 
-      });
-
-      if (field) {
-        await api.createNotification({
-          userId: field.ownerId,
-          title: "Agendamento Cancelado",
-          description: `O time cancelou o horário de ${slot.time} no dia ${slot.date}.`,
-          type: 'warning'
+    if (confirm("Deseja realmente cancelar este agendamento? Ele voltará a ficar disponível para outros times.")) {
+      setIsLoading(true);
+      try {
+        await api.updateSlot(slotId, { 
+          status: 'available', 
+          isBooked: false, 
+          bookedByTeamName: null as any, 
+          bookedByUserId: null as any, 
+          bookedByUserPhone: null as any, 
+          opponentTeamName: null as any, 
+          opponentTeamCategory: null as any,
+          opponentTeamPhone: null as any, 
+          opponentTeamLogoUrl: null as any,
+          opponentTeamGender: null as any,
+          receiptUrl: null as any 
         });
+
+        // Notificar Dono da Arena
+        if (field) {
+          await api.createNotification({
+            userId: field.ownerId,
+            title: "Agendamento Cancelado ⚠️",
+            description: `O desafio para o dia ${slot.date.split('-').reverse().join('/')} às ${slot.time} foi CANCELADO pelo time. O horário voltou a ficar disponível.`,
+            type: 'warning'
+          });
+        }
+        
+        await refreshData();
+        alert("Agendamento cancelado. O horário está livre novamente!");
+      } catch (e) {
+        alert("Erro ao cancelar.");
+      } finally {
+        setIsLoading(false);
       }
-      
-      refreshData();
-      alert("Cancelado com sucesso. O dono da arena foi notificado.");
     }
   };
 
@@ -241,7 +249,7 @@ const App: React.FC = () => {
                       onClick={() => handleNotificationClick(n)}
                       className={`p-4 rounded-2xl border flex gap-3 transition-all cursor-pointer ${n.read ? 'bg-white opacity-60' : 'bg-grass-50 border-grass-100 shadow-sm'}`}
                     >
-                       <div className="w-10 h-10 bg-white rounded-xl border flex items-center justify-center text-grass-500 shadow-sm">
+                       <div className={`w-10 h-10 rounded-xl border flex items-center justify-center shadow-sm ${n.type === 'success' ? 'bg-grass-50 text-grass-600 border-grass-200' : n.type === 'warning' ? 'bg-red-50 text-red-600 border-red-200' : 'bg-blue-50 text-blue-600 border-blue-200'}`}>
                           <Info className="w-5 h-5" />
                        </div>
                        <div className="flex-1">
@@ -322,7 +330,7 @@ const App: React.FC = () => {
             <div className="p-20 text-center flex flex-col items-center">
               <div className="bg-red-50 text-red-500 p-6 rounded-full mb-6"><Shield className="w-12 h-12" /></div>
               <h3 className="font-black text-pitch text-xl italic uppercase tracking-tighter">Acesso Restrito</h3>
-              <p className="text-gray-400 text-xs font-bold uppercase mt-2">Esta área é exclusiva para proprietários de arenas.</p>
+              <p className="text-gray-400 text-xs font-bold uppercase mt-2">Área exclusiva para proprietários.</p>
             </div>
           )
         )}
@@ -337,9 +345,9 @@ const App: React.FC = () => {
                 
                 <div className="w-full mt-10 space-y-3">
                   <button onClick={() => setShowProfileModal(true)} className="w-full py-5 bg-[#022c22] text-white rounded-3xl font-black flex items-center justify-center gap-3 uppercase text-xs">
-                      <Settings className="w-5 h-5 text-[#10b981]" /> Editar Configurações
+                      <Settings className="w-5 h-5 text-[#10b981]" /> Configurações
                   </button>
-                  <button onClick={handleLogout} className="w-full py-5 bg-red-50 text-red-600 rounded-3xl font-black uppercase text-xs">Sair da Conta</button>
+                  <button onClick={handleLogout} className="w-full py-5 bg-red-50 text-red-600 rounded-3xl font-black uppercase text-xs">Sair</button>
                 </div>
             </div>
         )}
@@ -354,7 +362,7 @@ const App: React.FC = () => {
           {user?.role === UserRole.TEAM_CAPTAIN ? (
             <button onClick={() => setActiveTab('MY_GAMES')} className={`flex flex-col items-center gap-1 ${activeTab === 'MY_GAMES' ? 'text-[#10b981]' : 'text-gray-300'}`}>
               <History className="w-6 h-6" />
-              <span className="text-[8px] font-black uppercase">Histórico</span>
+              <span className="text-[8px] font-black uppercase">Meus Jogos</span>
             </button>
           ) : (
             <button onClick={() => setActiveTab('ADMIN')} className={`flex flex-col items-center gap-1 ${activeTab === 'ADMIN' ? 'text-[#10b981]' : 'text-gray-300'}`}>
