@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Trash2, Calendar, Clock, RefreshCcw, X, Swords, Edit3, MessageCircle, UserCheck, Phone, Edit, Building2, MapPin, LayoutGrid, Flag, Trophy, CheckCircle, XCircle, AlertCircle, CalendarPlus, Mail, Camera, UserPlus, Smartphone, CalendarDays, History as HistoryIcon, BadgeCheck, Ban, Lock } from 'lucide-react';
+import { Plus, Trash2, Calendar, Clock, RefreshCcw, X, Swords, Edit3, MessageCircle, UserCheck, Phone, Edit, Building2, MapPin, LayoutGrid, Flag, Trophy, CheckCircle, XCircle, AlertCircle, CalendarPlus, Mail, Camera, UserPlus, Smartphone, CalendarDays, History as HistoryIcon, BadgeCheck, Ban, Lock, Search, Filter, Sparkles, ChevronDown } from 'lucide-react';
 import { Button } from '../components/Button';
 import { Field, MatchSlot, MatchType, User, CATEGORY_ORDER, RegisteredTeam, SPORTS, Gender } from '../types';
 import { api } from '../api';
@@ -27,9 +27,11 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
   const [isLoading, setIsLoading] = useState(false);
   const [registeredTeams, setRegisteredTeams] = useState<RegisteredTeam[]>([]);
   
+  // States Modais
   const [showAddSlotModal, setShowAddSlotModal] = useState(false);
   const [showAddMensalistaModal, setShowAddMensalistaModal] = useState(false);
   
+  // States Criação Slot
   const [slotDate, setSlotDate] = useState(new Date().toISOString().split('T')[0]);
   const [slotTime, setSlotTime] = useState('19:00');
   const [slotType, setSlotType] = useState<MatchType>('ALUGUEL');
@@ -41,7 +43,13 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
   const [selectedLocalIdentity, setSelectedLocalIdentity] = useState('0-0');
   const [allowedCats, setAllowedCats] = useState<string[]>([]);
 
-  // Form States Mensalista
+  // States Filtros Agenda
+  const [filterDate, setFilterDate] = useState(new Date().toISOString().split('T')[0]);
+  const [filterTerm, setFilterTerm] = useState('');
+  const [filterTag, setFilterTag] = useState('TODOS');
+  const [showFilters, setShowFilters] = useState(false);
+
+  // States Mensalista
   const [editingMensalista, setEditingMensalista] = useState<RegisteredTeam | null>(null);
   const [mensalistaName, setMensalistaName] = useState('');
   const [mensalistaCaptain, setMensalistaCaptain] = useState('');
@@ -244,31 +252,76 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
     window.open(`https://wa.me/55${cleanPhone}?text=${encodeURIComponent(message || '')}`, '_blank');
   };
 
-  // Separação de Agenda vs Histórico
-  const agendaSlots = slots.filter(s => s.date >= todayStr && (s.status === 'available' || s.status === 'confirmed'));
+  // --- LÓGICA DE FILTROS E TAGS ---
+
+  // Filtra slots por data selecionada (para a Agenda) e outros filtros
+  const agendaSlots = slots
+    .filter(s => {
+       // Filtro de "Futuro/Hoje"
+       if (s.date < todayStr) return false;
+       
+       // Filtro de Data Específica (Selecionada pelo usuário)
+       if (filterDate && s.date !== filterDate) return false;
+
+       // Filtro por Nome (Busca)
+       if (filterTerm) {
+         const term = filterTerm.toLowerCase();
+         const matchLocal = s.localTeamName?.toLowerCase().includes(term);
+         const matchOpponent = s.opponentTeamName?.toLowerCase().includes(term);
+         if (!matchLocal && !matchOpponent) return false;
+       }
+
+       // Filtro por Tag (Lógica Simplificada para filtro)
+       if (filterTag !== 'TODOS') {
+          if (filterTag === 'MENSALISTA' && s.matchType !== 'FIXO') return false;
+          if (filterTag === 'DESAFIO' && (!s.localTeamName || s.status !== 'available')) return false;
+          if (filterTag === 'FECHADO' && s.status !== 'confirmed') return false;
+          if (filterTag === 'LIVRE' && (s.status !== 'available' || s.localTeamName)) return false;
+       }
+
+       return true;
+    })
+    .sort((a,b) => a.time.localeCompare(b.time));
+
+  // Próximo jogo (para a arte de destaque) - Pega o primeiro da lista filtrada
+  const nextMatchSlot = agendaSlots[0];
+
   const historySlots = slots.filter(s => s.date < todayStr);
 
-  // Helper para Status Visual
-  const getSlotStatusDisplay = (slot: MatchSlot) => {
+  // Helper para gerar as Tags (Badges) Múltiplas
+  const getSlotBadges = (slot: MatchSlot) => {
+    const badges = [];
+
+    // Tag 1: Origem do Time (Mensalista ou Local)
+    if (slot.matchType === 'FIXO') {
+      badges.push({ label: 'MENSALISTA', color: 'bg-purple-100 text-purple-700', icon: <UserCheck className="w-3 h-3"/> });
+    } else if (slot.hasLocalTeam) {
+      badges.push({ label: 'TIME LOCAL', color: 'bg-indigo-100 text-indigo-700', icon: <Flag className="w-3 h-3"/> });
+    }
+
+    // Tag 2: Status do Jogo
     if (slot.status === 'confirmed') {
-      if (slot.opponentTeamName) {
-        return { label: 'JOGO FECHADO', color: 'bg-blue-100 text-blue-700', icon: <BadgeCheck className="w-6 h-6"/> };
-      }
-      if (slot.matchType === 'FIXO') {
-        return { label: 'MENSALISTA', color: 'bg-purple-100 text-purple-700', icon: <UserCheck className="w-6 h-6"/> };
-      }
-      return { label: 'ALUGADO / OCUPADO', color: 'bg-gray-100 text-gray-600', icon: <Lock className="w-6 h-6"/> };
+        if (slot.opponentTeamName) {
+           badges.push({ label: 'JOGO FECHADO', color: 'bg-blue-100 text-blue-700', icon: <BadgeCheck className="w-3 h-3"/> });
+        } else {
+           badges.push({ label: 'ALUGADO', color: 'bg-gray-100 text-gray-600', icon: <Lock className="w-3 h-3"/> });
+        }
+    } else if (slot.status === 'available') {
+        if (slot.hasLocalTeam || slot.localTeamName) {
+           badges.push({ label: 'DESAFIO ABERTO', color: 'bg-yellow-100 text-yellow-700', icon: <Swords className="w-3 h-3"/> });
+        } else {
+           badges.push({ label: 'LIVRE', color: 'bg-grass-100 text-grass-700', icon: <Clock className="w-3 h-3"/> });
+        }
+    } else if (slot.status === 'pending_verification') {
+        badges.push({ label: 'SOLICITAÇÃO', color: 'bg-orange-100 text-orange-600', icon: <AlertCircle className="w-3 h-3"/> });
     }
-    
-    // Available
-    if (slot.localTeamName) {
-      return { label: 'DESAFIO ABERTO', color: 'bg-yellow-100 text-yellow-700', icon: <Swords className="w-6 h-6"/> };
-    }
-    return { label: 'LIVRE', color: 'bg-grass-100 text-grass-700', icon: <Clock className="w-6 h-6"/> };
+
+    return badges;
   };
 
   return (
     <div className="bg-gray-50 min-h-screen pb-32">
+      {/* Header Fixo */}
       <div className="p-6 bg-white border-b sticky top-0 z-20 glass">
         <div className="flex justify-between items-center mb-4">
           <div className="flex items-center gap-3">
@@ -304,45 +357,146 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
 
       <div className="p-6">
         {activeTab === 'AGENDA' && (
-          <div className="grid gap-4">
-            {agendaSlots.length === 0 ? (
-              <div className="text-center py-20 text-gray-400 font-black uppercase text-[10px]">Nenhum horário futuro na agenda.</div>
-            ) : (
-              agendaSlots.map(slot => {
-                const statusInfo = getSlotStatusDisplay(slot);
-                return (
-                  <div key={slot.id} className="bg-white p-5 rounded-[2.5rem] border flex items-center justify-between shadow-sm hover:border-pitch transition-all">
-                    <div className="flex items-center gap-4">
-                      <div className={`p-4 rounded-2xl ${statusInfo.color}`}>
-                          {statusInfo.icon}
-                      </div>
-                      <div>
-                          <div className="flex items-center gap-2">
-                            <p className="text-sm font-black text-pitch uppercase">{slot.date.split('-').reverse().join('/')} às {slot.time}</p>
-                            <span className={`text-[8px] font-black uppercase px-2 py-0.5 rounded-full ${statusInfo.color}`}>
-                                {statusInfo.label}
-                            </span>
-                          </div>
-                          <p className="text-[9px] font-black text-gray-400 uppercase mt-1">
-                            {slot.opponentTeamName 
-                              ? `${slot.localTeamName || 'Arena'} vs ${slot.opponentTeamName}` 
-                              : slot.localTeamName 
-                                ? `${slot.localTeamName} (${slot.localTeamCategory}) - Aguardando` 
-                                : 'Horário sem time definido'} 
-                            <br/> {slot.matchType} • {slot.courtName || 'Principal'}
-                          </p>
-                      </div>
+          <div className="space-y-6">
+            
+            {/* Filtros da Agenda */}
+            <div className="bg-white p-4 rounded-[2rem] border shadow-sm space-y-3">
+              <div className="flex items-center justify-between cursor-pointer" onClick={() => setShowFilters(!showFilters)}>
+                <div className="flex items-center gap-2 text-pitch font-black uppercase text-xs">
+                  <Filter className="w-4 h-4 text-grass-500" />
+                  Filtros e Busca
+                </div>
+                <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${showFilters ? 'rotate-180' : ''}`} />
+              </div>
+
+              {showFilters && (
+                <div className="animate-in slide-in-from-top-2 duration-300 space-y-3 pt-2">
+                   {/* Data */}
+                   <div className="bg-gray-50 p-2 rounded-xl flex items-center gap-2 border">
+                      <Calendar className="w-4 h-4 text-gray-400 ml-2" />
+                      <input 
+                        type="date" 
+                        value={filterDate} 
+                        onChange={e => setFilterDate(e.target.value)} 
+                        className="bg-transparent font-bold text-xs outline-none w-full uppercase text-gray-600"
+                      />
+                   </div>
+                   
+                   {/* Busca por Nome */}
+                   <div className="bg-gray-50 p-2 rounded-xl flex items-center gap-2 border">
+                      <Search className="w-4 h-4 text-gray-400 ml-2" />
+                      <input 
+                        placeholder="Buscar time..." 
+                        value={filterTerm} 
+                        onChange={e => setFilterTerm(e.target.value)} 
+                        className="bg-transparent font-bold text-xs outline-none w-full uppercase placeholder:text-gray-300"
+                      />
+                   </div>
+
+                   {/* Tags */}
+                   <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
+                      {['TODOS', 'MENSALISTA', 'DESAFIO', 'FECHADO', 'LIVRE'].map(tag => (
+                        <button 
+                          key={tag}
+                          onClick={() => setFilterTag(tag)}
+                          className={`px-3 py-1.5 rounded-full text-[9px] font-black uppercase whitespace-nowrap transition-all border ${filterTag === tag ? 'bg-pitch text-white border-pitch' : 'bg-white text-gray-400 border-gray-100'}`}
+                        >
+                          {tag}
+                        </button>
+                      ))}
+                   </div>
+                </div>
+              )}
+            </div>
+
+            {/* Arte Especial: Próximo Jogo */}
+            {nextMatchSlot && (
+              <div className="relative overflow-hidden rounded-[2.5rem] bg-gradient-to-br from-pitch via-pitch to-grass-900 text-white shadow-xl p-6 border-2 border-white/10">
+                 <div className="absolute top-0 right-0 p-6 opacity-10">
+                    <Trophy className="w-32 h-32 transform rotate-12" />
+                 </div>
+                 <div className="relative z-10">
+                    <div className="flex items-center gap-2 mb-4">
+                       <Sparkles className="w-5 h-5 text-yellow-400 animate-pulse" />
+                       <span className="text-[10px] font-black uppercase tracking-widest text-grass-400">A Seguir • {nextMatchSlot.date.split('-').reverse().join('/')}</span>
                     </div>
-                    <div className="flex gap-2">
-                      {slot.status === 'confirmed' && slot.opponentTeamPhone && (
-                        <button onClick={() => handleWhatsApp(slot.opponentTeamPhone, `Olá capitão do ${slot.opponentTeamName}! Jogo confirmado na arena ${field.name} para o dia ${slot.date.split('-').reverse().join('/')} às ${slot.time}.`)} className="p-3 bg-grass-50 text-grass-600 rounded-xl"><Smartphone className="w-4 h-4"/></button>
-                      )}
-                      <button onClick={() => { if(confirm("Remover este horário?")) onDeleteSlot(slot.id); }} className="p-3 text-red-500 hover:bg-red-50 rounded-xl"><Trash2 className="w-4 h-4"/></button>
+                    
+                    <div className="flex items-center justify-between mb-6">
+                       <div className="text-center flex-1">
+                          <h3 className="text-2xl font-black italic uppercase leading-none">{nextMatchSlot.localTeamName || 'LIVRE'}</h3>
+                          <p className="text-[9px] font-bold text-gray-400 uppercase mt-1">{nextMatchSlot.localTeamCategory || 'Quadra'}</p>
+                       </div>
+                       <div className="bg-white/10 p-3 rounded-full backdrop-blur-md">
+                          <span className="font-black text-xl">{nextMatchSlot.time}</span>
+                       </div>
+                       <div className="text-center flex-1">
+                          <h3 className="text-2xl font-black italic uppercase leading-none text-gray-300">{nextMatchSlot.opponentTeamName || '?'}</h3>
+                          <p className="text-[9px] font-bold text-gray-500 uppercase mt-1">Adversário</p>
+                       </div>
                     </div>
-                  </div>
-                );
-              })
+
+                    <div className="flex flex-wrap gap-2 justify-center">
+                       {getSlotBadges(nextMatchSlot).map((badge, idx) => (
+                         <span key={idx} className={`px-3 py-1 rounded-full text-[9px] font-black uppercase flex items-center gap-1 bg-white/10 backdrop-blur-md border border-white/20 text-white`}>
+                           {badge.icon} {badge.label}
+                         </span>
+                       ))}
+                    </div>
+                 </div>
+              </div>
             )}
+
+            {/* Lista de Jogos Filtrada */}
+            <div className="grid gap-4">
+              {agendaSlots.length === 0 ? (
+                <div className="text-center py-20 text-gray-400 font-black uppercase text-[10px]">Nenhum horário encontrado para os filtros.</div>
+              ) : (
+                agendaSlots.map(slot => {
+                  const badges = getSlotBadges(slot);
+                  return (
+                    <div key={slot.id} className="bg-white p-5 rounded-[2.5rem] border flex flex-col gap-4 shadow-sm hover:border-pitch transition-all relative">
+                      {/* Top Row: Time, Data, Preço */}
+                      <div className="flex justify-between items-start">
+                         <div className="flex items-center gap-4">
+                            <div className={`p-4 rounded-2xl ${badges[0]?.color || 'bg-gray-100 text-gray-400'}`}>
+                               <Clock className="w-6 h-6"/>
+                            </div>
+                            <div>
+                               <h4 className="font-black text-pitch text-sm uppercase leading-tight">
+                                  {slot.time} • {slot.localTeamName || 'Horário Livre'}
+                               </h4>
+                               <p className="text-[9px] font-bold text-gray-400 uppercase mt-1">
+                                  {slot.opponentTeamName ? `vs ${slot.opponentTeamName}` : 'Aguardando Adversário'}
+                               </p>
+                            </div>
+                         </div>
+                         <div className="text-right">
+                            <span className="block font-black text-pitch text-sm">R$ {slot.price}</span>
+                            <span className="text-[8px] font-bold text-gray-300 uppercase">{slot.courtName}</span>
+                         </div>
+                      </div>
+
+                      {/* Middle Row: Tags Múltiplas */}
+                      <div className="flex flex-wrap gap-2">
+                         {badges.map((badge, i) => (
+                           <span key={i} className={`px-2 py-1 rounded-lg text-[8px] font-black uppercase flex items-center gap-1 ${badge.color}`}>
+                             {badge.icon} {badge.label}
+                           </span>
+                         ))}
+                      </div>
+
+                      {/* Bottom Row: Actions */}
+                      <div className="flex gap-2 pt-2 border-t mt-1">
+                        {slot.status === 'confirmed' && slot.opponentTeamPhone && (
+                          <button onClick={() => handleWhatsApp(slot.opponentTeamPhone, `Olá capitão do ${slot.opponentTeamName}! Jogo confirmado na arena ${field.name} para o dia ${slot.date.split('-').reverse().join('/')} às ${slot.time}.`)} className="flex-1 py-2 bg-grass-50 text-grass-600 rounded-xl text-[10px] font-black uppercase flex items-center justify-center gap-2"><Smartphone className="w-3 h-3"/> Avisar Time</button>
+                        )}
+                        <button onClick={() => { if(confirm("Remover este horário?")) onDeleteSlot(slot.id); }} className="p-2 text-red-500 hover:bg-red-50 rounded-xl bg-gray-50"><Trash2 className="w-4 h-4"/></button>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
           </div>
         )}
 
