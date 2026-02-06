@@ -24,6 +24,12 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
   const [showFilters, setShowFilters] = useState(false);
   const [userCoords, setUserCoords] = useState<{lat: number, lng: number} | null>(null);
   
+  // States de Filtros
+  const [filterDate, setFilterDate] = useState('');
+  const [filterSport, setFilterSport] = useState('');
+  const [filterCategory, setFilterCategory] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+
   const [myGamesSubTab, setMyGamesSubTab] = useState<'FUTUROS' | 'HISTORICO'>('FUTUROS');
 
   useEffect(() => {
@@ -43,22 +49,28 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
     const field = fields.find(f => f.id === slot.fieldId);
     if (!field) return false;
 
+    // Filtros de busca básica
+    if (filterDate && slot.date !== filterDate) return false;
+    if (filterSport && slot.sport !== filterSport) return false;
+    if (filterCategory) {
+        const baseCat = slot.localTeamCategory || slot.bookedByTeamCategory;
+        if (baseCat && baseCat !== filterCategory) return false;
+    }
+    if (searchQuery && !field.name.toLowerCase().includes(searchQuery.toLowerCase())) return false;
+
     if (viewMode === 'EXPLORE') {
       if (slot.date < todayStr) return false;
       if (field.ownerId === currentUser.id) return false;
 
-      // Status deve ser 'available' OU um agendamento incompleto (aguardando adversário)
       const isAwaitingAdversary = (slot.bookedByTeamName || slot.hasLocalTeam) && !slot.opponentTeamName;
       const isFullyAvailable = slot.status === 'available' && !slot.bookedByTeamName && !slot.hasLocalTeam;
       
       if (!isAwaitingAdversary && !isFullyAvailable) return false;
 
-      // Se já tem um mandante ou primeiro agendamento, verificar categorias permitidas
       const allowedCats = slot.allowedOpponentCategories || [];
       const baseCategory = slot.localTeamCategory || slot.bookedByTeamCategory;
 
       if (baseCategory || allowedCats.length > 0) {
-          // O time atual deve ter PELO MENOS UMA categoria que bata com as permitidas do slot
           const canMatch = userAllCategories.some(cat => allowedCats.includes(cat) || cat === baseCategory);
           if (!canMatch) return false;
       }
@@ -90,9 +102,7 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
     const field = fields.find(f => f.id === selectedSlot.fieldId);
     
     try {
-      // Determinar se este é o primeiro ou o segundo time
       const isFirstTeam = !selectedSlot.bookedByTeamName && !selectedSlot.hasLocalTeam;
-      
       const updateData: any = {
         bookedByUserId: currentUser.id,
         status: 'pending_verification'
@@ -103,7 +113,6 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
           updateData.bookedByTeamCategory = selectedCategory;
           updateData.bookedByUserPhone = currentUser.phoneNumber;
           updateData.bookedByTeamLogoUrl = team.logoUrl;
-          // Ao agendar pela primeira vez um aluguel vazio, definir que aceita vizinhos (opcional)
           updateData.allowedOpponentCategories = getNeighboringCategories(selectedCategory);
       } else {
           updateData.opponentTeamName = team.name;
@@ -132,7 +141,6 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
     }
   };
 
-  // Helper local para vizinhos (repetido do utils se necessário, mas importado é melhor)
   const getNeighboringCategories = (baseCategory: string): string[] => {
     const idx = CATEGORY_ORDER.indexOf(baseCategory);
     if (idx === -1) return [baseCategory];
@@ -145,7 +153,7 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
   return (
     <div className="flex flex-col h-full bg-gray-50 pb-20">
       {viewMode === 'EXPLORE' ? (
-        <div className="bg-white border-b p-4 sticky top-0 z-30 shadow-sm">
+        <div className="bg-white border-b p-4 sticky top-0 z-30 shadow-sm space-y-3">
           <div className="flex items-center justify-between">
              <div className="flex items-center gap-2">
                 <Search className="w-4 h-4 text-pitch" />
@@ -155,6 +163,29 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
                 Filtros <ChevronDown className={`w-3 h-3 ${showFilters ? 'rotate-180' : ''}`} />
              </button>
           </div>
+          
+          {showFilters && (
+            <div className="animate-in slide-in-from-top-2 duration-300 space-y-3 bg-gray-50 p-4 rounded-2xl border">
+               <input 
+                  placeholder="Nome da Arena..." 
+                  value={searchQuery} 
+                  onChange={e => setSearchQuery(e.target.value)} 
+                  className="w-full bg-white p-3 rounded-xl border font-bold text-[10px] uppercase outline-none"
+                />
+               <div className="grid grid-cols-2 gap-2">
+                  <input type="date" value={filterDate} onChange={e => setFilterDate(e.target.value)} className="bg-white p-3 rounded-xl border font-bold text-[10px] uppercase" />
+                  <select value={filterSport} onChange={e => setFilterSport(e.target.value)} className="bg-white p-3 rounded-xl border font-bold text-[10px] uppercase">
+                     <option value="">Esportes</option>
+                     {SPORTS.map(s => <option key={s} value={s}>{s}</option>)}
+                  </select>
+               </div>
+               <select value={filterCategory} onChange={e => setFilterCategory(e.target.value)} className="w-full bg-white p-3 rounded-xl border font-bold text-[10px] uppercase">
+                  <option value="">Categorias</option>
+                  {CATEGORY_ORDER.map(c => <option key={c} value={c}>{c}</option>)}
+               </select>
+               <button onClick={() => { setFilterDate(''); setFilterSport(''); setFilterCategory(''); setSearchQuery(''); }} className="text-[8px] font-black text-red-500 uppercase w-full text-right mt-2">Limpar Filtros</button>
+            </div>
+          )}
         </div>
       ) : (
         <div className="bg-white border-b p-4 sticky top-0 z-30 shadow-sm">
@@ -224,7 +255,9 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
                        <div>
                           <p className="text-[8px] font-black uppercase text-gray-400">Time Base</p>
                           <p className="text-sm font-black text-pitch uppercase truncate w-32">{slot.localTeamName || slot.bookedByTeamName || 'Em Aberto'}</p>
-                          <span className="text-[8px] font-bold text-indigo-600 uppercase">Categoria: {slot.localTeamCategory || slot.bookedByTeamCategory || 'Livre'}</span>
+                          <span className="text-[8px] font-bold text-indigo-600 uppercase">
+                            Categoria: {slot.localTeamCategory || slot.bookedByTeamCategory || 'A definir no agendamento'}
+                          </span>
                        </div>
                     </div>
                     {(slot.hasLocalTeam || slot.bookedByTeamName) && <Swords className="w-5 h-5 text-indigo-400" />}
@@ -295,7 +328,7 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
                             key={i} 
                             disabled={!isMatch}
                             onClick={() => { setSelectedTeamIdx(i); setSelectedCategory(''); }} 
-                            className={`flex-shrink-0 w-32 py-6 rounded-[2rem] font-black uppercase text-[10px] transition-all flex flex-col items-center gap-3 border-2 ${!isMatch ? 'opacity-30' : selectedTeamIdx === i ? 'bg-pitch text-white border-pitch shadow-lg scale-105' : 'bg-gray-50 border-gray-100 text-gray-300'}`}
+                            className={`flex-shrink-0 w-32 py-6 rounded-[2rem] font-black uppercase text-[10px] transition-all flex flex-col items-center gap-3 border-2 ${!isMatch ? 'opacity-30 cursor-not-allowed' : selectedTeamIdx === i ? 'bg-pitch text-white border-pitch shadow-lg scale-105' : 'bg-gray-50 border-gray-100 text-gray-300'}`}
                           >
                              <span className="truncate w-full px-2 text-center">{t.name}</span>
                           </button>

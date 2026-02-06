@@ -155,9 +155,9 @@ export const api = {
     return data.map(d => ({
       id: d.id,
       requesterId: d.requester_id,
-      targetId: d.target_id,
-      entityType: d.entity_type,
-      jsonData: d.json_data,
+      target_id: d.target_id,
+      entity_type: d.entity_type,
+      json_data: d.json_data,
       status: d.status,
       createdAt: d.created_at
     }));
@@ -170,7 +170,7 @@ export const api = {
 
   getCategories: async (): Promise<string[]> => {
     const { data, error } = await supabase.from('category').select('name').order('name');
-    return (error || !data) ? ["Livre", "Principal", "Veteranos"] : data.map(c => c.name);
+    return (error || !data) ? ["Sub-8", "Sub-9", "Veteranos"] : data.map(c => c.name);
   },
 
   getFields: async (): Promise<Field[]> => {
@@ -188,18 +188,19 @@ export const api = {
         contactPhone: f.contact_phone,
         latitude: f.latitude,
         longitude: f.longitude,
-        courts: f.courts || []
+        courts: f.courts || ['Principal']
     }));
   },
 
   updateField: async (fieldId: string, updates: Partial<Field>): Promise<Field> => {
-    const payload: any = {
-      name: updates.name,
-      location: updates.location,
-      hourly_rate: updates.hourlyRate,
-      image_url: updates.imageUrl,
-      contact_phone: updates.contactPhone
-    };
+    const payload: any = {};
+    if (updates.name !== undefined) payload.name = updates.name;
+    if (updates.location !== undefined) payload.location = updates.location;
+    if (updates.hourlyRate !== undefined) payload.hourly_rate = updates.hourlyRate;
+    if (updates.imageUrl !== undefined) payload.image_url = updates.imageUrl;
+    if (updates.contactPhone !== undefined) payload.contact_phone = updates.contactPhone;
+    if (updates.courts !== undefined) payload.courts = updates.courts;
+    
     if (updates.pixConfig) {
       payload.pix_key = updates.pixConfig.key;
       payload.pix_name = updates.pixConfig.name;
@@ -278,7 +279,6 @@ export const api = {
     if (data.bookedByUserId !== undefined) payload.booked_by_user_id = data.bookedByUserId;
     if (data.bookedByTeamCategory !== undefined) payload.booked_by_category = data.bookedByTeamCategory;
     
-    // Se o time agendar como aluguel e não houver mandante, ele define a categoria base
     if (data.bookedByTeamCategory && !payload.local_team_category) {
         payload.local_team_category = data.bookedByTeamCategory;
     }
