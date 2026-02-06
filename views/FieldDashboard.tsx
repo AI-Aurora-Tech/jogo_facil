@@ -79,7 +79,6 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
   }, [field.id]);
 
   useEffect(() => {
-    // Garantir que a quadra selecionada exista após atualização de perfil
     if (field.courts && field.courts.length > 0) {
       if (!field.courts.includes(slotCourt)) setSlotCourt(field.courts[0]);
       if (!field.courts.includes(mensalistaCourt)) setMensalistaCourt(field.courts[0]);
@@ -156,14 +155,14 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
         time: slotTime,
         durationMinutes: slotDuration,
         matchType: isLocalTeamSlot ? 'AMISTOSO' : slotMatchType,
-        isBooked: editingSlotId ? undefined : false,
+        isBooked: editingSlotId ? undefined : isLocalTeamSlot,
         hasLocalTeam: isLocalTeamSlot,
         localTeamName: isLocalTeamSlot ? manualLocalTeamName : null,
         localTeamCategory: isLocalTeamSlot ? manualLocalCategory : null,
         localTeamPhone: isLocalTeamSlot ? field.contactPhone : null,
         localTeamGender: 'MASCULINO',
         price: slotPrice,
-        status: editingSlotId ? undefined : 'available',
+        status: editingSlotId ? undefined : (isLocalTeamSlot ? 'confirmed' : 'available'),
         courtName: slotCourt,
         sport: slotSport,
         allowedOpponentCategories: isLocalTeamSlot ? allowedCats : []
@@ -286,20 +285,31 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
 
   const getSlotBadges = (slot: MatchSlot) => {
     const badges = [];
-    
-    if (slot.status === 'confirmed') {
+    const isLocal = slot.hasLocalTeam || slot.matchType === 'FIXO';
+    const hasOpponent = !!slot.opponentTeamName;
+    const hasAtLeastOneTeam = !!(slot.bookedByTeamName || slot.hasLocalTeam);
+
+    // Regra: Jogo com os dois times agendados (Local + Externo ou Externo + Externo)
+    if (hasOpponent) {
       badges.push({ label: 'JOGO CONFIRMADO', color: 'bg-grass-500 text-white', icon: <CheckCircle className="w-3 h-3"/> });
-    } else if (slot.status === 'pending_verification') {
-      badges.push({ label: 'SOLICITAÇÃO PENDENTE', color: 'bg-orange-500 text-white', icon: <AlertCircle className="w-3 h-3"/> });
-    } else if (slot.bookedByTeamName && !slot.opponentTeamName) {
-      badges.push({ label: 'AGENDADO • AGUARDANDO ADVERSÁRIO', color: 'bg-yellow-400 text-pitch font-black', icon: <Swords className="w-3 h-3"/> });
-    } else if (slot.matchType === 'FIXO' || slot.hasLocalTeam) {
-      if (!slot.opponentTeamName) {
-        badges.push({ label: 'TIME LOCAL • AGUARDANDO ADVERSÁRIO', color: 'bg-indigo-100 text-indigo-700', icon: <UserPlus className="w-3 h-3"/> });
-      } else {
-        badges.push({ label: 'DESAFIO AGENDADO', color: 'bg-indigo-600 text-white', icon: <Flag className="w-3 h-3"/> });
+      if (isLocal) {
+        badges.push({ label: 'TIME LOCAL', color: 'bg-indigo-600 text-white', icon: <UserCheck className="w-3 h-3"/> });
       }
-    } else if (slot.status === 'available') {
+    } 
+    // Regra: Apenas um time (Mandante ou Externo) aguardando adversário
+    else if (hasAtLeastOneTeam) {
+      if (slot.status === 'pending_verification') {
+        badges.push({ label: 'SOLICITAÇÃO PENDENTE', color: 'bg-orange-500 text-white', icon: <AlertCircle className="w-3 h-3"/> });
+      } else {
+        badges.push({ label: 'AGUARDANDO ADVERSÁRIO', color: 'bg-yellow-400 text-pitch font-black', icon: <Swords className="w-3 h-3"/> });
+      }
+      
+      if (isLocal) {
+        badges.push({ label: 'TIME LOCAL', color: 'bg-indigo-100 text-indigo-700', icon: <UserPlus className="w-3 h-3"/> });
+      }
+    } 
+    // Regra: Ninguém agendado
+    else {
       badges.push({ label: 'DISPONÍVEL', color: 'bg-gray-100 text-gray-400', icon: <Clock className="w-3 h-3"/> });
     }
 
