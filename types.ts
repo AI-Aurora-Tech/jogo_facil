@@ -115,6 +115,16 @@ export interface RegisteredTeam {
   courtName: string;
 }
 
+export const CATEGORY_ORDER = [
+  "Sub-8", "Sub-9", "Sub-10", "Sub-11", "Sub-12", "Sub-13", "Sub-14", "Sub-15", "Sub-16", "Sub-17", 
+  "Sport", "35+", "40+", "45+", "50+", "60+", "70+"
+];
+
+export const SPORTS = ["Futebol", "Society", "Futsal", "Vôlei", "Handball", "Basquete", "Tênis", "Beach Tennis"];
+
+/**
+ * Interface representing the result of a PIX receipt verification processed by AI.
+ */
 export interface VerificationResult {
   isValid: boolean;
   amountFound: number | null;
@@ -122,19 +132,15 @@ export interface VerificationResult {
   reason: string;
 }
 
+/**
+ * Interface representing a pending update request for users or field entities.
+ */
 export interface PendingUpdate {
   id: string;
   requesterId: string;
   targetId: string;
-  entityType: string;
+  entityType: 'field' | 'slot' | 'user';
   jsonData: any;
   status: 'pending' | 'approved' | 'rejected';
   createdAt: string;
 }
-
-export const CATEGORY_ORDER = [
-  "Sub-8", "Sub-9", "Sub-10", "Sub-11", "Sub-12", "Sub-13", "Sub-14", "Sub-15", "Sub-16", "Sub-17", 
-  "Sport", "35+", "40+", "45+", "50+", "60+", "70+", "Livre", "Principal"
-];
-
-export const SPORTS = ["Futebol", "Society", "Futsal", "Vôlei", "Handball", "Basquete", "Tênis", "Beach Tennis"];

@@ -44,13 +44,23 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
     if (!field) return false;
 
     if (viewMode === 'EXPLORE') {
-      if (slot.date < todayStr || slot.status !== 'available') return false;
+      if (slot.date < todayStr) return false;
       if (field.ownerId === currentUser.id) return false;
 
-      // Se já tem um mandante (mensalista ou primeiro de fora que agendou)
+      // Status deve ser 'available' OU um agendamento incompleto (aguardando adversário)
+      const isAwaitingAdversary = (slot.bookedByTeamName || slot.hasLocalTeam) && !slot.opponentTeamName;
+      const isFullyAvailable = slot.status === 'available' && !slot.bookedByTeamName && !slot.hasLocalTeam;
+      
+      if (!isAwaitingAdversary && !isFullyAvailable) return false;
+
+      // Se já tem um mandante ou primeiro agendamento, verificar categorias permitidas
+      const allowedCats = slot.allowedOpponentCategories || [];
       const baseCategory = slot.localTeamCategory || slot.bookedByTeamCategory;
-      if (baseCategory) {
-          if (!userAllCategories.includes(baseCategory)) return false;
+
+      if (baseCategory || allowedCats.length > 0) {
+          // O time atual deve ter PELO MENOS UMA categoria que bata com as permitidas do slot
+          const canMatch = userAllCategories.some(cat => allowedCats.includes(cat) || cat === baseCategory);
+          if (!canMatch) return false;
       }
     } else {
       const isMyBooking = slot.bookedByUserId === currentUser.id || slot.opponentTeamPhone === currentUser.phoneNumber;
@@ -66,12 +76,12 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
   const getStatusBadge = (slot: MatchSlot) => {
     if (slot.status === 'confirmed') return { label: 'CONFIRMADO', color: 'bg-grass-500 text-white', icon: <CalendarCheck className="w-3 h-3"/> };
     if (slot.status === 'pending_verification') return { label: 'AGUARDANDO APROVAÇÃO', color: 'bg-orange-100 text-orange-600', icon: <Clock className="w-3 h-3"/> };
-    if (slot.bookedByTeamName && !slot.opponentTeamName) return { label: 'AGUARDANDO ADVERSÁRIO', color: 'bg-yellow-100 text-yellow-700 font-bold', icon: <Swords className="w-3 h-3"/> };
-    return { label: 'PENDENTE', color: 'bg-gray-100 text-gray-500', icon: <Clock className="w-3 h-3"/> };
+    if ((slot.bookedByTeamName || slot.hasLocalTeam) && !slot.opponentTeamName) return { label: 'AGUARDANDO ADVERSÁRIO', color: 'bg-yellow-100 text-yellow-700 font-bold', icon: <Swords className="w-3 h-3"/> };
+    return { label: 'DISPONÍVEL', color: 'bg-gray-100 text-gray-500', icon: <Clock className="w-3 h-3"/> };
   };
 
-  const handleOpenMap = (lat: number, lng: number) => {
-    window.open(`https://www.google.com/maps/search/?api=1&query=${lat},${lng}`, '_blank');
+  const handleOpenMap = (location: string) => {
+    window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(location)}`, '_blank');
   };
 
   const handleBookingConfirm = async () => {
@@ -80,15 +90,30 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
     const field = fields.find(f => f.id === selectedSlot.fieldId);
     
     try {
-      await api.updateSlot(selectedSlot.id, {
-        opponentTeamName: team.name,
-        opponentTeamCategory: selectedCategory,
-        opponentTeamPhone: currentUser.phoneNumber,
-        opponentTeamLogoUrl: team.logoUrl,
-        opponentTeamGender: team.gender,
+      // Determinar se este é o primeiro ou o segundo time
+      const isFirstTeam = !selectedSlot.bookedByTeamName && !selectedSlot.hasLocalTeam;
+      
+      const updateData: any = {
         bookedByUserId: currentUser.id,
         status: 'pending_verification'
-      });
+      };
+
+      if (isFirstTeam) {
+          updateData.bookedByTeamName = team.name;
+          updateData.bookedByTeamCategory = selectedCategory;
+          updateData.bookedByUserPhone = currentUser.phoneNumber;
+          updateData.bookedByTeamLogoUrl = team.logoUrl;
+          // Ao agendar pela primeira vez um aluguel vazio, definir que aceita vizinhos (opcional)
+          updateData.allowedOpponentCategories = getNeighboringCategories(selectedCategory);
+      } else {
+          updateData.opponentTeamName = team.name;
+          updateData.opponentTeamCategory = selectedCategory;
+          updateData.opponentTeamPhone = currentUser.phoneNumber;
+          updateData.opponentTeamLogoUrl = team.logoUrl;
+          updateData.opponentTeamGender = team.gender;
+      }
+
+      await api.updateSlot(selectedSlot.id, updateData);
 
       if (field) {
         await api.createNotification({
@@ -105,6 +130,16 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
     } catch (e) { 
       alert("Erro ao solicitar agendamento."); 
     }
+  };
+
+  // Helper local para vizinhos (repetido do utils se necessário, mas importado é melhor)
+  const getNeighboringCategories = (baseCategory: string): string[] => {
+    const idx = CATEGORY_ORDER.indexOf(baseCategory);
+    if (idx === -1) return [baseCategory];
+    const result = [baseCategory];
+    if (idx > 0) result.push(CATEGORY_ORDER[idx - 1]);
+    if (idx < CATEGORY_ORDER.length - 1) result.push(CATEGORY_ORDER[idx + 1]);
+    return result;
   };
 
   return (
@@ -171,6 +206,12 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
                           {slot.sport}
                         </span>
                      </div>
+                     <button 
+                        onClick={() => handleOpenMap(field?.location || '')}
+                        className="text-[9px] font-bold text-blue-500 uppercase mt-2 flex items-center gap-1 hover:underline text-left"
+                      >
+                        <MapPin className="w-3 h-3" /> {field?.location}
+                      </button>
                   </div>
                 </div>
 
@@ -200,14 +241,14 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
                    
                    {viewMode === 'EXPLORE' ? (
                      <Button onClick={() => { setSelectedSlot(slot); setSelectedCategory(''); }} className="rounded-2xl px-8 py-4 font-black uppercase text-[10px] bg-pitch shadow-lg">
-                        {slot.hasLocalTeam || slot.bookedByTeamName ? 'Desafiar Agora' : 'Alugar Horário'}
+                        {(slot.hasLocalTeam || slot.bookedByTeamName) ? 'Desafiar Agora' : 'Alugar Horário'}
                      </Button>
                    ) : (
                      <div className="flex gap-2">
                        {slot.date >= todayStr && (
                           <button onClick={() => onCancelBooking(slot.id)} className="p-3 text-red-500 hover:bg-red-50 rounded-2xl border border-red-100 active:scale-95 transition-all"><CalendarX className="w-5 h-5"/></button>
                        )}
-                       <button onClick={() => handleOpenMap(field!.latitude, field!.longitude)} className="p-3 bg-gray-50 text-pitch rounded-2xl active:scale-95"><Navigation className="w-5 h-5"/></button>
+                       <button onClick={() => handleOpenMap(field?.location || '')} className="p-3 bg-gray-50 text-pitch rounded-2xl active:scale-95"><Navigation className="w-5 h-5"/></button>
                      </div>
                    )}
                 </div>
@@ -217,7 +258,6 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
         )}
       </div>
 
-      {/* Modal Confirm Booking (Mesma lógica de restrição de categoria) */}
       {selectedSlot && (
         <div className="fixed inset-0 bg-pitch/95 backdrop-blur-xl z-[400] flex items-end">
           <div className="bg-white w-full rounded-t-[4rem] p-12 animate-in slide-in-from-bottom duration-500 max-h-[90vh] overflow-y-auto pb-safe">
@@ -226,14 +266,68 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
                <button onClick={() => setSelectedSlot(null)} className="p-2 bg-gray-100 rounded-full"><X className="w-5 h-5"/></button>
             </div>
             <div className="space-y-8">
-               {(selectedSlot.localTeamCategory || selectedSlot.bookedByTeamCategory) && (
+               {(selectedSlot.localTeamCategory || selectedSlot.bookedByTeamCategory || selectedSlot.allowedOpponentCategories?.length > 0) && (
                  <div className="bg-indigo-50 p-4 rounded-2xl border border-indigo-100">
-                    <p className="text-[10px] font-black text-indigo-600 uppercase mb-1">Este horário exige a categoria:</p>
-                    <span className="bg-white px-3 py-1 rounded-md text-[10px] font-black text-indigo-700 border border-indigo-200">
-                      {selectedSlot.localTeamCategory || selectedSlot.bookedByTeamCategory}
-                    </span>
+                    <p className="text-[10px] font-black text-indigo-600 uppercase mb-2">Categorias permitidas para este horário:</p>
+                    <div className="flex flex-wrap gap-2">
+                       {(selectedSlot.allowedOpponentCategories?.length > 0 
+                          ? selectedSlot.allowedOpponentCategories 
+                          : [selectedSlot.localTeamCategory || selectedSlot.bookedByTeamCategory]
+                       ).map(cat => (
+                          <span key={cat} className="bg-white px-3 py-1 rounded-md text-[10px] font-black text-indigo-700 border border-indigo-200">
+                            {cat}
+                          </span>
+                       ))}
+                    </div>
                  </div>
                )}
+
+               <div>
+                  <label className="text-[10px] font-black text-gray-400 uppercase mb-3 block tracking-widest">Escolha seu Time</label>
+                  <div className="flex gap-4 overflow-x-auto pb-4 scrollbar-hide">
+                     {currentUser.teams.map((t, i) => {
+                        const baseCat = selectedSlot.localTeamCategory || selectedSlot.bookedByTeamCategory;
+                        const allowed = selectedSlot.allowedOpponentCategories || [];
+                        const isMatch = !baseCat && allowed.length === 0 || t.categories.some(c => c === baseCat || allowed.includes(c));
+                        
+                        return (
+                          <button 
+                            key={i} 
+                            disabled={!isMatch}
+                            onClick={() => { setSelectedTeamIdx(i); setSelectedCategory(''); }} 
+                            className={`flex-shrink-0 w-32 py-6 rounded-[2rem] font-black uppercase text-[10px] transition-all flex flex-col items-center gap-3 border-2 ${!isMatch ? 'opacity-30' : selectedTeamIdx === i ? 'bg-pitch text-white border-pitch shadow-lg scale-105' : 'bg-gray-50 border-gray-100 text-gray-300'}`}
+                          >
+                             <span className="truncate w-full px-2 text-center">{t.name}</span>
+                          </button>
+                        );
+                     })}
+                  </div>
+               </div>
+               
+               {currentUser.teams[selectedTeamIdx] && (
+                 <div>
+                    <label className="text-[10px] font-black text-gray-400 uppercase mb-3 block tracking-widest">Selecione a Categoria para este Jogo</label>
+                    <div className="flex flex-wrap gap-2">
+                       {currentUser.teams[selectedTeamIdx].categories.map(cat => {
+                          const baseCat = selectedSlot.localTeamCategory || selectedSlot.bookedByTeamCategory;
+                          const allowed = selectedSlot.allowedOpponentCategories || [];
+                          const isAllowed = !baseCat && allowed.length === 0 || cat === baseCat || allowed.includes(cat);
+                          
+                          return (
+                            <button 
+                              key={cat} 
+                              disabled={!isAllowed}
+                              onClick={() => setSelectedCategory(cat)} 
+                              className={`px-6 py-3 rounded-full font-black uppercase text-[10px] border-2 ${!isAllowed ? 'opacity-20 cursor-not-allowed' : selectedCategory === cat ? 'bg-grass-500 text-pitch border-grass-500' : 'bg-gray-50 text-gray-400'}`}
+                            >
+                               {cat}
+                            </button>
+                          );
+                       })}
+                    </div>
+                 </div>
+               )}
+
                <Button onClick={handleBookingConfirm} disabled={!selectedCategory} className="w-full py-6 rounded-[2.5rem] font-black uppercase shadow-xl">Solicitar Agora</Button>
             </div>
           </div>

@@ -1,10 +1,10 @@
 
 import React, { useState, useEffect } from 'react';
-import { Plus, Trash2, Calendar, Clock, RefreshCcw, X, Swords, Edit3, MessageCircle, UserCheck, Phone, Edit, Building2, MapPin, LayoutGrid, Flag, Trophy, CheckCircle, XCircle, AlertCircle, CalendarPlus, Mail, Camera, UserPlus, Smartphone, CalendarDays, History as HistoryIcon, BadgeCheck, Ban, Lock, Search, Filter, Sparkles, ChevronDown, CalendarRange } from 'lucide-react';
+import { Plus, Trash2, Calendar, Clock, RefreshCcw, X, Swords, Edit3, MessageCircle, UserCheck, Phone, Edit, Building2, MapPin, LayoutGrid, Flag, Trophy, CheckCircle, XCircle, AlertCircle, CalendarPlus, Mail, Camera, UserPlus, Smartphone, CalendarDays, History as HistoryIcon, BadgeCheck, Ban, Lock, Search, Filter, Sparkles, ChevronDown, CalendarRange, Check } from 'lucide-react';
 import { Button } from '../components/Button';
 import { Field, MatchSlot, MatchType, User, CATEGORY_ORDER, RegisteredTeam, SPORTS, Gender } from '../types';
 import { api } from '../api';
-import { convertFileToBase64 } from '../utils';
+import { convertFileToBase64, getNeighboringCategories } from '../utils';
 
 interface FieldDashboardProps {
   categories: string[];
@@ -44,7 +44,8 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
   
   const [isLocalTeamSlot, setIsLocalTeamSlot] = useState(false);
   const [manualLocalTeamName, setManualLocalTeamName] = useState(field.name || 'Time da Casa');
-  const [manualLocalCategory, setManualLocalCategory] = useState('Livre');
+  const [manualLocalCategory, setManualLocalCategory] = useState(CATEGORY_ORDER[0]);
+  const [acceptNeighbors, setAcceptNeighbors] = useState(true);
 
   // States Filtros Agenda
   const [filterRange, setFilterRange] = useState<string>('7'); 
@@ -61,7 +62,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
   const [mensalistaEmail, setMensalistaEmail] = useState('');
   const [mensalistaDay, setMensalistaDay] = useState(1);
   const [mensalistaTime, setMensalistaTime] = useState('19:00');
-  const [mensalistaCategory, setMensalistaCategory] = useState('Livre');
+  const [mensalistaCategory, setMensalistaCategory] = useState(CATEGORY_ORDER[0]);
   const [mensalistaLogo, setMensalistaLogo] = useState('');
   const [mensalistaGender, setMensalistaGender] = useState<Gender>('MASCULINO');
   const [mensalistaSport, setMensalistaSport] = useState('Society');
@@ -76,6 +77,14 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
   useEffect(() => {
     loadMensalistas();
   }, [field.id]);
+
+  useEffect(() => {
+    // Garantir que a quadra selecionada exista após atualização de perfil
+    if (field.courts && field.courts.length > 0) {
+      if (!field.courts.includes(slotCourt)) setSlotCourt(field.courts[0]);
+      if (!field.courts.includes(mensalistaCourt)) setMensalistaCourt(field.courts[0]);
+    }
+  }, [field.courts]);
 
   const loadMensalistas = async () => {
     try {
@@ -95,7 +104,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
     setSlotSport(slot.sport);
     setIsLocalTeamSlot(slot.hasLocalTeam);
     setManualLocalTeamName(slot.localTeamName || field.name);
-    setManualLocalCategory(slot.localTeamCategory || 'Livre');
+    setManualLocalCategory(slot.localTeamCategory || CATEGORY_ORDER[0]);
     setShowAddSlotModal(true);
   };
 
@@ -137,6 +146,10 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
   const handleCreateOrUpdateSlot = async () => {
     setIsLoading(true);
     try {
+      const allowedCats = acceptNeighbors 
+        ? getNeighboringCategories(manualLocalCategory)
+        : [manualLocalCategory];
+
       const slotData = {
         fieldId: field.id,
         date: slotDate,
@@ -153,7 +166,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
         status: editingSlotId ? undefined : 'available',
         courtName: slotCourt,
         sport: slotSport,
-        allowedOpponentCategories: isLocalTeamSlot ? [manualLocalCategory] : []
+        allowedOpponentCategories: isLocalTeamSlot ? allowedCats : []
       } as any;
 
       if (editingSlotId) {
@@ -264,11 +277,6 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
          const matchOpponent = s.opponentTeamName?.toLowerCase().includes(term);
          if (!matchLocal && !matchOpponent) return false;
        }
-       if (filterTag !== 'TODOS') {
-          if (filterTag === 'TIME LOCAL' && (!s.hasLocalTeam && s.matchType !== 'FIXO')) return false;
-          if (filterTag === 'DISPONÍVEL' && (s.hasLocalTeam || s.matchType === 'FIXO' || s.status !== 'available')) return false;
-          if (filterTag === 'AGENDADO' && !s.opponentTeamName) return false;
-       }
        return true;
     })
     .sort((a,b) => {
@@ -276,19 +284,14 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
        return a.time.localeCompare(b.time);
     });
 
-  const nextMatchSlot = agendaSlots[0];
-  const listSlots = nextMatchSlot ? agendaSlots.slice(1) : agendaSlots;
-
   const getSlotBadges = (slot: MatchSlot) => {
     const badges = [];
     
-    // Status para o Dono do Campo (Regra de 2 times de fora inclusa)
     if (slot.status === 'confirmed') {
       badges.push({ label: 'JOGO CONFIRMADO', color: 'bg-grass-500 text-white', icon: <CheckCircle className="w-3 h-3"/> });
     } else if (slot.status === 'pending_verification') {
       badges.push({ label: 'SOLICITAÇÃO PENDENTE', color: 'bg-orange-500 text-white', icon: <AlertCircle className="w-3 h-3"/> });
     } else if (slot.bookedByTeamName && !slot.opponentTeamName) {
-      // Caso o primeiro time de fora agende (aguardando adversário)
       badges.push({ label: 'AGENDADO • AGUARDANDO ADVERSÁRIO', color: 'bg-yellow-400 text-pitch font-black', icon: <Swords className="w-3 h-3"/> });
     } else if (slot.matchType === 'FIXO' || slot.hasLocalTeam) {
       if (!slot.opponentTeamName) {
@@ -433,7 +436,6 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
           </div>
         )}
 
-        {/* Mantenha as outras abas como estavam, elas já suportam os dados básicos */}
         {activeTab === 'SOLICITACOES' && (
            <div className="space-y-4">
               {slots.filter(s => s.status === 'pending_verification').map(slot => (
@@ -465,6 +467,37 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
               ))}
            </div>
         )}
+
+        {activeTab === 'MENSALISTAS' && (
+          <div className="space-y-4">
+             {registeredTeams.map(t => (
+               <div key={t.id} className="bg-white p-6 rounded-[3rem] border shadow-sm space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                      <div className="w-14 h-14 bg-gray-50 rounded-2xl flex items-center justify-center border overflow-hidden">
+                        {t.logoUrl ? <img src={t.logoUrl} className="w-full h-full object-cover" /> : <div className="font-black text-pitch text-xl">{t.name.charAt(0)}</div>}
+                      </div>
+                      <div>
+                          <h4 className="font-black text-pitch uppercase leading-none">{t.name}</h4>
+                          <p className="text-[9px] font-black text-gray-400 uppercase mt-2 flex items-center gap-1">
+                             {['Dom','Seg','Ter','Qua','Qui','Sex','Sab'][Number(t.fixedDay)]} às {t.fixedTime}
+                          </p>
+                          <p className="text-[8px] font-bold text-grass-600 uppercase mt-1">{t.sport} • {t.courtName}</p>
+                      </div>
+                    </div>
+                    <div className="flex gap-2">
+                      <button onClick={() => { setEditingMensalista(t); setMensalistaName(t.name); setMensalistaPhone(t.captainPhone || ''); setShowAddMensalistaModal(true); }} className="p-3 text-gray-300 hover:text-pitch"><Edit className="w-5 h-5"/></button>
+                      <button onClick={() => { if(confirm("Remover mensalista?")) api.deleteRegisteredTeam(t.id).then(loadMensalistas); }} className="p-3 text-gray-300 hover:text-red-500"><Trash2 className="w-4 h-4"/></button>
+                    </div>
+                  </div>
+                  <Button variant="outline" onClick={() => handleGenerateRecurringSlots(t)} isLoading={isLoading} className="w-full py-4 rounded-2xl text-[9px] font-black uppercase flex items-center justify-center gap-2 border-dashed">
+                    <CalendarPlus className="w-4 h-4" /> Gerar Agenda Mensalista
+                  </Button>
+               </div>
+             ))}
+             <button onClick={() => { setEditingMensalista(null); setMensalistaName(''); setMensalistaPhone(''); setShowAddMensalistaModal(true); }} className="w-full py-5 border-2 border-dashed border-gray-200 rounded-[2rem] text-gray-400 font-black uppercase text-[10px]">Adicionar Novo Mensalista</button>
+          </div>
+        )}
       </div>
 
       {/* Modal Add/Edit Slot */}
@@ -488,37 +521,17 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                  </div>
                  <div className="grid grid-cols-2 gap-4">
                     <div className="bg-gray-50 p-4 rounded-2xl border">
-                       <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Duração (min)</label>
-                       <input type="number" className="w-full bg-transparent font-black outline-none" value={slotDuration} onChange={e => setSlotDuration(Number(e.target.value))} />
+                       <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Local (Quadra)</label>
+                       <select className="w-full bg-transparent font-black outline-none text-xs" value={slotCourt} onChange={e => setSlotCourt(e.target.value)}>
+                          {field.courts.map(c => <option key={c} value={c}>{c}</option>)}
+                       </select>
                     </div>
                     <div className="bg-gray-50 p-4 rounded-2xl border">
                        <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Preço Locação (R$)</label>
                        <input type="number" className="w-full bg-transparent font-black outline-none" value={slotPrice} onChange={e => setSlotPrice(Number(e.target.value))} />
                     </div>
                  </div>
-                 <div className="grid grid-cols-2 gap-4">
-                    <div className="bg-gray-50 p-4 rounded-2xl border">
-                       <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Esporte</label>
-                       <select className="w-full bg-transparent font-black outline-none text-xs" value={slotSport} onChange={e => setSlotSport(e.target.value)}>
-                          {SPORTS.map(s => <option key={s} value={s}>{s}</option>)}
-                       </select>
-                    </div>
-                    <div className="bg-gray-50 p-4 rounded-2xl border">
-                       <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Tipo de Partida</label>
-                       <select className="w-full bg-transparent font-black outline-none text-xs" value={slotMatchType} onChange={e => setSlotMatchType(e.target.value as MatchType)}>
-                          <option value="ALUGUEL">Aluguel Comum</option>
-                          <option value="AMISTOSO">Amistoso (Desafio)</option>
-                          <option value="FESTIVAL">Festival</option>
-                       </select>
-                    </div>
-                 </div>
-                 <div className="bg-gray-50 p-4 rounded-2xl border">
-                    <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Local (Quadra)</label>
-                    <select className="w-full bg-transparent font-black outline-none text-xs" value={slotCourt} onChange={e => setSlotCourt(e.target.value)}>
-                       {field.courts.map(c => <option key={c} value={c}>{c}</option>)}
-                    </select>
-                 </div>
-
+                 
                  <div className="bg-gray-50 p-4 rounded-2xl border flex items-center justify-between cursor-pointer" onClick={() => setIsLocalTeamSlot(!isLocalTeamSlot)}>
                     <div>
                         <h4 className="font-black text-pitch text-xs uppercase">Vincular Mandante?</h4>
@@ -530,17 +543,85 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                  </div>
 
                  {isLocalTeamSlot && (
-                    <div className="animate-in fade-in slide-in-from-top-2 space-y-4">
-                        <input className="w-full p-4 bg-gray-50 border rounded-xl text-xs font-bold" placeholder="Nome do Mandante" value={manualLocalTeamName} onChange={e => setManualLocalTeamName(e.target.value)} />
-                        <select className="w-full p-4 bg-gray-50 border rounded-xl text-xs font-bold" value={manualLocalCategory} onChange={e => setManualLocalCategory(e.target.value)}>
-                           {CATEGORY_ORDER.map(c => <option key={c} value={c}>{c}</option>)}
-                        </select>
+                    <div className="animate-in fade-in slide-in-from-top-2 space-y-4 bg-gray-50 p-4 rounded-2xl border">
+                        <input className="w-full p-4 bg-white border rounded-xl text-xs font-bold" placeholder="Nome do Mandante" value={manualLocalTeamName} onChange={e => setManualLocalTeamName(e.target.value)} />
+                        <div>
+                           <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Categoria Principal</label>
+                           <select className="w-full p-4 bg-white border rounded-xl text-xs font-bold" value={manualLocalCategory} onChange={e => setManualLocalCategory(e.target.value)}>
+                              {CATEGORY_ORDER.map(c => <option key={c} value={c}>{c}</option>)}
+                           </select>
+                        </div>
+                        <div className="flex items-center gap-2 cursor-pointer" onClick={() => setAcceptNeighbors(!acceptNeighbors)}>
+                           <div className={`w-5 h-5 rounded border flex items-center justify-center transition-all ${acceptNeighbors ? 'bg-pitch border-pitch text-white' : 'bg-white border-gray-300'}`}>
+                              {acceptNeighbors && <Check className="w-3 h-3" />}
+                           </div>
+                           <span className="text-[10px] font-black text-pitch uppercase">Aceitar categorias vizinhas (Matchmaking)</span>
+                        </div>
+                        {acceptNeighbors && (
+                           <p className="text-[8px] text-gray-400 font-bold uppercase italic">* Permitirá desafios de uma categoria acima e uma abaixo.</p>
+                        )}
                     </div>
                  )}
 
                  <Button onClick={handleCreateOrUpdateSlot} isLoading={isLoading} className="w-full py-6 rounded-[2.5rem] font-black uppercase shadow-xl">
                    {editingSlotId ? 'Atualizar Horário' : 'Criar Horário'}
                  </Button>
+              </div>
+           </div>
+        </div>
+      )}
+
+      {/* Modal Add Mensalista */}
+      {showAddMensalistaModal && (
+        <div className="fixed inset-0 bg-pitch/95 backdrop-blur-md z-[100] flex items-end">
+           <div className="bg-white w-full rounded-t-[3rem] p-10 animate-in slide-in-from-bottom duration-500 max-h-[90vh] overflow-y-auto pb-safe">
+              <div className="flex justify-between items-center mb-8">
+                 <h2 className="text-2xl font-black italic uppercase text-pitch">{editingMensalista ? 'Editar' : 'Novo Mensalista'}</h2>
+                 <button onClick={() => setShowAddMensalistaModal(false)} className="p-2 bg-gray-100 rounded-full"><X className="w-6 h-6"/></button>
+              </div>
+              <div className="space-y-6">
+                 <div className="grid grid-cols-2 gap-4">
+                    <div className="bg-gray-50 p-4 rounded-2xl border">
+                       <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Nome Time</label>
+                       <input className="w-full bg-transparent font-black outline-none text-pitch" value={mensalistaName} onChange={e => setMensalistaName(e.target.value)} />
+                    </div>
+                    <div className="bg-gray-50 p-4 rounded-2xl border">
+                       <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Categoria</label>
+                       <select className="w-full bg-transparent font-black outline-none text-xs" value={mensalistaCategory} onChange={e => setMensalistaCategory(e.target.value)}>
+                          {CATEGORY_ORDER.map(c => <option key={c} value={c}>{c}</option>)}
+                       </select>
+                    </div>
+                 </div>
+                 <div className="grid grid-cols-2 gap-4">
+                    <div className="bg-gray-50 p-4 rounded-2xl border">
+                       <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Esporte</label>
+                       <select className="w-full bg-transparent font-black outline-none text-xs" value={mensalistaSport} onChange={e => setMensalistaSport(e.target.value)}>
+                          {SPORTS.map(s => <option key={s} value={s}>{s}</option>)}
+                       </select>
+                    </div>
+                    <div className="bg-gray-50 p-4 rounded-2xl border">
+                       <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Local (Quadra)</label>
+                       <select className="w-full bg-transparent font-black outline-none text-xs" value={mensalistaCourt} onChange={e => setMensalistaCourt(e.target.value)}>
+                          {field.courts.map(c => <option key={c} value={c}>{c}</option>)}
+                       </select>
+                    </div>
+                 </div>
+                 <div className="grid grid-cols-2 gap-4">
+                    <div className="bg-gray-50 p-4 rounded-2xl border">
+                       <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Dia da Semana</label>
+                       <select className="w-full bg-transparent font-black outline-none text-xs uppercase" value={mensalistaDay} onChange={e => setMensalistaDay(Number(e.target.value))}>
+                          {['Dom','Seg','Ter','Qua','Qui','Sex','Sab'].map((d, i) => <option key={i} value={i}>{d}</option>)}
+                       </select>
+                    </div>
+                    <div className="bg-gray-50 p-4 rounded-2xl border">
+                       <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Horário</label>
+                       <input type="time" className="w-full bg-transparent font-black outline-none text-pitch" value={mensalistaTime} onChange={e => setMensalistaTime(e.target.value)} />
+                    </div>
+                 </div>
+                 <div className="bg-pitch/5 p-6 rounded-[2.5rem] border border-pitch/10 space-y-4">
+                    <input className="w-full p-4 bg-white rounded-xl border text-xs font-bold" placeholder="WhatsApp Capitão" value={mensalistaPhone} onChange={e => setMensalistaPhone(e.target.value)} />
+                 </div>
+                 <Button onClick={handleSaveMensalista} isLoading={isLoading} className="w-full py-6 rounded-[2.5rem] font-black uppercase text-xs shadow-xl">Salvar Mensalista</Button>
               </div>
            </div>
         </div>

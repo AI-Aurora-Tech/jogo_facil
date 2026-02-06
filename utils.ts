@@ -1,4 +1,6 @@
 
+import { CATEGORY_ORDER } from './types';
+
 export const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
   if (!lat1 || !lon1 || !lat2 || !lon2) return 0;
   
@@ -20,6 +22,17 @@ export const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2
 function deg2rad(deg: number) {
   return deg * (Math.PI / 180);
 }
+
+export const getNeighboringCategories = (baseCategory: string): string[] => {
+  const idx = CATEGORY_ORDER.indexOf(baseCategory);
+  if (idx === -1) return [baseCategory];
+  
+  const result = [baseCategory];
+  if (idx > 0) result.push(CATEGORY_ORDER[idx - 1]);
+  if (idx < CATEGORY_ORDER.length - 1) result.push(CATEGORY_ORDER[idx + 1]);
+  
+  return result;
+};
 
 export const convertFileToBase64 = (file: File): Promise<string> => {
   return new Promise((resolve, reject) => {
