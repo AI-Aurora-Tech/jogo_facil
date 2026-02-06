@@ -44,12 +44,13 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
 
   const todayStr = new Date().toISOString().split('T')[0];
   const userAllCategories = currentUser.teams?.flatMap(t => t.categories) || [];
+  const myTeamsNames = currentUser.teams?.map(t => t.name.toLowerCase()) || [];
 
   const filteredSlots = slots.filter(slot => {
     const field = fields.find(f => f.id === slot.fieldId);
     if (!field) return false;
 
-    // Filtros de busca básica
+    // Filtros de busca básica (aplicam-se a ambos os modos)
     if (filterDate && slot.date !== filterDate) return false;
     if (filterSport && slot.sport !== filterSport) return false;
     if (filterCategory) {
@@ -62,11 +63,20 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
       if (slot.date < todayStr) return false;
       if (field.ownerId === currentUser.id) return false;
 
-      const isAwaitingAdversary = (slot.bookedByTeamName || slot.hasLocalTeam) && !slot.opponentTeamName;
-      const isFullyAvailable = slot.status === 'available' && !slot.bookedByTeamName && !slot.hasLocalTeam;
+      // Logica: Mostrar se está vago OU se tem 1 time esperando adversário (mesmo se for mensalista/confirmado)
+      const hasFirstTeam = (slot.bookedByTeamName || slot.hasLocalTeam);
+      const hasOpponent = !!slot.opponentTeamName;
+      
+      // Se já tem os dois times, não aparece no Explorar
+      if (hasFirstTeam && hasOpponent) return false;
+
+      // Status deve permitir agendamento (available ou um agendamento incompleto)
+      const isAwaitingAdversary = hasFirstTeam && !hasOpponent;
+      const isFullyAvailable = slot.status === 'available' && !hasFirstTeam;
       
       if (!isAwaitingAdversary && !isFullyAvailable) return false;
 
+      // Verificação de Matchmaking de Categorias
       const allowedCats = slot.allowedOpponentCategories || [];
       const baseCategory = slot.localTeamCategory || slot.bookedByTeamCategory;
 
@@ -75,7 +85,13 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
           if (!canMatch) return false;
       }
     } else {
-      const isMyBooking = slot.bookedByUserId === currentUser.id || slot.opponentTeamPhone === currentUser.phoneNumber;
+      // ABA: MEUS JOGOS
+      // Verificamos por ID ou pelos Nomes dos Times para evitar que suma após confirmação
+      const isMyTeamInSlot = (slot.bookedByTeamName && myTeamsNames.includes(slot.bookedByTeamName.toLowerCase())) ||
+                             (slot.opponentTeamName && myTeamsNames.includes(slot.opponentTeamName.toLowerCase()));
+      
+      const isMyBooking = slot.bookedByUserId === currentUser.id || isMyTeamInSlot;
+      
       if (!isMyBooking) return false;
 
       if (myGamesSubTab === 'FUTUROS' && slot.date < todayStr) return false;
@@ -86,7 +102,10 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
   }).sort((a,b) => new Date(`${a.date}T${a.time}`).getTime() - new Date(`${b.date}T${b.time}`).getTime());
 
   const getStatusBadge = (slot: MatchSlot) => {
-    if (slot.status === 'confirmed') return { label: 'CONFIRMADO', color: 'bg-grass-500 text-white', icon: <CalendarCheck className="w-3 h-3"/> };
+    if (slot.status === 'confirmed') {
+       if (slot.opponentTeamName) return { label: 'JOGO CONFIRMADO', color: 'bg-grass-500 text-white', icon: <CalendarCheck className="w-3 h-3"/> };
+       return { label: 'AGUARDANDO ADVERSÁRIO', color: 'bg-yellow-100 text-yellow-700 font-bold', icon: <Swords className="w-3 h-3"/> };
+    }
     if (slot.status === 'pending_verification') return { label: 'AGUARDANDO APROVAÇÃO', color: 'bg-orange-100 text-orange-600', icon: <Clock className="w-3 h-3"/> };
     if ((slot.bookedByTeamName || slot.hasLocalTeam) && !slot.opponentTeamName) return { label: 'AGUARDANDO ADVERSÁRIO', color: 'bg-yellow-100 text-yellow-700 font-bold', icon: <Swords className="w-3 h-3"/> };
     return { label: 'DISPONÍVEL', color: 'bg-gray-100 text-gray-500', icon: <Clock className="w-3 h-3"/> };
@@ -213,6 +232,7 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
               ? calculateDistance(userCoords.lat, userCoords.lng, field.latitude, field.longitude) 
               : null;
             const status = getStatusBadge(slot);
+            const currentCategory = slot.localTeamCategory || slot.bookedByTeamCategory;
 
             return (
               <div key={slot.id} className="bg-white rounded-[2.5rem] border shadow-sm overflow-hidden group hover:border-pitch transition-all relative">
@@ -252,12 +272,17 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
                        <div className="w-10 h-10 bg-white rounded-xl border flex items-center justify-center overflow-hidden font-black text-xs text-pitch">
                           {slot.localTeamName?.charAt(0) || slot.bookedByTeamName?.charAt(0) || '?'}
                        </div>
-                       <div>
-                          <p className="text-[8px] font-black uppercase text-gray-400">Time Base</p>
+                       <div className="flex-1 min-w-0">
+                          <p className="text-[8px] font-black uppercase text-gray-400">Mandante</p>
                           <p className="text-sm font-black text-pitch uppercase truncate w-32">{slot.localTeamName || slot.bookedByTeamName || 'Em Aberto'}</p>
-                          <span className="text-[8px] font-bold text-indigo-600 uppercase">
-                            Categoria: {slot.localTeamCategory || slot.bookedByTeamCategory || 'A definir no agendamento'}
-                          </span>
+                          <div className="flex items-center gap-1">
+                             <span className="text-[8px] font-bold text-indigo-600 uppercase">
+                               Categoria: {currentCategory || 'A definir'}
+                             </span>
+                             {currentCategory && (
+                               <span className="bg-indigo-600 text-white text-[7px] font-black px-1.5 py-0.5 rounded uppercase">Alvo</span>
+                             )}
+                          </div>
                        </div>
                     </div>
                     {(slot.hasLocalTeam || slot.bookedByTeamName) && <Swords className="w-5 h-5 text-indigo-400" />}
@@ -301,7 +326,7 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
             <div className="space-y-8">
                {(selectedSlot.localTeamCategory || selectedSlot.bookedByTeamCategory || selectedSlot.allowedOpponentCategories?.length > 0) && (
                  <div className="bg-indigo-50 p-4 rounded-2xl border border-indigo-100">
-                    <p className="text-[10px] font-black text-indigo-600 uppercase mb-2">Categorias permitidas para este horário:</p>
+                    <p className="text-[10px] font-black text-indigo-600 uppercase mb-2">Categorias permitidas para este desafio:</p>
                     <div className="flex flex-wrap gap-2">
                        {(selectedSlot.allowedOpponentCategories?.length > 0 
                           ? selectedSlot.allowedOpponentCategories 
@@ -312,6 +337,7 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
                           </span>
                        ))}
                     </div>
+                    <p className="text-[8px] font-bold text-gray-400 uppercase mt-2 italic">* O sistema filtrou apenas seus times compatíveis.</p>
                  </div>
                )}
 
@@ -328,8 +354,11 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
                             key={i} 
                             disabled={!isMatch}
                             onClick={() => { setSelectedTeamIdx(i); setSelectedCategory(''); }} 
-                            className={`flex-shrink-0 w-32 py-6 rounded-[2rem] font-black uppercase text-[10px] transition-all flex flex-col items-center gap-3 border-2 ${!isMatch ? 'opacity-30 cursor-not-allowed' : selectedTeamIdx === i ? 'bg-pitch text-white border-pitch shadow-lg scale-105' : 'bg-gray-50 border-gray-100 text-gray-300'}`}
+                            className={`flex-shrink-0 w-32 py-6 rounded-[2rem] font-black uppercase text-[10px] transition-all flex flex-col items-center gap-3 border-2 ${!isMatch ? 'opacity-30 cursor-not-allowed grayscale' : selectedTeamIdx === i ? 'bg-pitch text-white border-pitch shadow-lg scale-105' : 'bg-gray-50 border-gray-100 text-gray-300'}`}
                           >
+                             <div className="w-12 h-12 bg-white rounded-xl border flex items-center justify-center overflow-hidden font-black text-pitch">
+                                {t.logoUrl ? <img src={t.logoUrl} className="w-full h-full object-cover" /> : t.name.charAt(0)}
+                             </div>
                              <span className="truncate w-full px-2 text-center">{t.name}</span>
                           </button>
                         );
