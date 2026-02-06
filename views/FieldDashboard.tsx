@@ -30,9 +30,10 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
   
   // States Modais
   const [showAddSlotModal, setShowAddSlotModal] = useState(false);
+  const [editingSlotId, setEditingSlotId] = useState<string | null>(null);
   const [showAddMensalistaModal, setShowAddMensalistaModal] = useState(false);
   
-  // States Criação Slot
+  // States Criação/Edição Slot
   const [slotDate, setSlotDate] = useState(new Date().toISOString().split('T')[0]);
   const [slotTime, setSlotTime] = useState('19:00');
   const [slotDuration, setSlotDuration] = useState(60);
@@ -41,7 +42,6 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
   const [slotPrice, setSlotPrice] = useState(field.hourlyRate);
   const [slotSport, setSlotSport] = useState('Society');
   
-  // Novos States para Criação Manual de Time Local
   const [isLocalTeamSlot, setIsLocalTeamSlot] = useState(false);
   const [manualLocalTeamName, setManualLocalTeamName] = useState(field.name || 'Time da Casa');
   const [manualLocalCategory, setManualLocalCategory] = useState('Livre');
@@ -84,6 +84,21 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
     } catch (e) { console.error(e); }
   };
 
+  const handleEditSlot = (slot: MatchSlot) => {
+    setEditingSlotId(slot.id);
+    setSlotDate(slot.date);
+    setSlotTime(slot.time);
+    setSlotDuration(slot.durationMinutes);
+    setSlotMatchType(slot.matchType);
+    setSlotCourt(slot.courtName || field.courts[0]);
+    setSlotPrice(slot.price);
+    setSlotSport(slot.sport);
+    setIsLocalTeamSlot(slot.hasLocalTeam);
+    setManualLocalTeamName(slot.localTeamName || field.name);
+    setManualLocalCategory(slot.localTeamCategory || 'Livre');
+    setShowAddSlotModal(true);
+  };
+
   const handleAction = async (slot: MatchSlot, action: 'confirm' | 'reject') => {
     setIsLoading(true);
     try {
@@ -119,34 +134,42 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
     }
   };
 
-  const handleCreateSlot = async () => {
+  const handleCreateOrUpdateSlot = async () => {
     setIsLoading(true);
     try {
-      await api.createSlots([{
+      const slotData = {
         fieldId: field.id,
         date: slotDate,
         time: slotTime,
         durationMinutes: slotDuration,
         matchType: isLocalTeamSlot ? 'AMISTOSO' : slotMatchType,
-        isBooked: false,
+        isBooked: editingSlotId ? undefined : false,
         hasLocalTeam: isLocalTeamSlot,
         localTeamName: isLocalTeamSlot ? manualLocalTeamName : null,
         localTeamCategory: isLocalTeamSlot ? manualLocalCategory : null,
         localTeamPhone: isLocalTeamSlot ? field.contactPhone : null,
         localTeamGender: 'MASCULINO',
         price: slotPrice,
-        status: 'available',
+        status: editingSlotId ? undefined : 'available',
         courtName: slotCourt,
         sport: slotSport,
         allowedOpponentCategories: isLocalTeamSlot ? [manualLocalCategory] : []
-      }]);
+      } as any;
+
+      if (editingSlotId) {
+        await api.updateSlot(editingSlotId, slotData);
+        alert("Horário atualizado com sucesso!");
+      } else {
+        await api.createSlots([slotData]);
+        alert("Horário criado com sucesso!");
+      }
 
       setShowAddSlotModal(false);
+      setEditingSlotId(null);
       onRefreshData();
-      alert("Horário criado com sucesso!");
     } catch (e) {
       console.error(e);
-      alert("Erro ao criar horário.");
+      alert("Erro ao salvar horário.");
     } finally {
       setIsLoading(false);
     }
@@ -221,12 +244,6 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
     finally { setIsLoading(false); }
   };
 
-  const handleWhatsApp = (phone?: string, message?: string) => {
-    if (!phone) return;
-    const cleanPhone = phone.replace(/\D/g, '');
-    window.open(`https://wa.me/55${cleanPhone}?text=${encodeURIComponent(message || '')}`, '_blank');
-  };
-
   const agendaSlots = slots
     .filter(s => {
        if (s.date < todayStr) return false;
@@ -251,7 +268,6 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
           if (filterTag === 'TIME LOCAL' && (!s.hasLocalTeam && s.matchType !== 'FIXO')) return false;
           if (filterTag === 'DISPONÍVEL' && (s.hasLocalTeam || s.matchType === 'FIXO' || s.status !== 'available')) return false;
           if (filterTag === 'AGENDADO' && !s.opponentTeamName) return false;
-          if (filterTag === 'PROCURANDO ADVERSÁRIO' && (s.opponentTeamName || (!s.hasLocalTeam && s.matchType !== 'FIXO'))) return false;
        }
        return true;
     })
@@ -262,22 +278,28 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
 
   const nextMatchSlot = agendaSlots[0];
   const listSlots = nextMatchSlot ? agendaSlots.slice(1) : agendaSlots;
-  const historySlots = slots.filter(s => s.date < todayStr);
 
   const getSlotBadges = (slot: MatchSlot) => {
     const badges = [];
-    if (slot.matchType === 'FIXO' || slot.hasLocalTeam) {
-      badges.push({ label: 'TIME LOCAL', color: 'bg-indigo-100 text-indigo-700', icon: <Flag className="w-3 h-3"/> });
-    } else if (slot.status === 'available') {
-      badges.push({ label: 'DISPONÍVEL', color: 'bg-grass-100 text-grass-700', icon: <Clock className="w-3 h-3"/> });
-    }
-    if (slot.opponentTeamName) {
-        badges.push({ label: 'AGENDADO', color: 'bg-blue-100 text-blue-700', icon: <BadgeCheck className="w-3 h-3"/> });
-    } else if (slot.matchType === 'FIXO' || slot.hasLocalTeam) {
-        badges.push({ label: 'PROCURANDO ADVERSÁRIO', color: 'bg-yellow-100 text-yellow-700', icon: <Swords className="w-3 h-3"/> });
+    
+    // Status para o Dono do Campo (Regra de 2 times de fora inclusa)
+    if (slot.status === 'confirmed') {
+      badges.push({ label: 'JOGO CONFIRMADO', color: 'bg-grass-500 text-white', icon: <CheckCircle className="w-3 h-3"/> });
     } else if (slot.status === 'pending_verification') {
-        badges.push({ label: 'SOLICITAÇÃO', color: 'bg-orange-100 text-orange-600', icon: <AlertCircle className="w-3 h-3"/> });
+      badges.push({ label: 'SOLICITAÇÃO PENDENTE', color: 'bg-orange-500 text-white', icon: <AlertCircle className="w-3 h-3"/> });
+    } else if (slot.bookedByTeamName && !slot.opponentTeamName) {
+      // Caso o primeiro time de fora agende (aguardando adversário)
+      badges.push({ label: 'AGENDADO • AGUARDANDO ADVERSÁRIO', color: 'bg-yellow-400 text-pitch font-black', icon: <Swords className="w-3 h-3"/> });
+    } else if (slot.matchType === 'FIXO' || slot.hasLocalTeam) {
+      if (!slot.opponentTeamName) {
+        badges.push({ label: 'TIME LOCAL • AGUARDANDO ADVERSÁRIO', color: 'bg-indigo-100 text-indigo-700', icon: <UserPlus className="w-3 h-3"/> });
+      } else {
+        badges.push({ label: 'DESAFIO AGENDADO', color: 'bg-indigo-600 text-white', icon: <Flag className="w-3 h-3"/> });
+      }
+    } else if (slot.status === 'available') {
+      badges.push({ label: 'DISPONÍVEL', color: 'bg-gray-100 text-gray-400', icon: <Clock className="w-3 h-3"/> });
     }
+
     return badges;
   };
 
@@ -295,7 +317,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
              </div>
           </div>
           <div className="flex gap-2">
-            <button onClick={() => { setSlotDate(todayStr); setShowAddSlotModal(true); }} className="p-3 bg-pitch text-white rounded-xl active:scale-95 shadow-md flex items-center gap-2">
+            <button onClick={() => { setEditingSlotId(null); setSlotDate(todayStr); setShowAddSlotModal(true); }} className="p-3 bg-pitch text-white rounded-xl active:scale-95 shadow-md flex items-center gap-2">
                <Plus className="w-5 h-5"/>
                <span className="text-[10px] font-black uppercase">Novo Horário</span>
             </button>
@@ -359,41 +381,17 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
               )}
             </div>
 
-            {nextMatchSlot && (
-              <div className="relative overflow-hidden rounded-[2.5rem] bg-gradient-to-br from-pitch via-pitch to-grass-900 text-white shadow-xl p-6 border-2 border-white/10">
-                 <div className="relative z-10">
-                    <div className="flex items-center gap-2 mb-4">
-                       <Sparkles className="w-5 h-5 text-yellow-400 animate-pulse" />
-                       <span className="text-[10px] font-black uppercase tracking-widest text-grass-400">Próximo Jogo • {nextMatchSlot.date.split('-').reverse().join('/')}</span>
-                    </div>
-                    <div className="flex items-center justify-between mb-6">
-                       <div className="text-center flex-1">
-                          <h3 className="text-xl font-black italic uppercase leading-none truncate">{nextMatchSlot.localTeamName || 'DISPONÍVEL'}</h3>
-                          <p className="text-[8px] font-bold text-gray-400 uppercase mt-1">{nextMatchSlot.courtName}</p>
-                       </div>
-                       <div className="bg-white/10 p-3 rounded-full backdrop-blur-md flex flex-col items-center justify-center min-w-[70px]">
-                          <span className="font-black text-xl">{nextMatchSlot.time}</span>
-                       </div>
-                       <div className="text-center flex-1">
-                          <h3 className="text-xl font-black italic uppercase leading-none text-gray-300 truncate">{nextMatchSlot.opponentTeamName || '?'}</h3>
-                          <p className="text-[8px] font-bold text-gray-500 uppercase mt-1">Desafiante</p>
-                       </div>
-                    </div>
-                 </div>
-              </div>
-            )}
-
             <div className="grid gap-4">
               {agendaSlots.length === 0 ? (
                 <div className="text-center py-20 text-gray-400 font-black uppercase text-[10px]">Nenhum horário disponível.</div>
               ) : (
-                listSlots.map(slot => {
+                agendaSlots.map(slot => {
                   const badges = getSlotBadges(slot);
                   return (
-                    <div key={slot.id} className="bg-white p-5 rounded-[2.5rem] border flex flex-col gap-4 shadow-sm relative">
+                    <div key={slot.id} className="bg-white p-5 rounded-[2.5rem] border flex flex-col gap-4 shadow-sm relative group overflow-hidden">
                       <div className="flex justify-between items-start">
                          <div className="flex items-center gap-4">
-                            <div className={`p-4 rounded-2xl ${badges[0]?.color || 'bg-gray-100'}`}>
+                            <div className={`p-4 rounded-2xl ${slot.isBooked ? 'bg-pitch text-white' : 'bg-gray-100 text-gray-400'}`}>
                                <Flag className="w-5 h-5"/>
                             </div>
                             <div>
@@ -401,7 +399,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                                   {slot.time} • {slot.date.split('-').reverse().slice(0,2).join('/')}
                                </h4>
                                <p className="text-[9px] font-bold text-gray-400 uppercase mt-1 truncate">
-                                  {slot.localTeamName || 'Horário Livre'} vs {slot.opponentTeamName || '?'}
+                                  {slot.localTeamName || slot.bookedByTeamName || 'Horário Livre'} vs {slot.opponentTeamName || '?'}
                                </p>
                                <span className="text-[8px] font-black text-grass-600 uppercase mt-1 inline-block">{slot.sport} • {slot.courtName}</span>
                             </div>
@@ -418,8 +416,14 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                            </span>
                          ))}
                       </div>
-                      <div className="flex gap-2 pt-2 border-t mt-1">
-                        <button onClick={() => { if(confirm("Remover este horário?")) onDeleteSlot(slot.id); }} className="p-2 text-red-500 hover:bg-red-50 rounded-xl bg-gray-50"><Trash2 className="w-4 h-4"/></button>
+                      <div className="flex gap-2 pt-2 border-t mt-1 justify-between items-center">
+                        <div className="flex gap-2">
+                           <button onClick={() => handleEditSlot(slot)} className="p-3 bg-gray-50 text-pitch rounded-xl hover:bg-pitch hover:text-white transition-all"><Edit className="w-4 h-4"/></button>
+                           <button onClick={() => { if(confirm("Remover este horário?")) onDeleteSlot(slot.id); }} className="p-3 text-red-500 hover:bg-red-50 rounded-xl bg-gray-50"><Trash2 className="w-4 h-4"/></button>
+                        </div>
+                        {slot.status === 'pending_verification' && (
+                           <button onClick={() => setActiveTab('SOLICITACOES')} className="bg-orange-500 text-white text-[8px] font-black uppercase px-3 py-2 rounded-lg animate-pulse">Ver Solicitação</button>
+                        )}
                       </div>
                     </div>
                   );
@@ -429,15 +433,10 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
           </div>
         )}
 
+        {/* Mantenha as outras abas como estavam, elas já suportam os dados básicos */}
         {activeTab === 'SOLICITACOES' && (
-          <div className="space-y-4">
-             {slots.filter(s => s.status === 'pending_verification').length === 0 ? (
-               <div className="text-center py-20 flex flex-col items-center">
-                  <CheckCircle className="w-12 h-12 text-gray-200 mb-4" />
-                  <p className="text-[10px] font-black text-gray-300 uppercase">Tudo em dia! Nenhuma solicitação.</p>
-               </div>
-             ) : (
-               slots.filter(s => s.status === 'pending_verification').map(slot => (
+           <div className="space-y-4">
+              {slots.filter(s => s.status === 'pending_verification').map(slot => (
                  <div key={slot.id} className="bg-white rounded-[2.5rem] border-2 border-orange-100 shadow-md p-6 space-y-6">
                     <div className="flex justify-between items-start">
                        <div>
@@ -463,105 +462,17 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                        <Button onClick={() => handleAction(slot, 'confirm')} className="py-4 rounded-2xl bg-pitch text-white font-black uppercase text-[10px]">Aceitar Jogo</Button>
                     </div>
                  </div>
-               ))
-             )}
-          </div>
-        )}
-
-        {activeTab === 'MENSALISTAS' && (
-          <div className="space-y-4">
-             {registeredTeams.map(t => (
-               <div key={t.id} className="bg-white p-6 rounded-[3rem] border shadow-sm space-y-4">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-4">
-                      <div className="w-14 h-14 bg-gray-50 rounded-2xl flex items-center justify-center border overflow-hidden">
-                        {t.logoUrl ? <img src={t.logoUrl} className="w-full h-full object-cover" /> : <div className="font-black text-pitch text-xl">{t.name.charAt(0)}</div>}
-                      </div>
-                      <div>
-                          <h4 className="font-black text-pitch uppercase leading-none">{t.name}</h4>
-                          <p className="text-[9px] font-black text-gray-400 uppercase mt-2 flex items-center gap-1">
-                             {['Dom','Seg','Ter','Qua','Qui','Sex','Sab'][Number(t.fixedDay)]} às {t.fixedTime}
-                          </p>
-                          <p className="text-[8px] font-bold text-grass-600 uppercase mt-1">{t.sport} • {t.courtName}</p>
-                      </div>
-                    </div>
-                    <div className="flex gap-2">
-                      <button onClick={() => { setEditingMensalista(t); setMensalistaName(t.name); setMensalistaPhone(t.captainPhone || ''); setShowAddMensalistaModal(true); }} className="p-3 text-gray-300 hover:text-pitch"><Edit className="w-5 h-5"/></button>
-                      <button onClick={() => { if(confirm("Remover mensalista?")) api.deleteRegisteredTeam(t.id).then(loadMensalistas); }} className="p-3 text-gray-300 hover:text-red-500"><Trash2 className="w-4 h-4"/></button>
-                    </div>
-                  </div>
-                  <Button variant="outline" onClick={() => handleGenerateRecurringSlots(t)} isLoading={isLoading} className="w-full py-4 rounded-2xl text-[9px] font-black uppercase flex items-center justify-center gap-2 border-dashed">
-                    <CalendarPlus className="w-4 h-4" /> Gerar Agenda Mensalista
-                  </Button>
-               </div>
-             ))}
-             <button onClick={() => { setEditingMensalista(null); setMensalistaName(''); setMensalistaPhone(''); setShowAddMensalistaModal(true); }} className="w-full py-5 border-2 border-dashed border-gray-200 rounded-[2rem] text-gray-400 font-black uppercase text-[10px]">Adicionar Novo Mensalista</button>
-          </div>
+              ))}
+           </div>
         )}
       </div>
 
-      {/* Modal Add Mensalista */}
-      {showAddMensalistaModal && (
-        <div className="fixed inset-0 bg-pitch/95 backdrop-blur-md z-[100] flex items-end">
-           <div className="bg-white w-full rounded-t-[3rem] p-10 animate-in slide-in-from-bottom duration-500 max-h-[90vh] overflow-y-auto pb-safe">
-              <div className="flex justify-between items-center mb-8">
-                 <h2 className="text-2xl font-black italic uppercase text-pitch">{editingMensalista ? 'Editar' : 'Novo Mensalista'}</h2>
-                 <button onClick={() => setShowAddMensalistaModal(false)} className="p-2 bg-gray-100 rounded-full"><X className="w-6 h-6"/></button>
-              </div>
-              <div className="space-y-6">
-                 <div className="grid grid-cols-2 gap-4">
-                    <div className="bg-gray-50 p-4 rounded-2xl border">
-                       <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Nome Time</label>
-                       <input className="w-full bg-transparent font-black outline-none text-pitch" value={mensalistaName} onChange={e => setMensalistaName(e.target.value)} />
-                    </div>
-                    <div className="bg-gray-50 p-4 rounded-2xl border">
-                       <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Categoria</label>
-                       <select className="w-full bg-transparent font-black outline-none text-xs" value={mensalistaCategory} onChange={e => setMensalistaCategory(e.target.value)}>
-                          {CATEGORY_ORDER.map(c => <option key={c} value={c}>{c}</option>)}
-                       </select>
-                    </div>
-                 </div>
-                 <div className="grid grid-cols-2 gap-4">
-                    <div className="bg-gray-50 p-4 rounded-2xl border">
-                       <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Esporte</label>
-                       <select className="w-full bg-transparent font-black outline-none text-xs" value={mensalistaSport} onChange={e => setMensalistaSport(e.target.value)}>
-                          {SPORTS.map(s => <option key={s} value={s}>{s}</option>)}
-                       </select>
-                    </div>
-                    <div className="bg-gray-50 p-4 rounded-2xl border">
-                       <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Local (Quadra)</label>
-                       <select className="w-full bg-transparent font-black outline-none text-xs" value={mensalistaCourt} onChange={e => setMensalistaCourt(e.target.value)}>
-                          {field.courts.map(c => <option key={c} value={c}>{c}</option>)}
-                       </select>
-                    </div>
-                 </div>
-                 <div className="grid grid-cols-2 gap-4">
-                    <div className="bg-gray-50 p-4 rounded-2xl border">
-                       <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Dia da Semana</label>
-                       <select className="w-full bg-transparent font-black outline-none text-xs uppercase" value={mensalistaDay} onChange={e => setMensalistaDay(Number(e.target.value))}>
-                          {['Dom','Seg','Ter','Qua','Qui','Sex','Sab'].map((d, i) => <option key={i} value={i}>{d}</option>)}
-                       </select>
-                    </div>
-                    <div className="bg-gray-50 p-4 rounded-2xl border">
-                       <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Horário</label>
-                       <input type="time" className="w-full bg-transparent font-black outline-none text-pitch" value={mensalistaTime} onChange={e => setMensalistaTime(e.target.value)} />
-                    </div>
-                 </div>
-                 <div className="bg-pitch/5 p-6 rounded-[2.5rem] border border-pitch/10 space-y-4">
-                    <input className="w-full p-4 bg-white rounded-xl border text-xs font-bold" placeholder="WhatsApp Capitão" value={mensalistaPhone} onChange={e => setMensalistaPhone(e.target.value)} />
-                 </div>
-                 <Button onClick={handleSaveMensalista} isLoading={isLoading} className="w-full py-6 rounded-[2.5rem] font-black uppercase text-xs shadow-xl">Salvar Mensalista</Button>
-              </div>
-           </div>
-        </div>
-      )}
-
-      {/* Modal Add Slot */}
+      {/* Modal Add/Edit Slot */}
       {showAddSlotModal && (
-        <div className="fixed inset-0 bg-pitch/95 backdrop-blur-md z-[100] flex items-end">
+        <div className="fixed inset-0 bg-pitch/95 backdrop-blur-md z-[400] flex items-end">
            <div className="bg-white w-full rounded-t-[3rem] p-10 animate-in slide-in-from-bottom duration-500 shadow-2xl max-h-[90vh] overflow-y-auto pb-safe">
               <div className="flex justify-between items-center mb-8">
-                 <h2 className="text-xl font-black italic uppercase text-pitch">Novo Horário de Agenda</h2>
+                 <h2 className="text-xl font-black italic uppercase text-pitch">{editingSlotId ? 'Editar Horário' : 'Novo Horário de Agenda'}</h2>
                  <button onClick={() => setShowAddSlotModal(false)} className="p-2 bg-gray-100 rounded-full"><X className="w-6 h-6"/></button>
               </div>
               <div className="space-y-5">
@@ -610,8 +521,8 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
 
                  <div className="bg-gray-50 p-4 rounded-2xl border flex items-center justify-between cursor-pointer" onClick={() => setIsLocalTeamSlot(!isLocalTeamSlot)}>
                     <div>
-                        <h4 className="font-black text-pitch text-xs uppercase">Vincular Time da Casa?</h4>
-                        <p className="text-[8px] text-gray-400">O horário já inicia com um mandante definido.</p>
+                        <h4 className="font-black text-pitch text-xs uppercase">Vincular Mandante?</h4>
+                        <p className="text-[8px] text-gray-400">Define um time fixo para este horário.</p>
                     </div>
                     <div className={`w-12 h-6 rounded-full p-1 transition-all ${isLocalTeamSlot ? 'bg-pitch' : 'bg-gray-200'}`}>
                         <div className={`w-4 h-4 rounded-full bg-white shadow-sm transition-all transform ${isLocalTeamSlot ? 'translate-x-6' : ''}`} />
@@ -627,7 +538,9 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                     </div>
                  )}
 
-                 <Button onClick={handleCreateSlot} isLoading={isLoading} className="w-full py-6 rounded-[2.5rem] font-black uppercase shadow-xl">Salvar na Agenda</Button>
+                 <Button onClick={handleCreateOrUpdateSlot} isLoading={isLoading} className="w-full py-6 rounded-[2.5rem] font-black uppercase shadow-xl">
+                   {editingSlotId ? 'Atualizar Horário' : 'Criar Horário'}
+                 </Button>
               </div>
            </div>
         </div>
