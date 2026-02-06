@@ -37,7 +37,6 @@ export const api = {
     const normalizedEmail = userFields.email.toLowerCase().trim();
 
     let finalRole = userFields.role;
-    // SUPER ADMIN FORCE LOGIC
     if (normalizedEmail === 'ai.auroratech@gmail.com') {
       finalRole = UserRole.SUPER_ADMIN;
     }
@@ -188,7 +187,8 @@ export const api = {
         imageUrl: f.image_url,
         contactPhone: f.contact_phone,
         latitude: f.latitude,
-        longitude: f.longitude
+        longitude: f.longitude,
+        courts: f.courts || []
     }));
   },
 
@@ -222,6 +222,10 @@ export const api = {
       isBooked: s.is_booked,
       hasLocalTeam: s.has_local_team,
       localTeamName: s.local_team_name,
+      localTeamCategory: s.local_team_category,
+      localTeamPhone: s.local_team_phone,
+      localTeamLogoUrl: s.local_team_logo_url,
+      localTeamGender: s.local_team_gender,
       bookedByUserId: s.booked_by_user_id,
       bookedByTeamName: s.booked_by_team_name,
       bookedByTeamCategory: s.booked_by_category,
@@ -234,7 +238,9 @@ export const api = {
       price: s.price,
       allowedOpponentCategories: s.allowed_opponent_categories || [],
       receiptUrl: s.receipt_url,
-      aiVerificationResult: s.ai_verification_result
+      aiVerificationResult: s.ai_verification_result,
+      courtName: s.court_name,
+      sport: s.sport
     })) as unknown as MatchSlot[];
   },
 
@@ -243,13 +249,17 @@ export const api = {
       field_id: s.fieldId,
       date: s.date,
       time: s.time,
+      duration_minutes: s.durationMinutes,
       match_type: s.matchType || 'ALUGUEL',
       is_booked: s.isBooked || false,
       has_local_team: s.hasLocalTeam || false,
       local_team_name: s.localTeamName || null,
+      local_team_category: s.localTeamCategory || null,
       price: s.price,
       status: s.status || 'available',
-      allowed_opponent_categories: s.allowedOpponentCategories || []
+      allowed_opponent_categories: s.allowedOpponentCategories || [],
+      court_name: s.courtName,
+      sport: s.sport
     }));
     await supabase.from('match_slot').insert(payload);
   },
@@ -268,6 +278,11 @@ export const api = {
     if (data.bookedByUserId !== undefined) payload.booked_by_user_id = data.bookedByUserId;
     if (data.bookedByTeamCategory !== undefined) payload.booked_by_category = data.bookedByTeamCategory;
     
+    // Se o time agendar como aluguel e não houver mandante, ele define a categoria base
+    if (data.bookedByTeamCategory && !payload.local_team_category) {
+        payload.local_team_category = data.bookedByTeamCategory;
+    }
+
     await supabase.from('match_slot').update(payload).eq('id', slotId);
   },
 

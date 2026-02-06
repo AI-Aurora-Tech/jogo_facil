@@ -1,5 +1,4 @@
 
-
 export enum UserRole {
   GUEST = 'GUEST',
   ADMIN = 'ADMIN',
@@ -116,9 +115,6 @@ export interface RegisteredTeam {
   courtName: string;
 }
 
-/**
- * Result of the AI verification process for payment receipts.
- */
 export interface VerificationResult {
   isValid: boolean;
   amountFound: number | null;
@@ -126,9 +122,6 @@ export interface VerificationResult {
   reason: string;
 }
 
-/**
- * Represents a pending update for administrative approval.
- */
 export interface PendingUpdate {
   id: string;
   requesterId: string;
@@ -141,7 +134,7 @@ export interface PendingUpdate {
 
 export const CATEGORY_ORDER = [
   "Sub-8", "Sub-9", "Sub-10", "Sub-11", "Sub-12", "Sub-13", "Sub-14", "Sub-15", "Sub-16", "Sub-17", 
-  "Sport", "35+", "40+", "45+", "50+", "60+", "70+"
+  "Sport", "35+", "40+", "45+", "50+", "60+", "70+", "Livre", "Principal"
 ];
 
-export const SPORTS = ["Futebol", "Vôlei", "Handball", "Basquete", "Futsal", "Tênis", "Beach Tennis"];
+export const SPORTS = ["Futebol", "Society", "Futsal", "Vôlei", "Handball", "Basquete", "Tênis", "Beach Tennis"];
