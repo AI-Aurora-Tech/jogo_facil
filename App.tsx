@@ -7,7 +7,8 @@ import { FieldDashboard } from './views/FieldDashboard';
 import { TeamDashboard } from './views/TeamDashboard';
 import { EditProfileModal } from './components/EditProfileModal';
 import { api } from './api';
-import { RefreshCw, Settings, Building2, Shield, Search, Loader2, Bell, X, Info, History, KeyRound, Eye, LogOut, Smartphone, Download, Share } from 'lucide-react';
+import { RefreshCw, Settings, Building2, Shield, Search, Loader2, Bell, X, Info, History, KeyRound, Eye, LogOut, Smartphone, Download, Share, Trophy } from 'lucide-react';
+import { supabase } from './supabaseClient'; // Importação direta para Realtime
 
 const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
@@ -32,6 +33,21 @@ const App: React.FC = () => {
   const [showInstallBanner, setShowInstallBanner] = useState(false);
   const [isIOS, setIsIOS] = useState(false);
   const [isStandalone, setIsStandalone] = useState(false);
+
+  // Função para atualizar o Badge do App (Contador no ícone)
+  const updateAppBadge = (count: number) => {
+    if ('setAppBadge' in navigator) {
+      try {
+        if (count > 0) {
+          (navigator as any).setAppBadge(count);
+        } else {
+          (navigator as any).clearAppBadge();
+        }
+      } catch (e) {
+        console.warn("Badging API not supported or failed", e);
+      }
+    }
+  };
 
   useEffect(() => {
     // Detectar evento de instalação (Android/Desktop)
@@ -83,8 +99,8 @@ const App: React.FC = () => {
     setDeferredPrompt(null);
   };
 
-  const refreshData = useCallback(async () => {
-    setIsLoading(true);
+  const refreshData = useCallback(async (isAutoRefresh = false) => {
+    if (!isAutoRefresh) setIsLoading(true);
     try {
       const [f, s, cats] = await Promise.all([
         api.getFields().catch(() => [] as Field[]),
@@ -97,25 +113,58 @@ const App: React.FC = () => {
       setCategories(cats);
       
       const saved = localStorage.getItem('jf_session_user');
-      if (saved) {
-        try {
-          const u = JSON.parse(saved);
-          const notifs = await api.getNotifications(u.id).catch(() => []);
+      const currentUser = impersonatingUser || (saved ? JSON.parse(saved) : null);
+      
+      if (currentUser) {
+          const notifs = await api.getNotifications(currentUser.id).catch(() => []);
           setNotifications(notifs);
+          
+          const unreadCount = notifs.filter(n => !n.read).length;
+          updateAppBadge(unreadCount);
 
-          if (u?.role === UserRole.SUPER_ADMIN) {
+          if (currentUser.role === UserRole.SUPER_ADMIN) {
             const users = await api.getAllUsers().catch(() => []);
             setAllUsers(users);
           }
-        } catch (e) { console.error("Session parse error", e); }
       }
     } catch (e) { 
       console.error("Global Refresh Error:", e); 
     } finally { 
-      setIsLoading(false); 
+      if (!isAutoRefresh) setIsLoading(false);
       setIsInitialLoading(false);
     }
-  }, []);
+  }, [impersonatingUser]);
+
+  // Efeito para Supabase Realtime (Notificações Automáticas)
+  useEffect(() => {
+    const currentUser = impersonatingUser || user;
+    if (!currentUser) return;
+
+    // Canal para ouvir INSERT na tabela 'notification' para este usuário
+    const channel = supabase
+      .channel('realtime-notifications')
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'notification',
+          filter: `user_id=eq.${currentUser.id}`,
+        },
+        (payload) => {
+          console.log('Nova notificação recebida!', payload);
+          // Tocar um som sutil (opcional)
+          // const audio = new Audio('/notification.mp3'); audio.play().catch(() => {});
+          
+          refreshData(true); // Atualiza dados sem loading screen intrusivo
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user, impersonatingUser, refreshData]);
 
   useEffect(() => {
     const init = async () => {
@@ -192,7 +241,13 @@ const App: React.FC = () => {
   };
 
   const handleNotificationClick = async (n: Notification) => {
-    if (!n.read) await api.markNotificationAsRead(n.id);
+    if (!n.read) {
+      await api.markNotificationAsRead(n.id);
+      // Atualizar badge localmente rápido
+      const unreadCount = notifications.filter(not => !not.read && not.id !== n.id).length;
+      updateAppBadge(unreadCount);
+    }
+    
     setShowNotifications(false);
     await refreshData();
     
@@ -232,6 +287,7 @@ const App: React.FC = () => {
 
   const handleLogout = () => {
     localStorage.removeItem('jf_session_user');
+    updateAppBadge(0);
     window.location.href = '/';
   };
 
@@ -286,7 +342,7 @@ const App: React.FC = () => {
     <div className="min-h-screen bg-gray-50 flex flex-col pb-safe relative">
       {/* PWA Install Banner */}
       {showInstallBanner && !isStandalone && (
-        <div className="bg-grass-600 text-white p-4 flex items-center justify-between animate-in slide-in-from-top duration-500 sticky top-0 z-[100] shadow-lg">
+        <div className="bg-grass-600 text-white p-4 pt-safe flex items-center justify-between animate-in slide-in-from-top duration-500 sticky top-0 z-[100] shadow-lg">
            <div className="flex items-center gap-3">
               <Download className="w-5 h-5" />
               <div className="flex flex-col">
@@ -313,15 +369,19 @@ const App: React.FC = () => {
 
       {/* Impersonation Banner */}
       {impersonatingUser && (
-        <div className="bg-red-500 text-white text-xs font-black uppercase tracking-widest p-2 text-center flex justify-between items-center px-4">
+        <div className="bg-red-500 text-white text-xs font-black uppercase tracking-widest p-2 pt-safe text-center flex justify-between items-center px-4">
            <span>Acessando como: {impersonatingUser.name}</span>
            <button onClick={() => { setImpersonatingUser(null); setActiveTab('SUPER'); }} className="bg-white/20 px-3 py-1 rounded-lg hover:bg-white/30"><LogOut className="w-4 h-4" /></button>
         </div>
       )}
 
-      <header className="bg-white/80 backdrop-blur-md px-6 py-4 flex justify-between items-center sticky top-0 z-50 border-b">
+      {/* HEADER com pt-safe para garantir que não fique atrás do relógio/notch */}
+      <header className="bg-white/95 backdrop-blur-md px-6 py-4 pt-safe flex justify-between items-center sticky top-0 z-50 border-b shadow-sm">
           <div className="flex flex-col">
-              <span className="text-xl font-black text-[#022c22] italic uppercase leading-none">JOGO FÁCIL</span>
+              <div className="flex items-center gap-2">
+                 <Trophy className="w-5 h-5 text-grass-600" />
+                 <span className="text-xl font-black text-[#022c22] italic uppercase leading-none">JOGO FÁCIL</span>
+              </div>
               {user && <span className="text-[8px] font-bold text-gray-400 uppercase tracking-widest mt-1">Olá, {currentUserContext?.name.split(' ')[0]}</span>}
           </div>
           <div className="flex items-center gap-2">
@@ -331,13 +391,13 @@ const App: React.FC = () => {
             >
               <Bell className="w-5 h-5 text-gray-500" />
               {unreadNotifs > 0 && (
-                <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[8px] font-black w-4 h-4 rounded-full flex items-center justify-center border-2 border-white">
+                <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[8px] font-black w-4 h-4 rounded-full flex items-center justify-center border-2 border-white animate-bounce">
                   {unreadNotifs}
                 </span>
               )}
             </button>
             <button 
-              onClick={refreshData} 
+              onClick={() => refreshData(false)} 
               disabled={isLoading}
               className={`p-2 bg-gray-50 rounded-xl transition-all ${isLoading ? 'animate-spin opacity-50' : 'active:scale-95'}`}
             >
@@ -347,7 +407,7 @@ const App: React.FC = () => {
       </header>
 
       {showNotifications && (
-        <div className="fixed inset-0 bg-black/50 z-[200] flex justify-end">
+        <div className="fixed inset-0 bg-black/50 z-[200] flex justify-end pt-safe">
           <div className="bg-white w-full max-w-sm h-full shadow-2xl animate-in slide-in-from-right duration-300 overflow-y-auto">
              <div className="p-6 border-b flex justify-between items-center bg-gray-50 sticky top-0 z-10">
                 <h2 className="font-black text-pitch uppercase italic">Notificações</h2>
@@ -371,6 +431,7 @@ const App: React.FC = () => {
                           <p className="text-[10px] text-gray-500 font-medium leading-relaxed">{n.description}</p>
                           <span className="text-[8px] text-gray-300 font-black uppercase mt-2 block">{new Date(n.timestamp).toLocaleString()}</span>
                        </div>
+                       {!n.read && <div className="w-2 h-2 bg-red-500 rounded-full self-center" />}
                     </div>
                   ))
                 )}
@@ -464,7 +525,7 @@ const App: React.FC = () => {
 
         {activeTab === 'PROFILE' && currentUserContext && (
             <div className="p-10 flex flex-col items-center">
-                <div className="w-32 h-32 bg-[#022c22] rounded-[3rem] flex items-center justify-center text-5xl font-black text-[#10b981] shadow-2xl mb-6">
+                <div className="w-32 h-32 bg-[#022c22] rounded-[3rem] flex items-center justify-center text-5xl font-black text-[#10b981] shadow-2xl mb-6 border-4 border-[#10b981]">
                   {currentUserContext.name.charAt(0)}
                 </div>
                 <h2 className="text-2xl font-black text-pitch italic uppercase tracking-tighter leading-none">{currentUserContext.name}</h2>
@@ -479,16 +540,17 @@ const App: React.FC = () => {
                       <Download className="w-5 h-5" /> {isIOS ? 'Instalar no iPhone' : 'Instalar Aplicativo'}
                     </button>
                   )}
-                  <button onClick={() => setShowProfileModal(true)} className="w-full py-5 bg-[#022c22] text-white rounded-3xl font-black flex items-center justify-center gap-3 uppercase text-xs">
+                  <button onClick={() => setShowProfileModal(true)} className="w-full py-5 bg-[#022c22] text-white rounded-3xl font-black flex items-center justify-center gap-3 uppercase text-xs shadow-xl active:scale-95 transition-transform">
                       <Settings className="w-5 h-5 text-[#10b981]" /> Configurações
                   </button>
-                  <button onClick={handleLogout} className="w-full py-5 bg-red-50 text-red-600 rounded-3xl font-black uppercase text-xs">Sair</button>
+                  <button onClick={handleLogout} className="w-full py-5 bg-red-50 text-red-600 rounded-3xl font-black uppercase text-xs active:scale-95 transition-transform">Sair</button>
                 </div>
             </div>
         )}
       </main>
 
-      <nav className="fixed bottom-0 left-0 right-0 bg-white border-t p-4 flex justify-around z-50">
+      {/* NAV INFERIOR com pb-safe para respeitar a área de gesto do iPhone */}
+      <nav className="fixed bottom-0 left-0 right-0 bg-white border-t p-4 pb-safe flex justify-around z-50 shadow-[0_-5px_20px_rgba(0,0,0,0.05)]">
           <button onClick={() => setActiveTab('EXPLORE')} className={`flex flex-col items-center gap-1 ${activeTab === 'EXPLORE' ? 'text-[#10b981]' : 'text-gray-300'}`}>
             <Search className="w-6 h-6" />
             <span className="text-[8px] font-black uppercase">Explorar</span>

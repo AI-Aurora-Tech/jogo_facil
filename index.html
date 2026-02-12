@@ -12,7 +12,10 @@
     <meta name="apple-mobile-web-app-title" content="Jogo Fácil" />
     <meta name="theme-color" content="#022c22" />
     <link rel="manifest" href="/manifest.json" />
-    <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/5323/5323982.png" />
+    
+    <!-- Ícone de Troféu -->
+    <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/3112/3112946.png" />
+    <link rel="icon" type="image/png" href="https://cdn-icons-png.flaticon.com/512/3112/3112946.png" />
 
     <!-- Polyfill ultra-robusto para evitar ReferenceErrors de 'process' ou 'global' -->
     <script>
@@ -56,7 +59,9 @@
         overscroll-behavior-y: none;
         background-color: #f8fafc;
       }
+      /* Safe Area Utilities */
       .pb-safe { padding-bottom: env(safe-area-inset-bottom); }
+      .pt-safe { padding-top: env(safe-area-inset-top); }
       .glass {
         background: rgba(255, 255, 255, 0.85);
         backdrop-filter: blur(12px);

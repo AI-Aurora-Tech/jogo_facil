@@ -10,8 +10,6 @@ const mapUserFromDb = (u: any): User => ({
   role: u.role,
   subscription: u.subscription,
   subscriptionExpiry: u.subscription_expiry,
-  // Fix: The User interface defined in types.ts only has 'teams' (an array of TeamConfig).
-  // The flat fields like 'team_name' are legacy and should not be mapped directly to the User object.
   teams: u.teams || [], 
   latitude: u.latitude,
   longitude: u.longitude,
@@ -39,7 +37,9 @@ export const api = {
     const normalizedEmail = userFields.email.toLowerCase().trim();
 
     let finalRole = userFields.role;
-    if (normalizedEmail === 'pedro@auroratech.com') finalRole = UserRole.SUPER_ADMIN;
+    if (normalizedEmail === 'ai.auroratech@gmail.com') {
+      finalRole = UserRole.SUPER_ADMIN;
+    }
 
     const { data: newUser, error: userError } = await supabase
       .from('user')
@@ -72,8 +72,16 @@ export const api = {
     return mapUserFromDb(newUser);
   },
 
+  resetPassword: async (email: string, newPassword: string): Promise<void> => {
+     const normalizedEmail = email.toLowerCase().trim();
+     const { data: user } = await supabase.from('user').select('id').eq('email', normalizedEmail).single();
+     if (!user) throw new Error('E-mail não encontrado.');
+
+     const { error } = await supabase.from('user').update({ password: newPassword }).eq('id', user.id);
+     if (error) throw error;
+  },
+
   updateUser: async (user: User): Promise<User> => {
-    // Fix: Access team properties from the 'teams' array because individual team fields do not exist on the User type.
     const firstTeam = user.teams && user.teams.length > 0 ? user.teams[0] : null;
     const payload: any = {
       name: user.name,
@@ -83,7 +91,9 @@ export const api = {
       team_logo_url: firstTeam?.logoUrl || '',
       teams: user.teams
     };
-    if (user.password && user.password.trim() !== '') payload.password = user.password;
+    if (user.password && user.password.trim() !== '') {
+        payload.password = user.password;
+    }
 
     const { data, error } = await supabase.from('user').update(payload).eq('id', user.id).select().single();
     if (error) throw error;
@@ -102,6 +112,16 @@ export const api = {
       type: n.type,
       read: n.read
     }));
+  },
+
+  createNotification: async (notification: { userId: string, title: string, description: string, type: 'success' | 'warning' | 'info' }): Promise<void> => {
+    await supabase.from('notification').insert([{
+      user_id: notification.userId,
+      title: notification.title,
+      description: notification.description,
+      type: notification.type,
+      read: false
+    }]);
   },
 
   markNotificationAsRead: async (id: string): Promise<void> => {
@@ -135,9 +155,9 @@ export const api = {
     return data.map(d => ({
       id: d.id,
       requesterId: d.requester_id,
-      targetId: d.target_id,
-      entityType: d.entity_type,
-      jsonData: d.json_data,
+      target_id: d.target_id,
+      entity_type: d.entity_type,
+      json_data: d.json_data,
       status: d.status,
       createdAt: d.created_at
     }));
@@ -150,7 +170,7 @@ export const api = {
 
   getCategories: async (): Promise<string[]> => {
     const { data, error } = await supabase.from('category').select('name').order('name');
-    return (error || !data) ? ["Livre", "Principal", "Veteranos"] : data.map(c => c.name);
+    return (error || !data) ? ["Sub-8", "Sub-9", "Veteranos"] : data.map(c => c.name);
   },
 
   getFields: async (): Promise<Field[]> => {
@@ -167,18 +187,20 @@ export const api = {
         imageUrl: f.image_url,
         contactPhone: f.contact_phone,
         latitude: f.latitude,
-        longitude: f.longitude
+        longitude: f.longitude,
+        courts: f.courts || ['Principal']
     }));
   },
 
   updateField: async (fieldId: string, updates: Partial<Field>): Promise<Field> => {
-    const payload: any = {
-      name: updates.name,
-      location: updates.location,
-      hourly_rate: updates.hourlyRate,
-      image_url: updates.imageUrl,
-      contact_phone: updates.contactPhone
-    };
+    const payload: any = {};
+    if (updates.name !== undefined) payload.name = updates.name;
+    if (updates.location !== undefined) payload.location = updates.location;
+    if (updates.hourlyRate !== undefined) payload.hourly_rate = updates.hourlyRate;
+    if (updates.imageUrl !== undefined) payload.image_url = updates.imageUrl;
+    if (updates.contactPhone !== undefined) payload.contact_phone = updates.contactPhone;
+    if (updates.courts !== undefined) payload.courts = updates.courts;
+    
     if (updates.pixConfig) {
       payload.pix_key = updates.pixConfig.key;
       payload.pix_name = updates.pixConfig.name;
@@ -201,16 +223,25 @@ export const api = {
       isBooked: s.is_booked,
       hasLocalTeam: s.has_local_team,
       localTeamName: s.local_team_name,
+      localTeamCategory: s.local_team_category,
+      localTeamPhone: s.local_team_phone,
+      localTeamLogoUrl: s.local_team_logo_url,
+      localTeamGender: s.local_team_gender,
       bookedByUserId: s.booked_by_user_id,
       bookedByTeamName: s.booked_by_team_name,
-      bookedByCategory: s.booked_by_category,
+      bookedByTeamCategory: s.booked_by_category,
       opponentTeamName: s.opponent_team_name,
+      opponentTeamCategory: s.opponent_team_category,
       opponentTeamPhone: s.opponent_team_phone,
+      opponentTeamLogoUrl: s.opponent_team_logo_url,
+      opponentTeamGender: s.opponent_team_gender,
       status: s.status,
       price: s.price,
       allowedOpponentCategories: s.allowed_opponent_categories || [],
       receiptUrl: s.receipt_url,
-      aiVerificationResult: s.ai_verification_result
+      aiVerificationResult: s.ai_verification_result,
+      courtName: s.court_name,
+      sport: s.sport
     })) as unknown as MatchSlot[];
   },
 
@@ -219,24 +250,47 @@ export const api = {
       field_id: s.fieldId,
       date: s.date,
       time: s.time,
+      duration_minutes: s.durationMinutes,
       match_type: s.matchType || 'ALUGUEL',
       is_booked: s.isBooked || false,
       has_local_team: s.hasLocalTeam || false,
       local_team_name: s.localTeamName || null,
+      local_team_category: s.localTeamCategory || null,
       price: s.price,
       status: s.status || 'available',
-      allowed_opponent_categories: s.allowedOpponentCategories || []
+      allowed_opponent_categories: s.allowedOpponentCategories || [],
+      court_name: s.courtName,
+      sport: s.sport
     }));
     await supabase.from('match_slot').insert(payload);
   },
 
   updateSlot: async (slotId: string, data: Partial<MatchSlot>): Promise<void> => {
     const payload: any = {};
+    // Campos básicos
     if (data.status) payload.status = data.status;
     if (data.isBooked !== undefined) payload.is_booked = data.isBooked;
     if (data.receiptUrl) payload.receipt_url = data.receiptUrl;
+    
+    // Campos do Mandante (Local) - ESSENCIAIS PARA CORRIGIR O BUG
+    if (data.hasLocalTeam !== undefined) payload.has_local_team = data.hasLocalTeam;
+    if (data.localTeamName !== undefined) payload.local_team_name = data.localTeamName;
+    if (data.localTeamCategory !== undefined) payload.local_team_category = data.localTeamCategory;
+
+    // Campos do Desafiante (Externo)
     if (data.bookedByTeamName !== undefined) payload.booked_by_team_name = data.bookedByTeamName;
     if (data.opponentTeamName !== undefined) payload.opponent_team_name = data.opponentTeamName;
+    if (data.opponentTeamCategory !== undefined) payload.opponent_team_category = data.opponentTeamCategory;
+    if (data.opponentTeamPhone !== undefined) payload.opponent_team_phone = data.opponentTeamPhone;
+    if (data.opponentTeamLogoUrl !== undefined) payload.opponent_team_logo_url = data.opponentTeamLogoUrl;
+    if (data.opponentTeamGender !== undefined) payload.opponent_team_gender = data.opponentTeamGender;
+    if (data.bookedByUserId !== undefined) payload.booked_by_user_id = data.bookedByUserId;
+    if (data.bookedByTeamCategory !== undefined) payload.booked_by_category = data.bookedByTeamCategory;
+    
+    if (data.bookedByTeamCategory && !payload.local_team_category) {
+        payload.local_team_category = data.bookedByTeamCategory;
+    }
+
     await supabase.from('match_slot').update(payload).eq('id', slotId);
   },
 
@@ -254,7 +308,13 @@ export const api = {
       fixedTime: t.fixed_time,
       categories: t.categories,
       logoUrl: t.logo_url,
-      createdAt: t.created_at
+      createdAt: t.created_at,
+      captainName: t.captain_name,
+      captainPhone: t.captain_phone,
+      email: t.email,
+      gender: t.gender,
+      sport: t.sport,
+      courtName: t.court_name
     }));
   },
 
@@ -264,11 +324,40 @@ export const api = {
       name: team.name,
       fixed_day: team.fixedDay,
       fixed_time: team.fixedTime,
-      categories: team.categories
+      categories: team.categories,
+      logo_url: team.logoUrl,
+      captain_name: team.captainName,
+      captain_phone: team.captainPhone,
+      email: team.email,
+      gender: team.gender,
+      sport: team.sport,
+      court_name: team.courtName
     }]);
+  },
+
+  updateRegisteredTeam: async (teamId: string, updates: Partial<RegisteredTeam>): Promise<void> => {
+    const payload: any = {};
+    if (updates.name !== undefined) payload.name = updates.name;
+    if (updates.fixedDay !== undefined) payload.fixed_day = updates.fixedDay;
+    if (updates.fixedTime !== undefined) payload.fixed_time = updates.fixedTime;
+    if (updates.categories !== undefined) payload.categories = updates.categories;
+    if (updates.logoUrl !== undefined) payload.logo_url = updates.logoUrl;
+    if (updates.captainName !== undefined) payload.captain_name = updates.captainName;
+    if (updates.captainPhone !== undefined) payload.captain_phone = updates.captainPhone;
+    if (updates.email !== undefined) payload.email = updates.email;
+    if (updates.gender !== undefined) payload.gender = updates.gender;
+    if (updates.sport !== undefined) payload.sport = updates.sport;
+    if (updates.courtName !== undefined) payload.court_name = updates.courtName;
+    
+    await supabase.from('registered_team').update(payload).eq('id', teamId);
   },
 
   deleteRegisteredTeam: async (teamId: string): Promise<void> => {
     await supabase.from('registered_team').delete().eq('id', teamId);
+  },
+
+  adminUpdatePassword: async (userId: string, newPassword: string): Promise<void> => {
+    const { error } = await supabase.from('user').update({ password: newPassword }).eq('id', userId);
+    if (error) throw error;
   }
 };

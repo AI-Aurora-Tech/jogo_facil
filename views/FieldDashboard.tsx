@@ -79,6 +79,13 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
   }, [field.id]);
 
   useEffect(() => {
+    // Atualiza nome padrão se o nome da arena carregar depois
+    if (field.name && manualLocalTeamName === 'Time da Casa') {
+      setManualLocalTeamName(field.name);
+    }
+  }, [field.name]);
+
+  useEffect(() => {
     if (field.courts && field.courts.length > 0) {
       if (!field.courts.includes(slotCourt)) setSlotCourt(field.courts[0]);
       if (!field.courts.includes(mensalistaCourt)) setMensalistaCourt(field.courts[0]);
@@ -102,7 +109,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
     setSlotPrice(slot.price);
     setSlotSport(slot.sport);
     setIsLocalTeamSlot(slot.hasLocalTeam);
-    setManualLocalTeamName(slot.localTeamName || field.name);
+    setManualLocalTeamName(slot.localTeamName || field.name || 'Time da Casa');
     setManualLocalCategory(slot.localTeamCategory || CATEGORY_ORDER[0]);
     setShowAddSlotModal(true);
   };
@@ -148,6 +155,8 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
       const allowedCats = acceptNeighbors 
         ? getNeighboringCategories(manualLocalCategory)
         : [manualLocalCategory];
+      
+      const teamName = isLocalTeamSlot ? (manualLocalTeamName || field.name || 'Time da Casa') : null;
 
       const slotData = {
         fieldId: field.id,
@@ -157,7 +166,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
         matchType: isLocalTeamSlot ? 'AMISTOSO' : slotMatchType,
         isBooked: editingSlotId ? undefined : isLocalTeamSlot,
         hasLocalTeam: isLocalTeamSlot,
-        localTeamName: isLocalTeamSlot ? manualLocalTeamName : null,
+        localTeamName: teamName,
         localTeamCategory: isLocalTeamSlot ? manualLocalCategory : null,
         localTeamPhone: isLocalTeamSlot ? field.contactPhone : null,
         localTeamGender: 'MASCULINO',

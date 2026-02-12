@@ -2,8 +2,9 @@
 import React, { useState } from 'react';
 import { UserRole, SubscriptionPlan, CATEGORY_ORDER } from '../types';
 import { Button } from '../components/Button';
-import { Shield, MapPin, AlertCircle, KeyRound, ChevronLeft } from 'lucide-react';
+import { Shield, MapPin, AlertCircle, KeyRound, ChevronLeft, Camera } from 'lucide-react';
 import { api } from '../api';
+import { convertFileToBase64 } from '../utils';
 
 interface AuthProps {
   categories: string[];
@@ -29,6 +30,10 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, onCancel }) => {
   const [address, setAddress] = useState('');
   const [teamName, setTeamName] = useState('');
   const [teamCategories, setTeamCategories] = useState<string[]>([]);
+  
+  // Photo States
+  const [teamLogo, setTeamLogo] = useState('');
+  const [arenaPhoto, setArenaPhoto] = useState('');
 
   const toggleCategory = (cat: string) => {
     if (teamCategories.includes(cat)) {
@@ -87,11 +92,13 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, onCancel }) => {
           name,
           phoneNumber: phone,
           subscription: SubscriptionPlan.FREE,
-          teams: role === UserRole.TEAM_CAPTAIN ? [{ name: teamName, categories: teamCategories }] : [],
+          teams: role === UserRole.TEAM_CAPTAIN ? [{ name: teamName, categories: teamCategories, logoUrl: teamLogo }] : [],
+          teamLogoUrl: role === UserRole.TEAM_CAPTAIN ? teamLogo : undefined,
           fieldData: role === UserRole.FIELD_OWNER ? {
             name: arenaName,
             location: address,
-            contactPhone: phone
+            contactPhone: phone,
+            imageUrl: arenaPhoto
           } : undefined
         };
         const newUser = await api.register(payload);
@@ -155,6 +162,18 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, onCancel }) => {
                 {role === UserRole.TEAM_CAPTAIN && (
                   <div className="bg-gray-50 p-5 rounded-[2rem] border-2 border-dashed border-gray-200 mt-4 animate-in slide-in-from-top-2">
                     <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3">Dados da Equipe</p>
+                    
+                    <div className="flex flex-col items-center mb-4">
+                       <div className="w-20 h-20 bg-white rounded-2xl border-2 border-dashed border-gray-200 flex items-center justify-center relative overflow-hidden group">
+                          {teamLogo ? <img src={teamLogo} className="w-full h-full object-cover" /> : <Camera className="w-6 h-6 text-gray-300" />}
+                          <input type="file" accept="image/*" className="absolute inset-0 opacity-0 cursor-pointer" onChange={async e => {
+                             const f = e.target.files?.[0];
+                             if(f) setTeamLogo(await convertFileToBase64(f));
+                          }} />
+                       </div>
+                       <span className="text-[8px] font-black text-gray-400 uppercase mt-2">Logo do Time</span>
+                    </div>
+
                     <input className="w-full bg-transparent border-b-2 border-gray-100 p-2 font-black text-lg outline-none focus:border-pitch transition-colors mb-4" placeholder="Nome do seu Time" value={teamName} onChange={e => setTeamName(e.target.value)} required />
                     
                     <p className="text-[9px] font-bold text-gray-400 uppercase mb-2">Quais categorias seu time joga?</p>
@@ -177,6 +196,17 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, onCancel }) => {
                 {role === UserRole.FIELD_OWNER && (
                   <div className="bg-gray-50 p-5 rounded-[2rem] border-2 border-dashed border-gray-200 mt-4 space-y-3 animate-in slide-in-from-top-2">
                     <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3">Dados da Arena</p>
+                    
+                    <div className="flex flex-col items-center mb-2">
+                       <div className="w-full h-32 bg-white rounded-2xl border-2 border-dashed border-gray-200 flex items-center justify-center relative overflow-hidden group">
+                          {arenaPhoto ? <img src={arenaPhoto} className="w-full h-full object-cover" /> : <div className="flex flex-col items-center text-gray-300"><Camera className="w-8 h-8" /><span className="text-[8px] font-black uppercase mt-1">Foto da Arena</span></div>}
+                          <input type="file" accept="image/*" className="absolute inset-0 opacity-0 cursor-pointer" onChange={async e => {
+                             const f = e.target.files?.[0];
+                             if(f) setArenaPhoto(await convertFileToBase64(f));
+                          }} />
+                       </div>
+                    </div>
+
                     <input className="w-full bg-transparent border-b-2 border-gray-100 p-2 font-black text-lg outline-none" placeholder="Nome da Arena" value={arenaName} onChange={e => setArenaName(e.target.value)} required />
                     <input className="w-full bg-transparent border-b-2 border-gray-100 p-2 font-bold text-sm outline-none" placeholder="Endereço Completo" value={address} onChange={e => setAddress(e.target.value)} required />
                   </div>
