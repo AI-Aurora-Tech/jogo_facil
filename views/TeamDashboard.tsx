@@ -35,9 +35,12 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
   useEffect(() => {
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
-        (pos) => setUserCoords({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
-        (err) => console.warn("Erro ao obter localização", err),
-        { enableHighAccuracy: true }
+        (pos) => {
+          console.log("Localização obtida:", pos.coords);
+          setUserCoords({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+        },
+        (err) => console.warn("Erro ao obter localização:", err),
+        { enableHighAccuracy: true, timeout: 10000 }
       );
     }
   }, []);
@@ -228,9 +231,11 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
         ) : (
           filteredSlots.map(slot => {
             const field = fields.find(f => f.id === slot.fieldId);
-            const dist = (userCoords && field?.latitude && field?.longitude) 
-              ? calculateDistance(userCoords.lat, userCoords.lng, field.latitude, field.longitude) 
-              : null;
+            
+            // Lógica de Distância Corrigida: Verifica se existem coordenadas válidas (mesmo que 0)
+            const hasCoords = userCoords && field?.latitude != null && field?.longitude != null;
+            const dist = hasCoords ? calculateDistance(userCoords!.lat, userCoords!.lng, field!.latitude, field!.longitude) : null;
+            
             const status = getStatusBadge(slot);
             const currentCategory = slot.localTeamCategory || slot.bookedByTeamCategory;
 
@@ -245,7 +250,7 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
                         <h3 className="font-black text-pitch text-lg leading-none uppercase truncate mr-2">{field?.name}</h3>
                         <div className="flex flex-col items-end gap-1">
                            <span className="text-[9px] font-black text-grass-600 uppercase flex items-center gap-1">
-                             <MapPin className="w-3 h-3"/> {dist ? `${dist}km` : '--'}
+                             <MapPin className="w-3 h-3"/> {dist !== null ? `${dist}km` : '--'}
                            </span>
                         </div>
                      </div>

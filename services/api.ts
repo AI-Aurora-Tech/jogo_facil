@@ -201,6 +201,10 @@ export const api = {
     if (updates.contactPhone !== undefined) payload.contact_phone = updates.contactPhone;
     if (updates.courts !== undefined) payload.courts = updates.courts;
     
+    // Adicionando suporte para atualização de coordenadas
+    if (updates.latitude !== undefined) payload.latitude = updates.latitude;
+    if (updates.longitude !== undefined) payload.longitude = updates.longitude;
+
     if (updates.pixConfig) {
       payload.pix_key = updates.pixConfig.key;
       payload.pix_name = updates.pixConfig.name;

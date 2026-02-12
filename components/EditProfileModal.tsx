@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { User, UserRole, Field, TeamConfig, Gender } from '../types';
 import { Button } from './Button';
-import { X, User as UserIcon, Shield, Check, Plus, AlertCircle, Building2, MapPin, Smartphone, Camera, Trash2, LayoutGrid, Tag, Lock, PlusCircle } from 'lucide-react';
+import { X, User as UserIcon, Shield, Check, Plus, AlertCircle, Building2, MapPin, Smartphone, Camera, Trash2, LayoutGrid, Tag, Lock, PlusCircle, Globe } from 'lucide-react';
 import { formatCategory, convertFileToBase64 } from '../utils';
 
 interface EditProfileModalProps {
@@ -21,6 +21,8 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({ categories, 
   
   const [arenaName, setArenaName] = useState(field?.name || '');
   const [arenaLocation, setArenaLocation] = useState(field?.location || '');
+  const [arenaLat, setArenaLat] = useState(field?.latitude || 0);
+  const [arenaLng, setArenaLng] = useState(field?.longitude || 0);
   const [arenaPrice, setArenaPrice] = useState(field?.hourlyRate || 0);
   const [arenaPhoto, setArenaPhoto] = useState(field?.imageUrl || '');
   const [courts, setCourts] = useState<string[]>(field?.courts || ['Principal']);
@@ -95,7 +97,15 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({ categories, 
 
     let updatedField;
     if (user.role === UserRole.FIELD_OWNER && field) {
-      updatedField = { name: arenaName, location: arenaLocation, hourlyRate: arenaPrice, courts, imageUrl: arenaPhoto };
+      updatedField = { 
+        name: arenaName, 
+        location: arenaLocation, 
+        hourlyRate: arenaPrice, 
+        courts, 
+        imageUrl: arenaPhoto,
+        latitude: arenaLat,
+        longitude: arenaLng
+      };
     }
     onUpdate(updatedUser, updatedField);
   };
@@ -187,10 +197,31 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({ categories, 
                    <input className="w-full bg-transparent font-bold text-pitch outline-none" type="number" value={arenaPrice} onChange={e => setArenaPrice(Number(e.target.value))} />
                 </div>
               </div>
+              
               <div className="bg-gray-50 p-4 rounded-2xl border">
                  <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Endereço</label>
                  <input className="w-full bg-transparent font-bold text-pitch outline-none" value={arenaLocation} onChange={e => setArenaLocation(e.target.value)} />
               </div>
+
+              {/* GEO LOCALIZAÇÃO */}
+              <div className="bg-blue-50 p-4 rounded-2xl border border-blue-100">
+                 <div className="flex items-center gap-2 mb-3">
+                   <Globe className="w-4 h-4 text-blue-500" />
+                   <h5 className="text-[10px] font-black text-blue-600 uppercase tracking-widest">Coordenadas (Para cálculo de distância)</h5>
+                 </div>
+                 <div className="grid grid-cols-2 gap-4">
+                    <div>
+                       <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Latitude</label>
+                       <input className="w-full bg-white p-3 rounded-xl border font-bold text-pitch text-xs" type="number" step="any" value={arenaLat} onChange={e => setArenaLat(Number(e.target.value))} placeholder="Ex: -23.5505" />
+                    </div>
+                    <div>
+                       <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Longitude</label>
+                       <input className="w-full bg-white p-3 rounded-xl border font-bold text-pitch text-xs" type="number" step="any" value={arenaLng} onChange={e => setArenaLng(Number(e.target.value))} placeholder="Ex: -46.6333" />
+                    </div>
+                 </div>
+                 <p className="text-[8px] text-blue-400 mt-2 font-bold italic">* Você pode obter esses números clicando com o botão direito no Google Maps.</p>
+              </div>
+
             </section>
           )}
 
