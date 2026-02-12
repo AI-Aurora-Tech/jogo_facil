@@ -7,7 +7,7 @@ import { FieldDashboard } from './views/FieldDashboard';
 import { TeamDashboard } from './views/TeamDashboard';
 import { EditProfileModal } from './components/EditProfileModal';
 import { api } from './api';
-import { RefreshCw, Settings, Building2, Shield, Search, Loader2, Bell, X, Info, History, KeyRound, Eye, LogOut } from 'lucide-react';
+import { RefreshCw, Settings, Building2, Shield, Search, Loader2, Bell, X, Info, History, KeyRound, Eye, LogOut, Smartphone, Download, Share } from 'lucide-react';
 
 const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
@@ -26,6 +26,52 @@ const App: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [isInitialLoading, setIsInitialLoading] = useState(true);
   const [impersonatingUser, setImpersonatingUser] = useState<User | null>(null);
+
+  // PWA Install Logic
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  const [showInstallBanner, setShowInstallBanner] = useState(false);
+  const [isIOS, setIsIOS] = useState(false);
+
+  useEffect(() => {
+    // Detectar evento de instalação (Android/Desktop)
+    window.addEventListener('beforeinstallprompt', (e) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+      setShowInstallBanner(true);
+    });
+
+    window.addEventListener('appinstalled', () => {
+      setShowInstallBanner(false);
+      setDeferredPrompt(null);
+    });
+
+    // Detectar iOS
+    const userAgent = window.navigator.userAgent.toLowerCase();
+    const isIosDevice = /iphone|ipad|ipod/.test(userAgent);
+    // Verificar se já está rodando como app (standalone)
+    const isStandalone = ('standalone' in window.navigator) && (window.navigator as any).standalone;
+    
+    if (isIosDevice && !isStandalone) {
+      setIsIOS(true);
+      setShowInstallBanner(true);
+    }
+  }, []);
+
+  const handleInstallClick = async () => {
+    if (isIOS) {
+      // No iOS não podemos forçar a instalação, apenas fechamos o banner após instruir
+      setShowInstallBanner(false);
+      return;
+    }
+
+    if (!deferredPrompt) return;
+    deferredPrompt.prompt();
+    const { outcome } = await deferredPrompt.userChoice;
+    if (outcome === 'accepted') {
+      setShowInstallBanner(false);
+    }
+    setDeferredPrompt(null);
+  };
 
   const refreshData = useCallback(async () => {
     setIsLoading(true);
@@ -228,6 +274,33 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col pb-safe relative">
+      {/* PWA Install Banner */}
+      {showInstallBanner && (
+        <div className="bg-grass-600 text-white p-4 flex items-center justify-between animate-in slide-in-from-top duration-500 sticky top-0 z-[100] shadow-lg">
+           <div className="flex items-center gap-3">
+              <Download className="w-5 h-5" />
+              <div className="flex flex-col">
+                <span className="text-[10px] font-black uppercase leading-none">Instalar Jogo Fácil</span>
+                <span className="text-[8px] font-bold opacity-80 uppercase mt-0.5">
+                  {isIOS ? 'Toque em Compartilhar e "Adicionar à Tela de Início"' : 'Acesso rápido e offline'}
+                </span>
+              </div>
+           </div>
+           <div className="flex items-center gap-2">
+              <button onClick={() => setShowInstallBanner(false)} className="p-1 opacity-50"><X className="w-4 h-4" /></button>
+              {!isIOS && (
+                <button 
+                  onClick={handleInstallClick}
+                  className="bg-white text-grass-700 px-4 py-1.5 rounded-lg text-[10px] font-black uppercase shadow-sm active:scale-95 transition-all"
+                >
+                  Instalar
+                </button>
+              )}
+              {isIOS && <Share className="w-5 h-5 animate-bounce" />}
+           </div>
+        </div>
+      )}
+
       {/* Impersonation Banner */}
       {impersonatingUser && (
         <div className="bg-red-500 text-white text-xs font-black uppercase tracking-widest p-2 text-center flex justify-between items-center px-4">

@@ -1,13 +1,13 @@
 
 {
-  "name": "Jogo Fácil - Agendamentos",
+  "name": "Jogo Fácil",
   "short_name": "Jogo Fácil",
   "description": "Agende suas partidas de futebol de forma fácil e segura.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#022c22",
-  "theme_color": "#059669",
-  "orientation": "portrait",
+  "theme_color": "#022c22",
+  "orientation": "portrait-primary",
   "icons": [
     {
       "src": "https://cdn-icons-png.flaticon.com/512/5323/5323982.png",
@@ -21,5 +21,6 @@
       "type": "image/png",
       "purpose": "any maskable"
     }
-  ]
+  ],
+  "categories": ["sports", "productivity"]
 }

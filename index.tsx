@@ -1,4 +1,3 @@
-
 import React, { ErrorInfo, ReactNode } from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
@@ -15,16 +14,12 @@ interface ErrorBoundaryState {
 /**
  * ErrorBoundary class to catch rendering errors in the component tree.
  */
-// Fix: Use React.Component to ensure proper inheritance of 'props' and 'state' from the React base class.
+// Fixed: Using explicit React.Component to ensure type safety for props.
 class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
-  // Fix: Explicitly initialize state in the constructor to ensure generic types are correctly applied and inherited properties are accessible.
-  constructor(props: ErrorBoundaryProps) {
-    super(props);
-    this.state = {
-      hasError: false,
-      error: null
-    };
-  }
+  public state: ErrorBoundaryState = {
+    hasError: false,
+    error: null
+  };
 
   public static getDerivedStateFromError(error: Error): ErrorBoundaryState {
     return { hasError: true, error };
@@ -40,7 +35,7 @@ class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundarySta
   };
 
   public render(): ReactNode {
-    // Fix: Access state through this.state, inherited from React.Component.
+    // Fixed: Correctly accessing state property.
     if (this.state.hasError) {
       return (
         <div className="min-h-screen bg-[#022c22] flex items-center justify-center p-6 text-center font-sans">
@@ -70,9 +65,20 @@ class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundarySta
         </div>
       );
     }
-    // Fix: Access children via this.props, which is now correctly recognized by inheriting from React.Component.
+    // Fixed: Correctly accessing props children.
     return this.props.children;
   }
+}
+
+// Registro do Service Worker para PWA
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').then(registration => {
+      console.log('SW registrado com sucesso:', registration.scope);
+    }).catch(error => {
+      console.log('Falha ao registrar SW:', error);
+    });
+  });
 }
 
 const rootElement = document.getElementById('root');
