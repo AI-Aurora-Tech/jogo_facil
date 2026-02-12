@@ -31,6 +31,7 @@ const App: React.FC = () => {
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [showInstallBanner, setShowInstallBanner] = useState(false);
   const [isIOS, setIsIOS] = useState(false);
+  const [isStandalone, setIsStandalone] = useState(false);
 
   useEffect(() => {
     // Detectar evento de instalação (Android/Desktop)
@@ -48,10 +49,14 @@ const App: React.FC = () => {
     // Detectar iOS
     const userAgent = window.navigator.userAgent.toLowerCase();
     const isIosDevice = /iphone|ipad|ipod/.test(userAgent);
-    // Verificar se já está rodando como app (standalone)
-    const isStandalone = ('standalone' in window.navigator) && (window.navigator as any).standalone;
     
-    if (isIosDevice && !isStandalone) {
+    // Verificar se já está rodando como app (standalone)
+    const isInStandaloneMode = ('standalone' in window.navigator && (window.navigator as any).standalone) || 
+                               (window.matchMedia('(display-mode: standalone)').matches);
+    
+    setIsStandalone(isInStandaloneMode);
+
+    if (isIosDevice && !isInStandaloneMode) {
       setIsIOS(true);
       setShowInstallBanner(true);
     }
@@ -59,12 +64,17 @@ const App: React.FC = () => {
 
   const handleInstallClick = async () => {
     if (isIOS) {
-      // No iOS não podemos forçar a instalação, apenas fechamos o banner após instruir
-      setShowInstallBanner(false);
+      alert("Para instalar no iPhone/iPad:\n\n1. Toque no botão Compartilhar (quadrado com seta)\n2. Role para baixo\n3. Toque em 'Adicionar à Tela de Início'");
       return;
     }
 
-    if (!deferredPrompt) return;
+    if (!deferredPrompt) {
+        if (!isStandalone) {
+             alert("Para instalar, procure a opção 'Adicionar à Tela Inicial' no menu do seu navegador.");
+        }
+        return;
+    }
+    
     deferredPrompt.prompt();
     const { outcome } = await deferredPrompt.userChoice;
     if (outcome === 'accepted') {
@@ -275,7 +285,7 @@ const App: React.FC = () => {
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col pb-safe relative">
       {/* PWA Install Banner */}
-      {showInstallBanner && (
+      {showInstallBanner && !isStandalone && (
         <div className="bg-grass-600 text-white p-4 flex items-center justify-between animate-in slide-in-from-top duration-500 sticky top-0 z-[100] shadow-lg">
            <div className="flex items-center gap-3">
               <Download className="w-5 h-5" />
@@ -461,6 +471,14 @@ const App: React.FC = () => {
                 <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mt-2">{currentUserContext.role}</p>
                 
                 <div className="w-full mt-10 space-y-3">
+                  {!isStandalone && (deferredPrompt || isIOS) && (
+                    <button 
+                      onClick={handleInstallClick} 
+                      className="w-full py-5 bg-grass-500 text-pitch rounded-3xl font-black flex items-center justify-center gap-3 uppercase text-xs hover:bg-grass-400 transition-colors shadow-lg shadow-grass-500/20"
+                    >
+                      <Download className="w-5 h-5" /> {isIOS ? 'Instalar no iPhone' : 'Instalar Aplicativo'}
+                    </button>
+                  )}
                   <button onClick={() => setShowProfileModal(true)} className="w-full py-5 bg-[#022c22] text-white rounded-3xl font-black flex items-center justify-center gap-3 uppercase text-xs">
                       <Settings className="w-5 h-5 text-[#10b981]" /> Configurações
                   </button>
