@@ -368,12 +368,12 @@ const App: React.FC = () => {
         </div>
       )}
 
-      {/* HEADER Ajustado para iOS - pt-10 força padding extra se isIOS */}
-      <header className={`bg-white/95 backdrop-blur-md px-6 flex justify-between items-center sticky top-0 z-50 border-b shadow-sm transition-all ${isIOS ? 'pt-10' : 'pt-safe'} py-4`}>
+      {/* HEADER Ajustado para iOS - pt-12 (48px) garante que fique abaixo da ilha dinâmica */}
+      <header className={`bg-white/95 backdrop-blur-md px-6 flex justify-between items-center sticky top-0 z-50 border-b shadow-sm transition-all ${isIOS ? 'pt-12 pb-4' : 'pt-safe py-4'}`}>
           <div className="mt-2 w-full flex justify-between items-center">
             <div className="flex flex-col">
                 <div className="flex items-center gap-2">
-                  <Trophy className="w-5 h-5 text-grass-600" />
+                  <Trophy className="w-6 h-6 text-grass-600" />
                   <span className="text-xl font-black text-[#022c22] italic uppercase leading-none">JOGO FÁCIL</span>
                 </div>
                 {user && <span className="text-[8px] font-bold text-gray-400 uppercase tracking-widest mt-1">Olá, {currentUserContext?.name.split(' ')[0]}</span>}
@@ -381,9 +381,9 @@ const App: React.FC = () => {
             <div className="flex items-center gap-2">
               <button 
                 onClick={() => setShowNotifications(true)} 
-                className="p-3 bg-gray-50 rounded-xl relative active:scale-95 transition-all"
+                className="p-3 bg-gray-50 rounded-xl relative active:scale-95 transition-all hover:bg-gray-100"
               >
-                <Bell className="w-5 h-5 text-gray-500" />
+                <Bell className="w-6 h-6 text-gray-500" />
                 {unreadNotifs > 0 && (
                   <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[8px] font-black w-4 h-4 rounded-full flex items-center justify-center border-2 border-white animate-bounce">
                     {unreadNotifs}
@@ -393,9 +393,9 @@ const App: React.FC = () => {
               <button 
                 onClick={() => refreshData(false)} 
                 disabled={isLoading}
-                className={`p-3 bg-gray-50 rounded-xl transition-all ${isLoading ? 'animate-spin opacity-50' : 'active:scale-95'}`}
+                className={`p-3 bg-gray-50 rounded-xl transition-all hover:bg-gray-100 ${isLoading ? 'animate-spin opacity-50' : 'active:scale-95'}`}
               >
-                <RefreshCw className="w-5 h-5 text-[#10b981]" />
+                <RefreshCw className="w-6 h-6 text-[#10b981]" />
               </button>
             </div>
           </div>

@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { Search, MapPin, Clock, Swords, Filter, X, Check, MessageCircle, Phone, Navigation, Trophy, ChevronDown, Smartphone, Settings, AlertTriangle, ExternalLink, Activity, History as HistoryIcon, CalendarCheck, CalendarX, Locate } from 'lucide-react';
+import { Search, MapPin, Clock, Swords, Filter, X, Check, MessageCircle, Phone, Navigation, Trophy, ChevronDown, Smartphone, Settings, AlertTriangle, ExternalLink, Activity, History as HistoryIcon, CalendarCheck, CalendarX, Locate, MapPinOff } from 'lucide-react';
 import { Button } from '../components/Button';
 import { Field, MatchSlot, User, CATEGORY_ORDER, SPORTS, Gender } from '../types';
 import { api } from '../api';
@@ -55,8 +55,9 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
     }
   };
 
+  // Tenta pegar localização ao iniciar se já estiver permitida, mas sem forçar erro
   useEffect(() => {
-    fetchLocation();
+    // Opcional: Auto-fetch silencioso
   }, []);
 
   const todayStr = new Date().toISOString().split('T')[0];
@@ -183,15 +184,15 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
         <div className="bg-white border-b p-4 sticky top-0 z-30 shadow-sm space-y-3">
           <div className="flex items-center justify-between">
              <div className="flex items-center gap-2">
-                <Search className="w-4 h-4 text-pitch" />
-                <span className="text-[10px] font-black uppercase text-pitch">Explorar Arenas</span>
-                {!userCoords && (
-                  <button onClick={fetchLocation} className={`ml-2 bg-gray-100 p-1.5 rounded-full text-pitch hover:bg-gray-200 transition-colors ${isLocating ? 'bg-yellow-100 text-yellow-600' : ''}`} disabled={isLocating}>
-                    <Locate className={`w-3 h-3 ${isLocating ? 'animate-spin' : ''}`} />
-                  </button>
+                <Search className="w-5 h-5 text-pitch" />
+                <span className="text-xs font-black uppercase text-pitch">Explorar Arenas</span>
+                {userCoords && (
+                   <span className="flex items-center gap-1 bg-green-100 text-green-700 px-2 py-0.5 rounded-full text-[8px] font-bold uppercase animate-in fade-in">
+                     <Locate className="w-3 h-3" /> GPS Ativo
+                   </span>
                 )}
              </div>
-             <button onClick={() => setShowFilters(!showFilters)} className="text-[10px] font-black uppercase text-grass-600 flex items-center gap-1">
+             <button onClick={() => setShowFilters(!showFilters)} className="text-[10px] font-black uppercase text-grass-600 flex items-center gap-1 p-2 bg-gray-50 rounded-lg active:scale-95 transition-all">
                 Filtros <ChevronDown className={`w-3 h-3 ${showFilters ? 'rotate-180' : ''}`} />
              </button>
           </div>
@@ -222,10 +223,10 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
       ) : (
         <div className="bg-white border-b p-4 sticky top-0 z-30 shadow-sm">
            <div className="flex p-1 bg-gray-100 rounded-2xl overflow-x-auto scrollbar-hide">
-              <button onClick={() => setMyGamesSubTab('FUTUROS')} className={`flex-1 py-2 px-3 text-[10px] font-black uppercase rounded-xl transition-all ${myGamesSubTab === 'FUTUROS' ? 'bg-white text-pitch shadow-sm' : 'text-gray-400'}`}>
+              <button onClick={() => setMyGamesSubTab('FUTUROS')} className={`flex-1 py-3 px-4 text-[10px] font-black uppercase rounded-xl transition-all ${myGamesSubTab === 'FUTUROS' ? 'bg-white text-pitch shadow-sm' : 'text-gray-400'}`}>
                 Próximos Jogos
               </button>
-              <button onClick={() => setMyGamesSubTab('HISTORICO')} className={`flex-1 py-2 px-3 text-[10px] font-black uppercase rounded-xl transition-all ${myGamesSubTab === 'HISTORICO' ? 'bg-white text-pitch shadow-sm' : 'text-gray-400'}`}>
+              <button onClick={() => setMyGamesSubTab('HISTORICO')} className={`flex-1 py-3 px-4 text-[10px] font-black uppercase rounded-xl transition-all ${myGamesSubTab === 'HISTORICO' ? 'bg-white text-pitch shadow-sm' : 'text-gray-400'}`}>
                 Histórico
               </button>
            </div>
@@ -251,6 +252,29 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
             const status = getStatusBadge(slot);
             const currentCategory = slot.localTeamCategory || slot.bookedByTeamCategory;
 
+            // Lógica para o texto do botão de distância
+            let distanceBtnText = 'Calcular Distância';
+            let distanceBtnIcon = <Locate className="w-3 h-3"/>;
+            let distanceBtnStyle = 'bg-gray-100 text-gray-500 hover:bg-grass-50 hover:text-grass-600';
+            let distanceDisabled = false;
+
+            if (isLocating) {
+                distanceBtnText = 'Calculando...';
+                distanceBtnIcon = <Locate className="w-3 h-3 animate-spin"/>;
+                distanceDisabled = true;
+            } else if (distMeters > -1) {
+                distanceBtnText = formatDistance(distMeters);
+                distanceBtnIcon = <MapPin className="w-3 h-3"/>;
+                distanceBtnStyle = 'bg-grass-50 text-grass-600 border border-grass-100';
+                distanceDisabled = false; // Permite clicar novamente para atualizar
+            } else if (userCoords) {
+                // Temos GPS, mas deu erro no cálculo (provavelmente arena com lat/lng = 0)
+                distanceBtnText = 'Sem Mapa';
+                distanceBtnIcon = <MapPinOff className="w-3 h-3"/>;
+                distanceBtnStyle = 'bg-red-50 text-red-400 cursor-not-allowed opacity-70';
+                distanceDisabled = true;
+            }
+
             return (
               <div key={slot.id} className="bg-white rounded-[2.5rem] border shadow-sm overflow-hidden group hover:border-pitch transition-all relative">
                 <div className="p-6 flex gap-5">
@@ -263,13 +287,11 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
                         <div className="flex flex-col items-end gap-1">
                            <button 
                              onClick={fetchLocation}
-                             disabled={isLocating}
-                             className={`text-[9px] font-black uppercase flex items-center gap-1 px-2 py-1.5 rounded-lg transition-colors ${distMeters > -1 ? 'bg-grass-50 text-grass-600' : 'bg-gray-100 text-gray-500 hover:bg-grass-50 hover:text-grass-600'}`}
+                             disabled={distanceDisabled}
+                             className={`text-[10px] font-black uppercase flex items-center gap-2 px-3 py-2 rounded-xl transition-all active:scale-95 ${distanceBtnStyle}`}
                            >
-                             <MapPin className={`w-3 h-3 ${isLocating ? 'animate-bounce' : ''}`}/> 
-                             {distMeters > -1 ? formatDistance(distMeters) : isLocating ? 'Calculando...' : 'Calcular Distância'}
+                             {distanceBtnIcon} {distanceBtnText}
                            </button>
-                           {locationError && <span className="text-[7px] font-black text-red-500 uppercase">{locationError}</span>}
                         </div>
                      </div>
                      <div className="flex flex-wrap gap-2 mt-2">
@@ -282,7 +304,7 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
                      </div>
                      <button 
                         onClick={() => handleOpenMap(field?.location || '')}
-                        className="text-[9px] font-bold text-blue-500 uppercase mt-2 flex items-center gap-1 hover:underline text-left"
+                        className="text-[9px] font-bold text-blue-500 uppercase mt-3 flex items-center gap-1 hover:underline text-left p-1"
                       >
                         <MapPin className="w-3 h-3" /> {field?.location}
                       </button>
@@ -321,15 +343,15 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
                    </div>
                    
                    {viewMode === 'EXPLORE' ? (
-                     <Button onClick={() => { setSelectedSlot(slot); setSelectedCategory(''); }} className="rounded-2xl px-8 py-4 font-black uppercase text-[10px] bg-pitch shadow-lg">
+                     <Button onClick={() => { setSelectedSlot(slot); setSelectedCategory(''); }} className="rounded-2xl px-8 py-4 font-black uppercase text-[10px] bg-pitch shadow-lg active:scale-95 transition-transform">
                         {(slot.hasLocalTeam || slot.bookedByTeamName) ? 'Desafiar Agora' : 'Alugar Horário'}
                      </Button>
                    ) : (
                      <div className="flex gap-2">
                        {slot.date >= todayStr && (
-                          <button onClick={() => onCancelBooking(slot.id)} className="p-3 text-red-500 hover:bg-red-50 rounded-2xl border border-red-100 active:scale-95 transition-all"><CalendarX className="w-5 h-5"/></button>
+                          <button onClick={() => onCancelBooking(slot.id)} className="p-4 text-red-500 hover:bg-red-50 rounded-2xl border border-red-100 active:scale-95 transition-all"><CalendarX className="w-5 h-5"/></button>
                        )}
-                       <button onClick={() => handleOpenMap(field?.location || '')} className="p-3 bg-gray-50 text-pitch rounded-2xl active:scale-95"><Navigation className="w-5 h-5"/></button>
+                       <button onClick={() => handleOpenMap(field?.location || '')} className="p-4 bg-gray-50 text-pitch rounded-2xl active:scale-95 transition-all border border-gray-100"><Navigation className="w-5 h-5"/></button>
                      </div>
                    )}
                 </div>
@@ -344,7 +366,7 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
           <div className="bg-white w-full rounded-t-[4rem] p-12 animate-in slide-in-from-bottom duration-500 max-h-[90vh] overflow-y-auto pb-safe">
             <div className="flex justify-between items-center mb-8">
                <h2 className="text-2xl font-black text-pitch uppercase italic">Confirmar Solicitação</h2>
-               <button onClick={() => setSelectedSlot(null)} className="p-2 bg-gray-100 rounded-full"><X className="w-5 h-5"/></button>
+               <button onClick={() => setSelectedSlot(null)} className="p-3 bg-gray-100 rounded-full active:scale-90 transition-all"><X className="w-6 h-6"/></button>
             </div>
             <div className="space-y-8">
                {(selectedSlot.localTeamCategory || selectedSlot.bookedByTeamCategory || selectedSlot.allowedOpponentCategories?.length > 0) && (
@@ -413,7 +435,7 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
                  </div>
                )}
 
-               <Button onClick={handleBookingConfirm} disabled={!selectedCategory} className="w-full py-6 rounded-[2.5rem] font-black uppercase shadow-xl">Solicitar Agora</Button>
+               <Button onClick={handleBookingConfirm} disabled={!selectedCategory} className="w-full py-6 rounded-[2.5rem] font-black uppercase shadow-xl active:scale-95 transition-transform">Solicitar Agora</Button>
             </div>
           </div>
         </div>

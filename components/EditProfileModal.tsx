@@ -204,11 +204,16 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({ categories, 
               </div>
 
               {/* GEO LOCALIZAÇÃO */}
-              <div className="bg-blue-50 p-4 rounded-2xl border border-blue-100">
+              <div className={`bg-blue-50 p-4 rounded-2xl border ${arenaLat === 0 && arenaLng === 0 ? 'border-red-300 ring-2 ring-red-100' : 'border-blue-100'}`}>
                  <div className="flex items-center gap-2 mb-3">
                    <Globe className="w-4 h-4 text-blue-500" />
-                   <h5 className="text-[10px] font-black text-blue-600 uppercase tracking-widest">Coordenadas (Para cálculo de distância)</h5>
+                   <h5 className="text-[10px] font-black text-blue-600 uppercase tracking-widest">Coordenadas (Obrigatório para Distância)</h5>
                  </div>
+                 {arenaLat === 0 && arenaLng === 0 && (
+                     <div className="bg-red-100 text-red-600 p-2 rounded-xl text-[9px] font-bold mb-3 flex items-center gap-2">
+                        <AlertCircle className="w-3 h-3" /> Preencha para aparecer no cálculo de distância!
+                     </div>
+                 )}
                  <div className="grid grid-cols-2 gap-4">
                     <div>
                        <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Latitude</label>
