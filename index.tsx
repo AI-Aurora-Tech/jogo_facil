@@ -1,4 +1,3 @@
-
 import React, { ErrorInfo, ReactNode } from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
@@ -17,7 +16,7 @@ interface ErrorBoundaryState {
  */
 class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
   // Explicitly declare props to fix 'Property props does not exist' error in some TS environments
-  public override readonly props: Readonly<ErrorBoundaryProps> & Readonly<{ children?: ReactNode }>;
+  public readonly props: Readonly<ErrorBoundaryProps> & Readonly<{ children?: ReactNode }>;
 
   public state: ErrorBoundaryState = {
     hasError: false,

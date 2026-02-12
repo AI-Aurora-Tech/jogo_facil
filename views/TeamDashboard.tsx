@@ -24,6 +24,7 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
   const [showFilters, setShowFilters] = useState(false);
   const [userCoords, setUserCoords] = useState<LatLng | null>(null);
   const [isLocating, setIsLocating] = useState(false);
+  const [locationError, setLocationError] = useState<string | null>(null);
   
   // States de Filtros
   const [filterDate, setFilterDate] = useState('');
@@ -35,12 +36,15 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
 
   const fetchLocation = async () => {
     setIsLocating(true);
+    setLocationError(null);
     try {
       const coords = await getCurrentPosition();
       console.log("Localização obtida:", coords);
       setUserCoords(coords);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Erro ao obter localização:", error);
+      setLocationError("GPS desativado ou permissão negada.");
+      // Se der erro, tenta pegar de novo com configurações mais relaxadas se necessário, ou só avisa.
     } finally {
       setIsLocating(false);
     }
@@ -177,7 +181,7 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
                 <Search className="w-4 h-4 text-pitch" />
                 <span className="text-[10px] font-black uppercase text-pitch">Explorar Arenas</span>
                 {!userCoords && (
-                  <button onClick={fetchLocation} className="ml-2 bg-gray-100 p-1.5 rounded-full text-pitch hover:bg-gray-200" disabled={isLocating}>
+                  <button onClick={fetchLocation} className={`ml-2 bg-gray-100 p-1.5 rounded-full text-pitch hover:bg-gray-200 transition-colors ${isLocating ? 'bg-yellow-100 text-yellow-600' : ''}`} disabled={isLocating}>
                     <Locate className={`w-3 h-3 ${isLocating ? 'animate-spin' : ''}`} />
                   </button>
                 )}
@@ -253,10 +257,10 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
                         <h3 className="font-black text-pitch text-lg leading-none uppercase truncate mr-2">{field?.name}</h3>
                         <div className="flex flex-col items-end gap-1">
                            <button 
-                             onClick={() => !userCoords && fetchLocation()}
-                             className="text-[9px] font-black text-grass-600 uppercase flex items-center gap-1 bg-grass-50 px-2 py-0.5 rounded-lg hover:bg-grass-100 transition-colors"
+                             onClick={() => fetchLocation()}
+                             className={`text-[9px] font-black uppercase flex items-center gap-1 px-2 py-0.5 rounded-lg transition-colors ${distMeters > -1 ? 'bg-grass-50 text-grass-600' : 'bg-gray-100 text-gray-400 hover:bg-grass-50 hover:text-grass-600'}`}
                            >
-                             <MapPin className="w-3 h-3"/> {formatDistance(distMeters)}
+                             <MapPin className="w-3 h-3"/> {distMeters > -1 ? formatDistance(distMeters) : isLocating ? 'Calculando...' : 'Calcular Distância'}
                            </button>
                         </div>
                      </div>

@@ -26,7 +26,7 @@ export const getCurrentPosition = (options?: PositionOptions): Promise<LatLng> =
       {
         enableHighAccuracy: true,
         timeout: 20000,
-        maximumAge: 0,
+        maximumAge: 10000, // Aceita cache de até 10s para ser mais rápido
         ...options,
       }
     );
@@ -37,6 +37,7 @@ export const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2
   // Retorna a distância em METROS. Se inválido, retorna -1.
   if (lat1 === null || lon1 === null || lat2 === null || lon2 === null) return -1;
   if (isNaN(lat1) || isNaN(lon1) || isNaN(lat2) || isNaN(lon2)) return -1;
+  if (lat1 === 0 && lon1 === 0) return -1; // Evita cálculo se coordenadas forem default 0
   
   const R = 6371000; // Raio da Terra em metros
   const dLat = deg2rad(lat2 - lat1);

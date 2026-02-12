@@ -153,10 +153,7 @@ const App: React.FC = () => {
         },
         (payload) => {
           console.log('Nova notificação recebida!', payload);
-          // Tocar um som sutil (opcional)
-          // const audio = new Audio('/notification.mp3'); audio.play().catch(() => {});
-          
-          refreshData(true); // Atualiza dados sem loading screen intrusivo
+          refreshData(true); 
         }
       )
       .subscribe();
@@ -243,7 +240,6 @@ const App: React.FC = () => {
   const handleNotificationClick = async (n: Notification) => {
     if (!n.read) {
       await api.markNotificationAsRead(n.id);
-      // Atualizar badge localmente rápido
       const unreadCount = notifications.filter(not => !not.read && not.id !== n.id).length;
       updateAppBadge(unreadCount);
     }
@@ -376,39 +372,43 @@ const App: React.FC = () => {
       )}
 
       {/* HEADER Ajustado para iOS */}
-      <header className={`bg-white/95 backdrop-blur-md px-6 flex justify-between items-center sticky top-0 z-50 border-b shadow-sm transition-all ${isIOS ? 'pt-14 pb-4' : 'py-4 pt-safe'}`}>
-          <div className="flex flex-col">
-              <div className="flex items-center gap-2">
-                 <Trophy className="w-5 h-5 text-grass-600" />
-                 <span className="text-xl font-black text-[#022c22] italic uppercase leading-none">JOGO FÁCIL</span>
-              </div>
-              {user && <span className="text-[8px] font-bold text-gray-400 uppercase tracking-widest mt-1">Olá, {currentUserContext?.name.split(' ')[0]}</span>}
-          </div>
-          <div className="flex items-center gap-2">
-            <button 
-              onClick={() => setShowNotifications(true)} 
-              className="p-2 bg-gray-50 rounded-xl relative active:scale-95 transition-all"
-            >
-              <Bell className="w-5 h-5 text-gray-500" />
-              {unreadNotifs > 0 && (
-                <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[8px] font-black w-4 h-4 rounded-full flex items-center justify-center border-2 border-white animate-bounce">
-                  {unreadNotifs}
-                </span>
-              )}
-            </button>
-            <button 
-              onClick={() => refreshData(false)} 
-              disabled={isLoading}
-              className={`p-2 bg-gray-50 rounded-xl transition-all ${isLoading ? 'animate-spin opacity-50' : 'active:scale-95'}`}
-            >
-              <RefreshCw className="w-5 h-5 text-[#10b981]" />
-            </button>
+      <header className={`bg-white/95 backdrop-blur-md px-6 flex justify-between items-center sticky top-0 z-50 border-b shadow-sm transition-all pt-safe py-4`}>
+          {/* Adicionar um padding-top extra apenas para quando o safe-area for muito pequeno ou zero, mas em devices com notch o pt-safe resolve. 
+              Para garantir, usamos mt-2 ou ajustamos a altura minima */}
+          <div className="mt-2 w-full flex justify-between items-center">
+            <div className="flex flex-col">
+                <div className="flex items-center gap-2">
+                  <Trophy className="w-5 h-5 text-grass-600" />
+                  <span className="text-xl font-black text-[#022c22] italic uppercase leading-none">JOGO FÁCIL</span>
+                </div>
+                {user && <span className="text-[8px] font-bold text-gray-400 uppercase tracking-widest mt-1">Olá, {currentUserContext?.name.split(' ')[0]}</span>}
+            </div>
+            <div className="flex items-center gap-2">
+              <button 
+                onClick={() => setShowNotifications(true)} 
+                className="p-2 bg-gray-50 rounded-xl relative active:scale-95 transition-all"
+              >
+                <Bell className="w-5 h-5 text-gray-500" />
+                {unreadNotifs > 0 && (
+                  <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[8px] font-black w-4 h-4 rounded-full flex items-center justify-center border-2 border-white animate-bounce">
+                    {unreadNotifs}
+                  </span>
+                )}
+              </button>
+              <button 
+                onClick={() => refreshData(false)} 
+                disabled={isLoading}
+                className={`p-2 bg-gray-50 rounded-xl transition-all ${isLoading ? 'animate-spin opacity-50' : 'active:scale-95'}`}
+              >
+                <RefreshCw className="w-5 h-5 text-[#10b981]" />
+              </button>
+            </div>
           </div>
       </header>
 
       {showNotifications && (
         <div className="fixed inset-0 bg-black/50 z-[200] flex justify-end pt-safe">
-          <div className="bg-white w-full max-w-sm h-full shadow-2xl animate-in slide-in-from-right duration-300 overflow-y-auto">
+          <div className="bg-white w-full max-w-sm h-full shadow-2xl animate-in slide-in-from-right duration-300 overflow-y-auto mt-safe">
              <div className="p-6 border-b flex justify-between items-center bg-gray-50 sticky top-0 z-10">
                 <h2 className="font-black text-pitch uppercase italic">Notificações</h2>
                 <button onClick={() => setShowNotifications(false)} className="p-2"><X className="w-6 h-6"/></button>
