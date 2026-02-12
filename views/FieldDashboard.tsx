@@ -80,8 +80,12 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
 
   useEffect(() => {
     // Atualiza nome padrão se o nome da arena carregar depois
-    if (field.name && manualLocalTeamName === 'Time da Casa') {
-      setManualLocalTeamName(field.name);
+    // Fix: Verifica se o nome atual é 'Carregando...' para substituir pelo nome real
+    if (field.name && field.name !== 'Carregando...') {
+       setManualLocalTeamName(prev => {
+          if (prev === 'Time da Casa' || prev === 'Carregando...') return field.name;
+          return prev;
+       });
     }
   }, [field.name]);
 
@@ -109,7 +113,11 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
     setSlotPrice(slot.price);
     setSlotSport(slot.sport);
     setIsLocalTeamSlot(slot.hasLocalTeam);
-    setManualLocalTeamName(slot.localTeamName || field.name || 'Time da Casa');
+    
+    // Se o nome salvo for 'Carregando...', usa o nome atual da arena
+    const displayTeamName = (slot.localTeamName === 'Carregando...' ? field.name : slot.localTeamName) || field.name || 'Time da Casa';
+    setManualLocalTeamName(displayTeamName);
+    
     setManualLocalCategory(slot.localTeamCategory || CATEGORY_ORDER[0]);
     setShowAddSlotModal(true);
   };
@@ -156,7 +164,12 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
         ? getNeighboringCategories(manualLocalCategory)
         : [manualLocalCategory];
       
-      const teamName = isLocalTeamSlot ? (manualLocalTeamName || field.name || 'Time da Casa') : null;
+      let teamName = isLocalTeamSlot ? (manualLocalTeamName || field.name || 'Time da Casa') : null;
+      
+      // Proteção para não salvar 'Carregando...'
+      if (teamName === 'Carregando...') {
+          teamName = field.name !== 'Carregando...' ? field.name : 'Time da Casa';
+      }
 
       const slotData = {
         fieldId: field.id,
@@ -334,7 +347,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                 <img src={field.imageUrl} className="w-full h-full object-cover" />
              </div>
              <div>
-                <h1 className="font-black text-pitch italic uppercase tracking-tighter leading-none">{field.name}</h1>
+                <h1 className="font-black text-pitch italic uppercase tracking-tighter leading-none">{field.name === 'Carregando...' ? 'Carregando...' : field.name}</h1>
                 <p className="text-[9px] font-black text-gray-400 uppercase mt-1">Gestão de Arena</p>
              </div>
           </div>
@@ -409,6 +422,11 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
               ) : (
                 agendaSlots.map(slot => {
                   const badges = getSlotBadges(slot);
+                  
+                  // Lógica visual para corrigir nome "CARREGANDO..."
+                  const displayLocalName = (slot.localTeamName === 'Carregando...' ? field.name : slot.localTeamName) || slot.bookedByTeamName || 'Horário Livre';
+                  const displayLocalNameSafe = displayLocalName === 'Carregando...' ? 'Time da Casa' : displayLocalName;
+
                   return (
                     <div key={slot.id} className="bg-white p-5 rounded-[2.5rem] border flex flex-col gap-4 shadow-sm relative group overflow-hidden">
                       <div className="flex justify-between items-start">
@@ -421,7 +439,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                                   {slot.time} • {slot.date.split('-').reverse().slice(0,2).join('/')}
                                </h4>
                                <p className="text-[9px] font-bold text-gray-400 uppercase mt-1 truncate">
-                                  {slot.localTeamName || slot.bookedByTeamName || 'Horário Livre'} vs {slot.opponentTeamName || '?'}
+                                  {displayLocalNameSafe} vs {slot.opponentTeamName || '?'}
                                </p>
                                <span className="text-[8px] font-black text-grass-600 uppercase mt-1 inline-block">{slot.sport} • {slot.courtName}</span>
                             </div>
