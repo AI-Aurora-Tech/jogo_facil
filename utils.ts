@@ -13,20 +13,34 @@ export const getCurrentPosition = (options?: PositionOptions): Promise<LatLng> =
       return;
     }
 
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        resolve({
-          lat: pos.coords.latitude,
-          lng: pos.coords.longitude,
-        });
-      },
-      (err) => {
+    const success = (pos: GeolocationPosition) => {
+      resolve({
+        lat: pos.coords.latitude,
+        lng: pos.coords.longitude,
+      });
+    };
+
+    const error = (err: GeolocationPositionError) => {
+      // Se falhar no modo high accuracy, tenta modo normal automaticamente (fallback)
+      if (options?.enableHighAccuracy !== false) {
+         console.warn("GPS de alta precisão falhou, tentando modo rápido...");
+         navigator.geolocation.getCurrentPosition(
+            success,
+            (errFinal) => reject(errFinal),
+            { ...options, enableHighAccuracy: false, timeout: 10000, maximumAge: 0 }
+         );
+      } else {
         reject(err);
-      },
+      }
+    };
+
+    navigator.geolocation.getCurrentPosition(
+      success,
+      error,
       {
         enableHighAccuracy: true,
-        timeout: 20000,
-        maximumAge: 10000, // Aceita cache de até 10s para ser mais rápido
+        timeout: 10000,
+        maximumAge: 10000,
         ...options,
       }
     );

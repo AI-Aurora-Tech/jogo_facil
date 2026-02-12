@@ -31,7 +31,9 @@ const App: React.FC = () => {
   // PWA Install Logic
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [showInstallBanner, setShowInstallBanner] = useState(false);
-  const [isIOS, setIsIOS] = useState(false);
+  
+  // Detectar iOS na inicialização para layout
+  const [isIOS] = useState(() => /iphone|ipad|ipod/.test(window.navigator.userAgent.toLowerCase()));
   const [isStandalone, setIsStandalone] = useState(false);
 
   // Função para atualizar o Badge do App (Contador no ícone)
@@ -62,21 +64,16 @@ const App: React.FC = () => {
       setDeferredPrompt(null);
     });
 
-    // Detectar iOS
-    const userAgent = window.navigator.userAgent.toLowerCase();
-    const isIosDevice = /iphone|ipad|ipod/.test(userAgent);
-    
     // Verificar se já está rodando como app (standalone)
     const isInStandaloneMode = ('standalone' in window.navigator && (window.navigator as any).standalone) || 
                                (window.matchMedia('(display-mode: standalone)').matches);
     
     setIsStandalone(isInStandaloneMode);
 
-    if (isIosDevice && !isInStandaloneMode) {
-      setIsIOS(true);
+    if (isIOS && !isInStandaloneMode) {
       setShowInstallBanner(true);
     }
-  }, []);
+  }, [isIOS]);
 
   const handleInstallClick = async () => {
     if (isIOS) {
@@ -338,7 +335,7 @@ const App: React.FC = () => {
     <div className="min-h-screen bg-gray-50 flex flex-col pb-safe relative">
       {/* PWA Install Banner */}
       {showInstallBanner && !isStandalone && (
-        <div className="bg-grass-600 text-white p-4 pt-safe flex items-center justify-between animate-in slide-in-from-top duration-500 sticky top-0 z-[100] shadow-lg">
+        <div className={`bg-grass-600 text-white p-4 flex items-center justify-between animate-in slide-in-from-top duration-500 sticky top-0 z-[100] shadow-lg ${isIOS ? 'pt-12' : 'pt-safe'}`}>
            <div className="flex items-center gap-3">
               <Download className="w-5 h-5" />
               <div className="flex flex-col">
@@ -365,16 +362,14 @@ const App: React.FC = () => {
 
       {/* Impersonation Banner */}
       {impersonatingUser && (
-        <div className="bg-red-500 text-white text-xs font-black uppercase tracking-widest p-2 pt-safe text-center flex justify-between items-center px-4">
+        <div className={`bg-red-500 text-white text-xs font-black uppercase tracking-widest p-2 text-center flex justify-between items-center px-4 ${isIOS ? 'pt-12' : 'pt-safe'}`}>
            <span>Acessando como: {impersonatingUser.name}</span>
            <button onClick={() => { setImpersonatingUser(null); setActiveTab('SUPER'); }} className="bg-white/20 px-3 py-1 rounded-lg hover:bg-white/30"><LogOut className="w-4 h-4" /></button>
         </div>
       )}
 
-      {/* HEADER Ajustado para iOS */}
-      <header className={`bg-white/95 backdrop-blur-md px-6 flex justify-between items-center sticky top-0 z-50 border-b shadow-sm transition-all pt-safe py-4`}>
-          {/* Adicionar um padding-top extra apenas para quando o safe-area for muito pequeno ou zero, mas em devices com notch o pt-safe resolve. 
-              Para garantir, usamos mt-2 ou ajustamos a altura minima */}
+      {/* HEADER Ajustado para iOS - pt-10 força padding extra se isIOS */}
+      <header className={`bg-white/95 backdrop-blur-md px-6 flex justify-between items-center sticky top-0 z-50 border-b shadow-sm transition-all ${isIOS ? 'pt-10' : 'pt-safe'} py-4`}>
           <div className="mt-2 w-full flex justify-between items-center">
             <div className="flex flex-col">
                 <div className="flex items-center gap-2">
@@ -386,7 +381,7 @@ const App: React.FC = () => {
             <div className="flex items-center gap-2">
               <button 
                 onClick={() => setShowNotifications(true)} 
-                className="p-2 bg-gray-50 rounded-xl relative active:scale-95 transition-all"
+                className="p-3 bg-gray-50 rounded-xl relative active:scale-95 transition-all"
               >
                 <Bell className="w-5 h-5 text-gray-500" />
                 {unreadNotifs > 0 && (
@@ -398,7 +393,7 @@ const App: React.FC = () => {
               <button 
                 onClick={() => refreshData(false)} 
                 disabled={isLoading}
-                className={`p-2 bg-gray-50 rounded-xl transition-all ${isLoading ? 'animate-spin opacity-50' : 'active:scale-95'}`}
+                className={`p-3 bg-gray-50 rounded-xl transition-all ${isLoading ? 'animate-spin opacity-50' : 'active:scale-95'}`}
               >
                 <RefreshCw className="w-5 h-5 text-[#10b981]" />
               </button>

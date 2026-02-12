@@ -43,8 +43,13 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
       setUserCoords(coords);
     } catch (error: any) {
       console.error("Erro ao obter localização:", error);
-      setLocationError("GPS desativado ou permissão negada.");
-      // Se der erro, tenta pegar de novo com configurações mais relaxadas se necessário, ou só avisa.
+      let msg = "Erro ao obter localização.";
+      if (error.code === 1) msg = "Permissão de localização negada.";
+      else if (error.code === 2) msg = "Sinal de GPS indisponível.";
+      else if (error.code === 3) msg = "Tempo limite esgotado.";
+      
+      setLocationError(msg);
+      alert(msg + "\n\nVerifique se o GPS está ativo e se você permitiu o acesso no navegador.");
     } finally {
       setIsLocating(false);
     }
@@ -257,11 +262,14 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
                         <h3 className="font-black text-pitch text-lg leading-none uppercase truncate mr-2">{field?.name}</h3>
                         <div className="flex flex-col items-end gap-1">
                            <button 
-                             onClick={() => fetchLocation()}
-                             className={`text-[9px] font-black uppercase flex items-center gap-1 px-2 py-0.5 rounded-lg transition-colors ${distMeters > -1 ? 'bg-grass-50 text-grass-600' : 'bg-gray-100 text-gray-400 hover:bg-grass-50 hover:text-grass-600'}`}
+                             onClick={fetchLocation}
+                             disabled={isLocating}
+                             className={`text-[9px] font-black uppercase flex items-center gap-1 px-2 py-1.5 rounded-lg transition-colors ${distMeters > -1 ? 'bg-grass-50 text-grass-600' : 'bg-gray-100 text-gray-500 hover:bg-grass-50 hover:text-grass-600'}`}
                            >
-                             <MapPin className="w-3 h-3"/> {distMeters > -1 ? formatDistance(distMeters) : isLocating ? 'Calculando...' : 'Calcular Distância'}
+                             <MapPin className={`w-3 h-3 ${isLocating ? 'animate-bounce' : ''}`}/> 
+                             {distMeters > -1 ? formatDistance(distMeters) : isLocating ? 'Calculando...' : 'Calcular Distância'}
                            </button>
+                           {locationError && <span className="text-[7px] font-black text-red-500 uppercase">{locationError}</span>}
                         </div>
                      </div>
                      <div className="flex flex-wrap gap-2 mt-2">
