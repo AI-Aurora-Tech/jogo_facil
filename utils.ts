@@ -2,7 +2,7 @@
 import { CATEGORY_ORDER } from './types';
 
 export const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
-  if (!lat1 || !lon1 || !lat2 || !lon2) return 0;
+  if (lat1 == null || lon1 == null || lat2 == null || lon2 == null) return 0;
   
   const R = 6371; // Raio da Terra em km
   const dLat = deg2rad(lat2 - lat1);

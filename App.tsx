@@ -375,8 +375,8 @@ const App: React.FC = () => {
         </div>
       )}
 
-      {/* HEADER com pt-safe para garantir que não fique atrás do relógio/notch */}
-      <header className="bg-white/95 backdrop-blur-md px-6 py-4 pt-safe flex justify-between items-center sticky top-0 z-50 border-b shadow-sm">
+      {/* HEADER Ajustado para iOS */}
+      <header className={`bg-white/95 backdrop-blur-md px-6 flex justify-between items-center sticky top-0 z-50 border-b shadow-sm transition-all ${isIOS ? 'pt-14 pb-4' : 'py-4 pt-safe'}`}>
           <div className="flex flex-col">
               <div className="flex items-center gap-2">
                  <Trophy className="w-5 h-5 text-grass-600" />

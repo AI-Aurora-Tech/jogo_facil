@@ -186,8 +186,8 @@ export const api = {
         pixConfig: { key: f.pix_key || '', name: f.pix_name || '' },
         imageUrl: f.image_url,
         contactPhone: f.contact_phone,
-        latitude: f.latitude,
-        longitude: f.longitude,
+        latitude: Number(f.latitude) || 0,
+        longitude: Number(f.longitude) || 0,
         courts: f.courts || ['Principal']
     }));
   },
@@ -267,17 +267,9 @@ export const api = {
 
   updateSlot: async (slotId: string, data: Partial<MatchSlot>): Promise<void> => {
     const payload: any = {};
-    // Campos básicos
     if (data.status) payload.status = data.status;
     if (data.isBooked !== undefined) payload.is_booked = data.isBooked;
     if (data.receiptUrl) payload.receipt_url = data.receiptUrl;
-    
-    // Campos do Mandante (Local) - ESSENCIAIS PARA CORRIGIR O BUG
-    if (data.hasLocalTeam !== undefined) payload.has_local_team = data.hasLocalTeam;
-    if (data.localTeamName !== undefined) payload.local_team_name = data.localTeamName;
-    if (data.localTeamCategory !== undefined) payload.local_team_category = data.localTeamCategory;
-
-    // Campos do Desafiante (Externo)
     if (data.bookedByTeamName !== undefined) payload.booked_by_team_name = data.bookedByTeamName;
     if (data.opponentTeamName !== undefined) payload.opponent_team_name = data.opponentTeamName;
     if (data.opponentTeamCategory !== undefined) payload.opponent_team_category = data.opponentTeamCategory;
