@@ -1,10 +1,44 @@
 
 import { CATEGORY_ORDER } from './types';
 
+export interface LatLng {
+  lat: number;
+  lng: number;
+}
+
+export const getCurrentPosition = (options?: PositionOptions): Promise<LatLng> => {
+  return new Promise((resolve, reject) => {
+    if (!("geolocation" in navigator)) {
+      reject(new Error("Geolocalização não suportada."));
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        resolve({
+          lat: pos.coords.latitude,
+          lng: pos.coords.longitude,
+        });
+      },
+      (err) => {
+        reject(err);
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 20000,
+        maximumAge: 0,
+        ...options,
+      }
+    );
+  });
+};
+
 export const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
-  if (lat1 == null || lon1 == null || lat2 == null || lon2 == null) return 0;
+  // Retorna a distância em METROS. Se inválido, retorna -1.
+  if (lat1 === null || lon1 === null || lat2 === null || lon2 === null) return -1;
+  if (isNaN(lat1) || isNaN(lon1) || isNaN(lat2) || isNaN(lon2)) return -1;
   
-  const R = 6371; // Raio da Terra em km
+  const R = 6371000; // Raio da Terra em metros
   const dLat = deg2rad(lat2 - lat1);
   const dLon = deg2rad(lon2 - lon1);
   
@@ -14,9 +48,13 @@ export const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2
     Math.sin(dLon / 2) * Math.sin(dLon / 2);
     
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  const distance = R * c;
-  
-  return Number(distance.toFixed(1));
+  return R * c;
+};
+
+export const formatDistance = (meters: number): string => {
+  if (meters < 0 || !Number.isFinite(meters)) return "--";
+  if (meters < 1000) return `${Math.round(meters)}m`;
+  return `${(meters / 1000).toFixed(1)}km`;
 };
 
 function deg2rad(deg: number) {

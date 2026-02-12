@@ -1,10 +1,10 @@
 
 import React, { useState, useEffect } from 'react';
-import { Search, MapPin, Clock, Swords, Filter, X, Check, MessageCircle, Phone, Navigation, Trophy, ChevronDown, Smartphone, Settings, AlertTriangle, ExternalLink, Activity, History as HistoryIcon, CalendarCheck, CalendarX } from 'lucide-react';
+import { Search, MapPin, Clock, Swords, Filter, X, Check, MessageCircle, Phone, Navigation, Trophy, ChevronDown, Smartphone, Settings, AlertTriangle, ExternalLink, Activity, History as HistoryIcon, CalendarCheck, CalendarX, Locate } from 'lucide-react';
 import { Button } from '../components/Button';
 import { Field, MatchSlot, User, CATEGORY_ORDER, SPORTS, Gender } from '../types';
 import { api } from '../api';
-import { calculateDistance } from '../utils';
+import { calculateDistance, getCurrentPosition, formatDistance, LatLng, getNeighboringCategories } from '../utils';
 
 interface TeamDashboardProps {
   categories: string[];
@@ -22,7 +22,8 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
   const [selectedTeamIdx, setSelectedTeamIdx] = useState(0);
   const [selectedCategory, setSelectedCategory] = useState('');
   const [showFilters, setShowFilters] = useState(false);
-  const [userCoords, setUserCoords] = useState<{lat: number, lng: number} | null>(null);
+  const [userCoords, setUserCoords] = useState<LatLng | null>(null);
+  const [isLocating, setIsLocating] = useState(false);
   
   // States de Filtros
   const [filterDate, setFilterDate] = useState('');
@@ -32,17 +33,21 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
 
   const [myGamesSubTab, setMyGamesSubTab] = useState<'FUTUROS' | 'HISTORICO'>('FUTUROS');
 
-  useEffect(() => {
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          console.log("Localização obtida:", pos.coords);
-          setUserCoords({ lat: pos.coords.latitude, lng: pos.coords.longitude });
-        },
-        (err) => console.warn("Erro ao obter localização:", err),
-        { enableHighAccuracy: true, timeout: 10000 }
-      );
+  const fetchLocation = async () => {
+    setIsLocating(true);
+    try {
+      const coords = await getCurrentPosition();
+      console.log("Localização obtida:", coords);
+      setUserCoords(coords);
+    } catch (error) {
+      console.error("Erro ao obter localização:", error);
+    } finally {
+      setIsLocating(false);
     }
+  };
+
+  useEffect(() => {
+    fetchLocation();
   }, []);
 
   const todayStr = new Date().toISOString().split('T')[0];
@@ -163,15 +168,6 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
     }
   };
 
-  const getNeighboringCategories = (baseCategory: string): string[] => {
-    const idx = CATEGORY_ORDER.indexOf(baseCategory);
-    if (idx === -1) return [baseCategory];
-    const result = [baseCategory];
-    if (idx > 0) result.push(CATEGORY_ORDER[idx - 1]);
-    if (idx < CATEGORY_ORDER.length - 1) result.push(CATEGORY_ORDER[idx + 1]);
-    return result;
-  };
-
   return (
     <div className="flex flex-col h-full bg-gray-50 pb-20">
       {viewMode === 'EXPLORE' ? (
@@ -180,6 +176,11 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
              <div className="flex items-center gap-2">
                 <Search className="w-4 h-4 text-pitch" />
                 <span className="text-[10px] font-black uppercase text-pitch">Explorar Arenas</span>
+                {!userCoords && (
+                  <button onClick={fetchLocation} className="ml-2 bg-gray-100 p-1.5 rounded-full text-pitch hover:bg-gray-200" disabled={isLocating}>
+                    <Locate className={`w-3 h-3 ${isLocating ? 'animate-spin' : ''}`} />
+                  </button>
+                )}
              </div>
              <button onClick={() => setShowFilters(!showFilters)} className="text-[10px] font-black uppercase text-grass-600 flex items-center gap-1">
                 Filtros <ChevronDown className={`w-3 h-3 ${showFilters ? 'rotate-180' : ''}`} />
@@ -232,9 +233,11 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
           filteredSlots.map(slot => {
             const field = fields.find(f => f.id === slot.fieldId);
             
-            // Lógica de Distância Corrigida: Verifica se existem coordenadas válidas (mesmo que 0)
-            const hasCoords = userCoords && field?.latitude != null && field?.longitude != null;
-            const dist = hasCoords ? calculateDistance(userCoords!.lat, userCoords!.lng, field!.latitude, field!.longitude) : null;
+            // Calculo de Distância em Metros
+            let distMeters = -1;
+            if (userCoords && field && field.latitude != null && field.longitude != null) {
+              distMeters = calculateDistance(userCoords.lat, userCoords.lng, field.latitude, field.longitude);
+            }
             
             const status = getStatusBadge(slot);
             const currentCategory = slot.localTeamCategory || slot.bookedByTeamCategory;
@@ -249,9 +252,12 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
                      <div className="flex justify-between items-start">
                         <h3 className="font-black text-pitch text-lg leading-none uppercase truncate mr-2">{field?.name}</h3>
                         <div className="flex flex-col items-end gap-1">
-                           <span className="text-[9px] font-black text-grass-600 uppercase flex items-center gap-1">
-                             <MapPin className="w-3 h-3"/> {dist !== null ? `${dist}km` : '--'}
-                           </span>
+                           <button 
+                             onClick={() => !userCoords && fetchLocation()}
+                             className="text-[9px] font-black text-grass-600 uppercase flex items-center gap-1 bg-grass-50 px-2 py-0.5 rounded-lg hover:bg-grass-100 transition-colors"
+                           >
+                             <MapPin className="w-3 h-3"/> {formatDistance(distMeters)}
+                           </button>
                         </div>
                      </div>
                      <div className="flex flex-wrap gap-2 mt-2">

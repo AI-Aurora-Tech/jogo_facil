@@ -1,3 +1,4 @@
+
 import React, { ErrorInfo, ReactNode } from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
@@ -15,10 +16,18 @@ interface ErrorBoundaryState {
  * ErrorBoundary class to catch rendering errors in the component tree.
  */
 class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
+  // Explicitly declare props to fix 'Property props does not exist' error in some TS environments
+  public override readonly props: Readonly<ErrorBoundaryProps> & Readonly<{ children?: ReactNode }>;
+
   public state: ErrorBoundaryState = {
     hasError: false,
     error: null
   };
+
+  constructor(props: ErrorBoundaryProps) {
+    super(props);
+    this.props = props;
+  }
 
   public static getDerivedStateFromError(error: Error): ErrorBoundaryState {
     return { hasError: true, error };
