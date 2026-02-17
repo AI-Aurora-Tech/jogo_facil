@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Search, MapPin, Clock, Swords, Filter, X, Check, MessageCircle, Phone, Navigation, Trophy, ChevronDown, Smartphone, Settings, AlertTriangle, ExternalLink, Activity, History as HistoryIcon, CalendarCheck, CalendarX, Locate, MapPinOff, Calendar, RotateCcw } from 'lucide-react';
 import { Button } from '../components/Button';
 import { Field, MatchSlot, User, CATEGORY_ORDER, SPORTS, Gender } from '../types';
@@ -25,13 +25,7 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
   
   // Estado de GPS
   const [userCoords, setUserCoords] = useState<LatLng | null>(null);
-  const [gpsStatus, setGpsStatus] = useState<'IDLE' | 'LOADING' | 'SUCCESS' | 'ERROR'>('IDLE');
-  const [gpsErrorMsg, setGpsErrorMsg] = useState<string>('');
-  
-  // Controle de carregamento INDIVIDUAL por card
   const [loadingFieldId, setLoadingFieldId] = useState<string | null>(null);
-  
-  // Armazena coordenadas temporárias calculadas via endereço (quando o banco não tem)
   const [tempFieldCoords, setTempFieldCoords] = useState<Record<string, LatLng>>({});
 
   const [filterRange, setFilterRange] = useState<string>('ALL');
@@ -41,53 +35,48 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
   const [searchQuery, setSearchQuery] = useState('');
   const [myGamesSubTab, setMyGamesSubTab] = useState<'FUTUROS' | 'HISTORICO'>('FUTUROS');
 
-  // Função para pegar GPS do usuário (apenas)
-  const fetchUserLocation = async () => {
-    if (userCoords) return userCoords;
-    
-    setGpsStatus('LOADING');
-    setGpsErrorMsg('');
-    try {
-      const coords = await getCurrentPosition();
-      setUserCoords(coords);
-      setGpsStatus('SUCCESS');
-      return coords;
-    } catch (error: any) {
-      const msg = error.message || "Erro GPS";
-      setGpsErrorMsg(msg); 
-      setGpsStatus('ERROR');
-      alert(`Não foi possível obter sua localização: ${msg}`);
-      return null;
-    }
-  };
-
-  // FLUXO PRINCIPAL: Clicar no botão "Calcular Distância"
+  // Função Robusta de Cálculo de Distância com Diagnóstico
   const handleCalculateDistanceForField = async (field: Field) => {
-    // 1. Obter GPS do Usuário
-    const currentUserLoc = await fetchUserLocation();
-    if (!currentUserLoc) return; // Se falhar o GPS, para aqui e o alerta já foi exibido
-
-    // 2. Se o campo já tem coordenadas no banco ou temporárias, não precisa recalcular (o render fará isso)
-    const hasCoords = (field.latitude !== 0 && field.longitude !== 0) || !!tempFieldCoords[field.id];
-    
-    // Se já tem coordenadas, talvez o usuário queira atualizar sua posição GPS (se ele se moveu)
-    // Então deixamos prosseguir apenas se não tiver coords na arena.
-    // Se tiver coords na arena e o GPS do usuário atualizou, o cálculo é automático no render.
-    if (hasCoords) return;
-
-    // 3. Se não tem coordenadas da Arena, força o Geocoding
     setLoadingFieldId(field.id);
-    if (field.location && field.location.length > 5) {
-        const fieldCoords = await geocodeAddress(field.location);
-        if (fieldCoords) {
-            setTempFieldCoords(prev => ({ ...prev, [field.id]: fieldCoords }));
-        } else {
-            alert("Não conseguimos localizar este endereço no mapa automaticamente.\n\nVerifique se o endereço está escrito corretamente ou abra no Google Maps pelo link abaixo.");
-        }
-    } else {
-        alert("Esta arena não possui um endereço válido cadastrado.");
+    
+    // Passo 1: Obter Localização do Usuário (GPS)
+    let currentUserLoc = userCoords;
+    if (!currentUserLoc) {
+      try {
+        currentUserLoc = await getCurrentPosition();
+        setUserCoords(currentUserLoc);
+      } catch (error: any) {
+        alert(`ERRO DE GPS:\n${error.message}\n\nDicas:\n1. Verifique se o GPS está ativo.\n2. Permita o acesso à localização.\n3. Se estiver em um navegador dentro de app (Instagram/WhatsApp), tente abrir no Chrome/Safari.`);
+        setLoadingFieldId(null);
+        return;
+      }
     }
+
+    // Passo 2: Obter Localização da Arena (Geocoding se necessário)
+    let arenaLoc: LatLng | null = null;
+    
+    // Tenta usar coords do banco se existirem
+    if (field.latitude && field.longitude && (Math.abs(field.latitude) > 0.0001)) {
+        arenaLoc = { lat: field.latitude, lng: field.longitude };
+    } 
+    // Se já calculamos temporariamente antes
+    else if (tempFieldCoords[field.id]) {
+        arenaLoc = tempFieldCoords[field.id];
+    } 
+    // Se não tem, tenta buscar pelo endereço agora
+    else if (field.location && field.location.length > 5) {
+        arenaLoc = await geocodeAddress(field.location);
+        if (arenaLoc) {
+            setTempFieldCoords(prev => ({ ...prev, [field.id]: arenaLoc! }));
+        }
+    }
+
     setLoadingFieldId(null);
+
+    // Passo 3: Feedback ao usuário se falhar a localização da Arena
+    if (!arenaLoc) {
+        alert(`SUCESSO NO GPS DO USUÁRIO ✅\nFALHA NA ARENA ❌\n\nNão conseguimos encontrar o endereço "${field.location}" no mapa.\n\nTente abrir no Google Maps clicando no endereço.`);
+    }
   };
 
   const todayStr = new Date().toISOString().split('T')[0];
@@ -311,21 +300,17 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
             let distanceBtnStyle = 'bg-gray-100 text-gray-500 hover:bg-grass-50 hover:text-grass-600';
             let distanceDisabled = false;
 
-            if (gpsStatus === 'LOADING' || isThisFieldLoading) {
+            if (isThisFieldLoading) {
                 distanceBtnText = 'Calculando...';
                 distanceBtnIcon = <Locate className="w-3 h-3 animate-spin"/>;
                 distanceDisabled = true;
                 distanceBtnStyle = 'bg-gray-100 text-gray-400';
-            } else if (gpsStatus === 'ERROR') {
-                distanceBtnText = 'Tentar Novamente';
-                distanceBtnIcon = <RotateCcw className="w-3 h-3"/>;
-                distanceBtnStyle = 'bg-red-50 text-red-500 border border-red-100';
             } else if (distMeters > -1) {
                 distanceBtnText = formatDistance(distMeters);
                 distanceBtnIcon = <MapPin className="w-3 h-3"/>;
                 distanceBtnStyle = 'bg-grass-50 text-grass-600 border border-grass-100';
-            } else if (gpsStatus === 'SUCCESS' && userCoords) {
-                // GPS OK, mas sem distância (Geocoding da arena falhou ou ainda não foi pedido)
+            } else if (userCoords) {
+                // GPS OK, mas sem distância (Aguardando clique para tentar geocode)
                 distanceBtnText = 'Calcular Distância';
                 distanceBtnIcon = <MapPin className="w-3 h-3"/>;
                 distanceBtnStyle = 'bg-blue-50 text-blue-600 border border-blue-100 hover:bg-blue-100';
@@ -343,7 +328,7 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
                         <div className="flex flex-col items-end gap-1">
                            <button 
                              onClick={(e) => {
-                               e.stopPropagation(); // Evita conflitos de clique
+                               e.stopPropagation(); 
                                if(field) handleCalculateDistanceForField(field);
                              }}
                              disabled={distanceDisabled}

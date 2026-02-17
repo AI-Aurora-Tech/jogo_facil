@@ -7,59 +7,76 @@ export interface LatLng {
 }
 
 /**
- * Obtém a posição atual com sistema de fallback.
+ * Tenta obter a posição via getCurrentPosition.
  */
-export const getCurrentPosition = (options?: PositionOptions): Promise<LatLng> => {
+const attemptGetCurrentPosition = (timeout: number): Promise<LatLng> => {
   return new Promise((resolve, reject) => {
-    if (!("geolocation" in navigator)) {
-      reject(new Error("Geolocalização não suportada."));
-      return;
-    }
-
-    const success = (pos: GeolocationPosition) => {
-      resolve({
-        lat: pos.coords.latitude,
-        lng: pos.coords.longitude,
-      });
-    };
-
-    const error = (err: GeolocationPositionError) => {
-      console.warn(`Erro GPS Primário (${err.code}): ${err.message}`);
-      
-      // Fallback: Tenta novamente com precisão menor e timeout maior
-      if (options?.enableHighAccuracy !== false) {
-          // console.log("Tentando fallback com baixa precisão...");
-          navigator.geolocation.getCurrentPosition(
-            success,
-            (errFinal) => {
-                const msg = getFriendlyErrorMessage(errFinal);
-                reject(new Error(msg));
-            },
-            { maximumAge: 0, timeout: 15000, enableHighAccuracy: false }
-          );
-      } else {
-        const msg = getFriendlyErrorMessage(err);
-        reject(new Error(msg));
-      }
-    };
-
-    // Tenta primeiro com alta precisão
     navigator.geolocation.getCurrentPosition(
-      success,
-      error,
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0, ...options }
+      (pos) => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+      (err) => reject(err),
+      { enableHighAccuracy: true, timeout, maximumAge: 0 }
     );
   });
 };
 
-function getFriendlyErrorMessage(err: GeolocationPositionError): string {
-  switch(err.code) {
-    case 1: return "GPS Permissão Negada. Ative a localização no seu navegador/celular.";
-    case 2: return "Sinal GPS Indisponível.";
-    case 3: return "Tempo limite do GPS esgotado.";
-    default: return "Erro ao obter localização.";
+/**
+ * Tenta obter a posição via watchPosition (fallback robusto).
+ * Alguns dispositivos móveis acordam o GPS melhor com watchPosition.
+ */
+const attemptWatchPosition = (timeout: number): Promise<LatLng> => {
+  return new Promise((resolve, reject) => {
+    let done = false;
+    const id = navigator.geolocation.watchPosition(
+      (pos) => {
+        if (done) return;
+        done = true;
+        navigator.geolocation.clearWatch(id);
+        resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+      },
+      (err) => {
+         // Não rejeita imediatamente, espera o timeout ou sucesso
+         console.warn("WatchPosition error (retrying):", err);
+      },
+      { enableHighAccuracy: true, maximumAge: 0 }
+    );
+
+    setTimeout(() => {
+      if (!done) {
+        done = true;
+        navigator.geolocation.clearWatch(id);
+        reject(new Error("Timeout ao aguardar sinal GPS (watch)."));
+      }
+    }, timeout);
+  });
+};
+
+/**
+ * Obtém a posição atual com sistema de fallback robusto.
+ */
+export const getCurrentPosition = async (): Promise<LatLng> => {
+  if (!("geolocation" in navigator)) {
+    throw new Error("Seu navegador não suporta geolocalização.");
   }
-}
+
+  // Verificação de Contexto Seguro (HTTPS)
+  // Nota: localhost é considerado seguro.
+  if (window.isSecureContext === false) {
+    throw new Error("Geolocalização requer conexão segura (HTTPS).");
+  }
+
+  try {
+    // Tentativa 1: Método Padrão (Rápido - 5s)
+    return await attemptGetCurrentPosition(5000);
+  } catch (e) {
+    console.log("getCurrentPosition falhou, tentando fallback watchPosition...");
+    try {
+      // Tentativa 2: Método Watch (Mais lento/robusto - 7s)
+      return await attemptWatchPosition(7000);
+    } catch (e2) {
+      throw new Error("Não foi possível obter sua localização. Verifique se o GPS está ativo e se a permissão foi concedida.");
+    }
+  }
+};
 
 function toRad(deg: number) {
   return (deg * Math.PI) / 180;
@@ -99,7 +116,7 @@ export const geocodeAddress = async (address: string): Promise<LatLng | null> =>
 
   const doFetch = async (q: string) => {
      try {
-       // Pequeno delay para evitar rate limit
+       // Pequeno delay para evitar rate limit do Nominatim
        await new Promise(r => setTimeout(r, 300));
        const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q)}&limit=1`;
        const response = await fetch(url, {
@@ -117,29 +134,26 @@ export const geocodeAddress = async (address: string): Promise<LatLng | null> =>
   };
 
   try {
-    // 1. Limpeza do endereço (Troca traços por vírgulas para ajudar o Nominatim)
-    // Ex: "Rua X - Bairro Y" vira "Rua X, Bairro Y"
+    // 1. Limpeza do endereço
     const cleanAddress = address.replace(/ - /g, ', ').replace(/-/g, ', ');
     
-    // Tenta query completa
+    // Tenta query completa com Brasil
     const fullQuery = cleanAddress.toLowerCase().includes('brasil') ? cleanAddress : `${cleanAddress}, Brasil`;
     let result = await doFetch(fullQuery);
 
-    // 2. Fallback: Tenta simplificar se falhar
+    // 2. Fallback: Simplificação
     if (!result && address.includes(',')) {
        const parts = address.split(',');
-       // Tenta pegar: Parte 1 (Rua) + Última Parte (Cidade/Estado)
        if (parts.length >= 2) {
           const simplified = `${parts[0]}, ${parts[parts.length-1]}`.replace(/ - /g, ', ');
           result = await doFetch(simplified + ", Brasil");
        }
     }
     
-    // 3. Fallback agressivo: Tenta apenas a primeira parte (Nome da Rua) + Cidade se possível
+    // 3. Fallback agressivo: Rua + Cidade
     if (!result && address.includes('-')) {
         const parts = address.split('-');
         if (parts.length >= 2) {
-             // Tenta: Rua + Cidade (assumindo que a última parte é cidade/estado)
              const simplified = `${parts[0].trim()}, ${parts[parts.length-1].trim()}, Brasil`;
              result = await doFetch(simplified);
         }
