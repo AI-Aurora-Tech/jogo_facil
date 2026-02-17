@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { Search, MapPin, Clock, Swords, Filter, X, Check, MessageCircle, Phone, Navigation, Trophy, ChevronDown, Smartphone, Settings, AlertTriangle, ExternalLink, Activity, History as HistoryIcon, CalendarCheck, CalendarX, Locate, MapPinOff } from 'lucide-react';
+import { Search, MapPin, Clock, Swords, Filter, X, Check, MessageCircle, Phone, Navigation, Trophy, ChevronDown, Smartphone, Settings, AlertTriangle, ExternalLink, Activity, History as HistoryIcon, CalendarCheck, CalendarX, Locate, MapPinOff, Calendar } from 'lucide-react';
 import { Button } from '../components/Button';
 import { Field, MatchSlot, User, CATEGORY_ORDER, SPORTS, Gender } from '../types';
 import { api } from '../api';
@@ -27,7 +27,8 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
   const [locationError, setLocationError] = useState<string | null>(null);
   
   // States de Filtros
-  const [filterDate, setFilterDate] = useState('');
+  const [filterRange, setFilterRange] = useState<string>('ALL'); // ALL, TODAY, TOMORROW, 7DAYS, 15DAYS, SPECIFIC
+  const [filterDate, setFilterDate] = useState(''); // Usado apenas se filterRange === 'SPECIFIC'
   const [filterSport, setFilterSport] = useState('');
   const [filterCategory, setFilterCategory] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
@@ -38,18 +39,15 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
     setIsLocating(true);
     setLocationError(null);
     try {
+      // Usa a nova função robusta do utils.ts
       const coords = await getCurrentPosition();
-      console.log("Localização obtida:", coords);
+      console.log("Localização obtida com sucesso:", coords);
       setUserCoords(coords);
     } catch (error: any) {
-      console.error("Erro ao obter localização:", error);
-      let msg = "Erro ao obter localização.";
-      if (error.code === 1) msg = "Permissão de localização negada.";
-      else if (error.code === 2) msg = "Sinal de GPS indisponível.";
-      else if (error.code === 3) msg = "Tempo limite esgotado.";
-      
+      console.error("Falha na localização:", error);
+      const msg = error.message || "Não foi possível obter sua localização.";
       setLocationError(msg);
-      alert(msg + "\n\nVerifique se o GPS está ativo e se você permitiu o acesso no navegador.");
+      alert(msg);
     } finally {
       setIsLocating(false);
     }
@@ -57,10 +55,14 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
 
   // Tenta pegar localização ao iniciar se já estiver permitida, mas sem forçar erro
   useEffect(() => {
-    // Opcional: Auto-fetch silencioso
+    // Check rápido de permissão se possível (não suportado em todos browsers, então apenas deixamos manual por enquanto para evitar bloqueio)
   }, []);
 
   const todayStr = new Date().toISOString().split('T')[0];
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const tomorrowStr = tomorrow.toISOString().split('T')[0];
+
   const userAllCategories = currentUser.teams?.flatMap(t => t.categories) || [];
   const myTeamsNames = currentUser.teams?.map(t => t.name.toLowerCase()) || [];
 
@@ -68,14 +70,35 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
     const field = fields.find(f => f.id === slot.fieldId);
     if (!field) return false;
 
-    // Filtros de busca básica (aplicam-se a ambos os modos)
-    if (filterDate && slot.date !== filterDate) return false;
+    // Filtro de Texto (Nome da Arena)
+    if (searchQuery && !field.name.toLowerCase().includes(searchQuery.toLowerCase())) return false;
+    
+    // Filtros Específicos
     if (filterSport && slot.sport !== filterSport) return false;
+    
     if (filterCategory) {
         const baseCat = slot.localTeamCategory || slot.bookedByTeamCategory;
         if (baseCat && baseCat !== filterCategory) return false;
     }
-    if (searchQuery && !field.name.toLowerCase().includes(searchQuery.toLowerCase())) return false;
+
+    // Filtro de Data/Período
+    if (filterRange === 'SPECIFIC') {
+        if (filterDate && slot.date !== filterDate) return false;
+    } else if (filterRange === 'TODAY') {
+        if (slot.date !== todayStr) return false;
+    } else if (filterRange === 'TOMORROW') {
+        if (slot.date !== tomorrowStr) return false;
+    } else if (filterRange === '7DAYS') {
+        const limit = new Date();
+        limit.setDate(limit.getDate() + 7);
+        const limitStr = limit.toISOString().split('T')[0];
+        if (slot.date < todayStr || slot.date > limitStr) return false;
+    } else if (filterRange === '15DAYS') {
+        const limit = new Date();
+        limit.setDate(limit.getDate() + 15);
+        const limitStr = limit.toISOString().split('T')[0];
+        if (slot.date < todayStr || slot.date > limitStr) return false;
+    }
 
     if (viewMode === 'EXPLORE') {
       if (slot.date < todayStr) return false;
@@ -205,18 +228,46 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
                   onChange={e => setSearchQuery(e.target.value)} 
                   className="w-full bg-white p-3 rounded-xl border font-bold text-[10px] uppercase outline-none"
                 />
+               
+               {/* Filtro de Período/Data */}
                <div className="grid grid-cols-2 gap-2">
-                  <input type="date" value={filterDate} onChange={e => setFilterDate(e.target.value)} className="bg-white p-3 rounded-xl border font-bold text-[10px] uppercase" />
-                  <select value={filterSport} onChange={e => setFilterSport(e.target.value)} className="bg-white p-3 rounded-xl border font-bold text-[10px] uppercase">
-                     <option value="">Esportes</option>
+                   <div className="bg-white p-3 rounded-xl border flex items-center gap-2">
+                      <Calendar className="w-4 h-4 text-gray-400" />
+                      <select 
+                        value={filterRange} 
+                        onChange={e => setFilterRange(e.target.value)} 
+                        className="bg-transparent w-full font-bold text-[10px] uppercase outline-none"
+                      >
+                         <option value="ALL">Qualquer Data</option>
+                         <option value="TODAY">Hoje</option>
+                         <option value="TOMORROW">Amanhã</option>
+                         <option value="7DAYS">Próximos 7 dias</option>
+                         <option value="15DAYS">Próximos 15 dias</option>
+                         <option value="SPECIFIC">Data Específica</option>
+                      </select>
+                   </div>
+                   
+                   {filterRange === 'SPECIFIC' ? (
+                      <input type="date" value={filterDate} onChange={e => setFilterDate(e.target.value)} className="bg-white p-3 rounded-xl border font-bold text-[10px] uppercase w-full" />
+                   ) : (
+                      <div className="bg-gray-100 p-3 rounded-xl border border-gray-100 opacity-50 flex items-center justify-center">
+                         <span className="text-[9px] font-black text-gray-400 uppercase">Automático</span>
+                      </div>
+                   )}
+               </div>
+
+               <div className="grid grid-cols-2 gap-2">
+                  <select value={filterSport} onChange={e => setFilterSport(e.target.value)} className="bg-white p-3 rounded-xl border font-bold text-[10px] uppercase w-full">
+                     <option value="">Todos Esportes</option>
                      {SPORTS.map(s => <option key={s} value={s}>{s}</option>)}
                   </select>
+                  <select value={filterCategory} onChange={e => setFilterCategory(e.target.value)} className="bg-white p-3 rounded-xl border font-bold text-[10px] uppercase w-full">
+                    <option value="">Todas Categorias</option>
+                    {CATEGORY_ORDER.map(c => <option key={c} value={c}>{c}</option>)}
+                  </select>
                </div>
-               <select value={filterCategory} onChange={e => setFilterCategory(e.target.value)} className="w-full bg-white p-3 rounded-xl border font-bold text-[10px] uppercase">
-                  <option value="">Categorias</option>
-                  {CATEGORY_ORDER.map(c => <option key={c} value={c}>{c}</option>)}
-               </select>
-               <button onClick={() => { setFilterDate(''); setFilterSport(''); setFilterCategory(''); setSearchQuery(''); }} className="text-[8px] font-black text-red-500 uppercase w-full text-right mt-2">Limpar Filtros</button>
+               
+               <button onClick={() => { setFilterRange('ALL'); setFilterDate(''); setFilterSport(''); setFilterCategory(''); setSearchQuery(''); }} className="text-[8px] font-black text-red-500 uppercase w-full text-right mt-2">Limpar Filtros</button>
             </div>
           )}
         </div>

@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { Trophy, Shield, Calendar, CreditCard, ArrowRight } from 'lucide-react';
 import { Button } from '../components/Button';
@@ -8,9 +9,9 @@ interface LandingProps {
 
 export const Landing: React.FC<LandingProps> = ({ onStart }) => {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-pitch to-grass-900 text-white">
-      {/* Navbar */}
-      <nav className="p-6 flex justify-between items-center container mx-auto">
+    <div className="min-h-screen bg-gradient-to-br from-pitch to-grass-900 text-white pb-10">
+      {/* Navbar com Padding Safe para iOS */}
+      <nav className="p-6 pt-safe mt-4 md:mt-0 flex justify-between items-center container mx-auto relative z-10">
          <div className="font-bold text-2xl flex items-center gap-2">
              <Trophy className="w-6 h-6 text-grass-500" /> Jogo Fácil
          </div>
@@ -20,7 +21,7 @@ export const Landing: React.FC<LandingProps> = ({ onStart }) => {
       </nav>
 
       {/* Hero Section */}
-      <div className="container mx-auto px-6 py-16 text-center">
+      <div className="container mx-auto px-6 py-10 md:py-16 text-center">
         <h1 className="text-5xl md:text-7xl font-bold mb-6 tracking-tight">
           O Futuro do seu <span className="text-grass-400">Futebol</span>
         </h1>
@@ -36,7 +37,7 @@ export const Landing: React.FC<LandingProps> = ({ onStart }) => {
       </div>
 
       {/* Features Cards */}
-      <div className="container mx-auto px-6 py-10 grid md:grid-cols-3 gap-6">
+      <div className="container mx-auto px-6 py-4 grid md:grid-cols-3 gap-6">
           <div className="bg-white/10 p-8 rounded-2xl backdrop-blur-md border border-white/20 hover:bg-white/20 transition">
             <Shield className="w-10 h-10 text-grass-400 mb-4" />
             <h3 className="text-xl font-bold mb-2">Donos de Campo</h3>
