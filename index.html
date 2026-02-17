@@ -17,16 +17,7 @@
     <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/3112/3112946.png" />
     <link rel="icon" type="image/png" href="https://cdn-icons-png.flaticon.com/512/3112/3112946.png" />
 
-    <!-- Polyfill ultra-robusto para evitar ReferenceErrors de 'process' ou 'global' -->
-    <script>
-      (function() {
-        window.global = window;
-        if (typeof window.process === 'undefined') {
-          window.process = { env: { API_KEY: "" }, nextTick: function(f){f()} };
-        }
-      })();
-    </script>
-
+    <!-- Tailwind CSS via CDN (Mantido para simplicidade do projeto atual) -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
       tailwind.config = {
@@ -68,17 +59,17 @@
         -webkit-backdrop-filter: blur(12px);
       }
     </style>
-  <script type="importmap">
+<script type="importmap">
 {
   "imports": {
-    "@vitejs/plugin-react": "https://aistudiocdn.com/@vitejs/plugin-react@^5.1.1",
-    "vite": "https://aistudiocdn.com/vite@^7.2.6",
-    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.1/",
-    "@supabase/supabase-js": "https://aistudiocdn.com/@supabase/supabase-js@^2.86.0",
-    "lucide-react": "https://aistudiocdn.com/lucide-react@^0.555.0",
-    "react/": "https://aistudiocdn.com/react@^19.2.1/",
-    "react": "https://aistudiocdn.com/react@^19.2.1",
-    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.31.0"
+    "@google/genai": "https://esm.sh/@google/genai@^1.41.0",
+    "react-dom/": "https://esm.sh/react-dom@^19.2.4/",
+    "lucide-react": "https://esm.sh/lucide-react@^0.574.0",
+    "@supabase/supabase-js": "https://esm.sh/@supabase/supabase-js@^2.96.0",
+    "vite": "https://esm.sh/vite@^7.3.1",
+    "react/": "https://esm.sh/react@^19.2.4/",
+    "react": "https://esm.sh/react@^19.2.4",
+    "@vitejs/plugin-react": "https://esm.sh/@vitejs/plugin-react@^5.1.4"
   }
 }
 </script>
