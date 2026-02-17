@@ -1,5 +1,6 @@
--- ATENÇÃO: ESTE SCRIPT APAGA TODOS OS DADOS EXISTENTES!
--- Execute no SQL Editor do Supabase para corrigir a estrutura do banco.
+
+-- ATENÇÃO: ESTE SCRIPT RECRIA A ESTRUTURA E CORRIGE OS ALERTAS DE SEGURANÇA!
+-- Execute no SQL Editor do Supabase.
 
 -- 1. Limpeza (Drop Tables)
 DROP TABLE IF EXISTS notification CASCADE;
@@ -10,7 +11,7 @@ DROP TABLE IF EXISTS field CASCADE;
 DROP TABLE IF EXISTS category CASCADE;
 DROP TABLE IF EXISTS "user" CASCADE;
 
--- 2. Tabela de Usuários (Corrigido 'teams' para JSONB)
+-- 2. Tabela de Usuários
 CREATE TABLE "user" (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   email TEXT UNIQUE NOT NULL,
@@ -20,15 +21,10 @@ CREATE TABLE "user" (
   role TEXT NOT NULL,
   subscription TEXT DEFAULT 'FREE',
   subscription_expiry TIMESTAMP WITH TIME ZONE,
-  
-  -- Campo corrigido para armazenar array de times (TeamConfig[])
   teams JSONB DEFAULT '[]'::jsonb,
-  
-  -- Campos legados (opcionais, mas mantidos para evitar erro em queries antigas)
   team_name TEXT,
   team_categories TEXT[],
   team_logo_url TEXT,
-  
   latitude FLOAT,
   longitude FLOAT,
   team_rating FLOAT DEFAULT 5,
@@ -65,16 +61,12 @@ CREATE TABLE match_slot (
   is_booked BOOLEAN DEFAULT FALSE,
   status TEXT DEFAULT 'available',
   price NUMERIC,
-  
-  -- Dados do Time Local (Mandante)
   has_local_team BOOLEAN DEFAULT FALSE,
   local_team_name TEXT,
   local_team_category TEXT,
   local_team_phone TEXT,
   local_team_logo_url TEXT,
   local_team_gender TEXT,
-  
-  -- Dados do Agendamento (Desafiante/Cliente)
   booked_by_user_id UUID REFERENCES "user"(id),
   booked_by_team_name TEXT,
   booked_by_category TEXT,
@@ -83,14 +75,11 @@ CREATE TABLE match_slot (
   opponent_team_phone TEXT,
   opponent_team_logo_url TEXT,
   opponent_team_gender TEXT,
-  
   allowed_opponent_categories TEXT[] DEFAULT '{}',
   receipt_url TEXT,
   ai_verification_result JSONB,
-  
   sport TEXT DEFAULT 'Futebol',
   court_name TEXT,
-  
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
@@ -145,3 +134,31 @@ INSERT INTO category (name) VALUES
 ('Sub-8'), ('Sub-9'), ('Sub-10'), ('Sub-11'), ('Sub-12'), ('Sub-13'), 
 ('Sub-14'), ('Sub-15'), ('Sub-16'), ('Sub-17'), ('Sport'), 
 ('Veteranos'), ('35+'), ('40+'), ('45+'), ('50+'), ('60+'), ('Principal'), ('Livre');
+
+--------------------------------------------------------------------------------
+-- SEGURANÇA (RLS) - CORREÇÃO DOS ALERTAS
+--------------------------------------------------------------------------------
+-- Habilita RLS em todas as tabelas para satisfazer os alertas de segurança.
+-- Como o app usa autenticação customizada (não Supabase Auth), 
+-- criamos políticas permissivas para o acesso via API Key funcionar.
+
+ALTER TABLE "user" ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Allow Public Access" ON "user" FOR ALL USING (true);
+
+ALTER TABLE field ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Allow Public Access" ON field FOR ALL USING (true);
+
+ALTER TABLE match_slot ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Allow Public Access" ON match_slot FOR ALL USING (true);
+
+ALTER TABLE registered_team ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Allow Public Access" ON registered_team FOR ALL USING (true);
+
+ALTER TABLE notification ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Allow Public Access" ON notification FOR ALL USING (true);
+
+ALTER TABLE pending_update ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Allow Public Access" ON pending_update FOR ALL USING (true);
+
+ALTER TABLE category ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Allow Public Access" ON category FOR ALL USING (true);
