@@ -35,7 +35,7 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
   const [searchQuery, setSearchQuery] = useState('');
   const [myGamesSubTab, setMyGamesSubTab] = useState<'FUTUROS' | 'HISTORICO'>('FUTUROS');
 
-  // Função Robusta de Cálculo de Distância com Diagnóstico
+  // Função Robusta de Cálculo de Distância
   const handleCalculateDistanceForField = async (field: Field) => {
     setLoadingFieldId(field.id);
     
@@ -46,16 +46,16 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
         currentUserLoc = await getCurrentPosition();
         setUserCoords(currentUserLoc);
       } catch (error: any) {
-        alert(`ERRO DE GPS:\n${error.message}\n\nDicas:\n1. Verifique se o GPS está ativo.\n2. Permita o acesso à localização.\n3. Se estiver em um navegador dentro de app (Instagram/WhatsApp), tente abrir no Chrome/Safari.`);
+        alert(`ERRO DE GPS:\n${error.message}\n\nDicas:\n1. Verifique se o GPS está ativo.\n2. Permita o acesso à localização.`);
         setLoadingFieldId(null);
         return;
       }
     }
 
-    // Passo 2: Obter Localização da Arena (Geocoding se necessário)
+    // Passo 2: Obter Localização da Arena
     let arenaLoc: LatLng | null = null;
     
-    // Tenta usar coords do banco se existirem
+    // Tenta usar coords do banco se existirem e forem válidas
     if (field.latitude && field.longitude && (Math.abs(field.latitude) > 0.0001)) {
         arenaLoc = { lat: field.latitude, lng: field.longitude };
     } 
@@ -73,9 +73,12 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
 
     setLoadingFieldId(null);
 
-    // Passo 3: Feedback ao usuário se falhar a localização da Arena
+    // Passo 3: Feedback APENAS se falhar completamente
     if (!arenaLoc) {
-        alert(`SUCESSO NO GPS DO USUÁRIO ✅\nFALHA NA ARENA ❌\n\nNão conseguimos encontrar o endereço "${field.location}" no mapa.\n\nTente abrir no Google Maps clicando no endereço.`);
+        const confirmOpen = confirm(`SUCESSO NO GPS DO USUÁRIO ✅\nFALHA NA ARENA ❌\n\nNão conseguimos localizar o endereço exato no mapa automático.\n\nDeseja abrir este endereço no Google Maps para ver a localização?`);
+        if (confirmOpen) {
+            window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(field.location)}`, '_blank');
+        }
     }
   };
 

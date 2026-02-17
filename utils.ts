@@ -21,7 +21,6 @@ const attemptGetCurrentPosition = (timeout: number): Promise<LatLng> => {
 
 /**
  * Tenta obter a posição via watchPosition (fallback robusto).
- * Alguns dispositivos móveis acordam o GPS melhor com watchPosition.
  */
 const attemptWatchPosition = (timeout: number): Promise<LatLng> => {
   return new Promise((resolve, reject) => {
@@ -34,7 +33,6 @@ const attemptWatchPosition = (timeout: number): Promise<LatLng> => {
         resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude });
       },
       (err) => {
-         // Não rejeita imediatamente, espera o timeout ou sucesso
          console.warn("WatchPosition error (retrying):", err);
       },
       { enableHighAccuracy: true, maximumAge: 0 }
@@ -58,19 +56,16 @@ export const getCurrentPosition = async (): Promise<LatLng> => {
     throw new Error("Seu navegador não suporta geolocalização.");
   }
 
-  // Verificação de Contexto Seguro (HTTPS)
   // Nota: localhost é considerado seguro.
   if (window.isSecureContext === false) {
     throw new Error("Geolocalização requer conexão segura (HTTPS).");
   }
 
   try {
-    // Tentativa 1: Método Padrão (Rápido - 5s)
     return await attemptGetCurrentPosition(5000);
   } catch (e) {
     console.log("getCurrentPosition falhou, tentando fallback watchPosition...");
     try {
-      // Tentativa 2: Método Watch (Mais lento/robusto - 7s)
       return await attemptWatchPosition(7000);
     } catch (e2) {
       throw new Error("Não foi possível obter sua localização. Verifique se o GPS está ativo e se a permissão foi concedida.");
@@ -82,7 +77,7 @@ function toRad(deg: number) {
   return (deg * Math.PI) / 180;
 }
 
-// Cache simples em memória para evitar requisições repetidas para o mesmo endereço
+// Cache simples em memória
 const addressCache: Record<string, LatLng> = {};
 
 /**
@@ -108,20 +103,19 @@ export const fetchAddressByCEP = async (cep: string) => {
 };
 
 /**
- * Busca coordenadas (Lat/Lng) a partir de um endereço usando OpenStreetMap (Nominatim).
+ * Busca coordenadas (Lat/Lng) a partir de um endereço de forma INTELIGENTE.
  */
 export const geocodeAddress = async (address: string): Promise<LatLng | null> => {
   if (!address) return null;
   if (addressCache[address]) return addressCache[address];
 
+  // Helper para fetch no Nominatim com retry/delay e User-Agent correto
   const doFetch = async (q: string) => {
      try {
-       // Pequeno delay para evitar rate limit do Nominatim
-       await new Promise(r => setTimeout(r, 300));
+       await new Promise(r => setTimeout(r, 600)); // Delay para evitar bloqueio (Rate Limit)
+       // addressdetails=1 ajuda a debugar se necessário, mas q=... é o principal
        const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q)}&limit=1`;
-       const response = await fetch(url, {
-          headers: { 'User-Agent': 'JogoFacilApp/1.0' }
-       });
+       const response = await fetch(url, { headers: { 'User-Agent': 'JogoFacilApp/1.0' } });
        const data = await response.json();
        if (data && data.length > 0) {
          return {
@@ -134,38 +128,66 @@ export const geocodeAddress = async (address: string): Promise<LatLng | null> =>
   };
 
   try {
-    // 1. Limpeza do endereço
-    const cleanAddress = address.replace(/ - /g, ', ').replace(/-/g, ', ');
+    // ESTRATÉGIA 1: Extração via CEP (A mais precisa)
+    // Procura por padrão de CEP (XXXXX-XXX ou XXXXXXXX)
+    const cepMatch = address.match(/(\d{5}[-.]?\d{3})/);
+    let cepData = null;
     
-    // Tenta query completa com Brasil
-    const fullQuery = cleanAddress.toLowerCase().includes('brasil') ? cleanAddress : `${cleanAddress}, Brasil`;
-    let result = await doFetch(fullQuery);
-
-    // 2. Fallback: Simplificação
-    if (!result && address.includes(',')) {
-       const parts = address.split(',');
-       if (parts.length >= 2) {
-          const simplified = `${parts[0]}, ${parts[parts.length-1]}`.replace(/ - /g, ', ');
-          result = await doFetch(simplified + ", Brasil");
-       }
+    if (cepMatch) {
+        cepData = await fetchAddressByCEP(cepMatch[0]);
     }
-    
-    // 3. Fallback agressivo: Rua + Cidade
-    if (!result && address.includes('-')) {
-        const parts = address.split('-');
-        if (parts.length >= 2) {
-             const simplified = `${parts[0].trim()}, ${parts[parts.length-1].trim()}, Brasil`;
-             result = await doFetch(simplified);
+
+    // Tenta extrair o número do endereço original (geralmente dígitos isolados após vírgula ou nome da rua)
+    const numberMatch = address.match(/[,\s]+(\d+)([,\s-]|$)/);
+    const number = numberMatch ? numberMatch[1] : '';
+
+    if (cepData) {
+        // Se temos dados do CEP, montamos uma query limpa: "Rua, Numero, Cidade, Estado, Brasil"
+        let q = '';
+        
+        // Tentativa 1: Completa
+        if (number) {
+            q = `${cepData.logradouro}, ${number}, ${cepData.localidade}, ${cepData.uf}, Brasil`;
+            const res = await doFetch(q);
+            if (res) { addressCache[address] = res; return res; }
         }
+
+        // Tentativa 2: Sem número (centro da rua)
+        q = `${cepData.logradouro}, ${cepData.localidade}, ${cepData.uf}, Brasil`;
+        const res = await doFetch(q);
+        if (res) { addressCache[address] = res; return res; }
     }
 
-    if (result) {
-      addressCache[address] = result;
-      return result;
+    // ESTRATÉGIA 2: Limpeza da String Original (Fallback)
+    // Remove o CEP da string original, pois o Nominatim costuma falhar se o CEP estiver lá mas não linkado no mapa
+    let clean = address.replace(/(\d{5}[-.]?\d{3})/g, '').trim();
+    // Remove pontuações finais
+    clean = clean.replace(/[,.-]+$/, '');
+    // Troca " - " por ", " (Nominatim prefere vírgulas)
+    clean = clean.replace(/\s+-\s+/g, ', ');
+    
+    // Tenta buscar a string limpa
+    let res = await doFetch(`${clean}, Brasil`);
+    if (res) { addressCache[address] = res; return res; }
+
+    // ESTRATÉGIA 3: Fallback Agressivo (Apenas Cidade/Bairro)
+    // Se falhar tudo, tenta achar pelo menos a cidade para não dar erro total
+    if (cepData) {
+         res = await doFetch(`${cepData.localidade}, ${cepData.uf}, Brasil`);
+         if (res) return res; 
     }
+
+    // Última tentativa: Se tiver vírgula, tenta pegar a primeira parte (Rua) e a última (Cidade?)
+    const parts = clean.split(',');
+    if (parts.length >= 2) {
+        const simplified = `${parts[0].trim()}, ${parts[parts.length-1].trim()}, Brasil`;
+        res = await doFetch(simplified);
+        if (res) { addressCache[address] = res; return res; }
+    }
+
     return null;
   } catch (error) {
-    console.error("Erro ao geocodificar:", error);
+    console.error("Geocoding fatal error:", error);
     return null;
   }
 };
