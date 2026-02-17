@@ -28,6 +28,9 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
   const [gpsStatus, setGpsStatus] = useState<'IDLE' | 'LOADING' | 'SUCCESS' | 'ERROR'>('IDLE');
   const [gpsErrorMsg, setGpsErrorMsg] = useState<string>('');
   
+  // Controle de carregamento INDIVIDUAL por card
+  const [loadingFieldId, setLoadingFieldId] = useState<string | null>(null);
+  
   // Armazena coordenadas temporárias calculadas via endereço (quando o banco não tem)
   const [tempFieldCoords, setTempFieldCoords] = useState<Record<string, LatLng>>({});
 
@@ -40,50 +43,48 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
 
   const [myGamesSubTab, setMyGamesSubTab] = useState<'FUTUROS' | 'HISTORICO'>('FUTUROS');
 
-  // FLUXO PRINCIPAL DE LOCALIZAÇÃO
-  const handleActivateGPS = async () => {
-    if (gpsStatus === 'LOADING') return;
-    
+  // Função para pegar GPS do usuário (apenas)
+  const fetchUserLocation = async () => {
+    if (userCoords) return userCoords;
     setGpsStatus('LOADING');
     setGpsErrorMsg('');
-    
     try {
-      // 1. Obter GPS do Usuário
       const coords = await getCurrentPosition();
       setUserCoords(coords);
-
-      // 2. Tentar resolver coordenadas das arenas visíveis que não possuem Lat/Lng
-      // Filtramos apenas as arenas únicas que estão sendo exibidas e não têm coords
-      const visibleFieldIds = new Set(filteredSlots.map(s => s.fieldId));
-      const fieldsToGeocode = fields.filter(f => 
-        visibleFieldIds.has(f.id) && 
-        (f.latitude === 0 || f.longitude === 0) &&
-        !tempFieldCoords[f.id] // Se já não calculamos antes
-      );
-
-      if (fieldsToGeocode.length > 0) {
-          // Processa em paralelo mas com cuidado
-          const updates: Record<string, LatLng> = {};
-          
-          await Promise.all(fieldsToGeocode.map(async (field) => {
-             if (field.location && field.location.length > 5) {
-                const fieldCoords = await geocodeAddress(field.location);
-                if (fieldCoords) {
-                   updates[field.id] = fieldCoords;
-                }
-             }
-          }));
-          
-          setTempFieldCoords(prev => ({ ...prev, ...updates }));
-      }
-
       setGpsStatus('SUCCESS');
+      return coords;
     } catch (error: any) {
-      console.error("Falha na localização:", error);
       const msg = error.message || "Erro GPS";
       setGpsErrorMsg(msg.length > 15 ? "Erro GPS" : msg); 
       setGpsStatus('ERROR');
+      return null;
     }
+  };
+
+  // FLUXO PRINCIPAL: Clicar no botão "Calcular Distância" de um card específico
+  const handleCalculateDistanceForField = async (field: Field) => {
+    // 1. Garante que temos GPS do usuário
+    const currentUserLoc = await fetchUserLocation();
+    if (!currentUserLoc) return;
+
+    // 2. Se o campo já tem coordenadas no banco ou temporárias, não precisa fazer nada (o render já calcula)
+    const hasCoords = (field.latitude !== 0 && field.longitude !== 0) || !!tempFieldCoords[field.id];
+    if (hasCoords) return;
+
+    // 3. Se não tem, força o Geocoding
+    setLoadingFieldId(field.id);
+    if (field.location && field.location.length > 5) {
+        const fieldCoords = await geocodeAddress(field.location);
+        if (fieldCoords) {
+            setTempFieldCoords(prev => ({ ...prev, [field.id]: fieldCoords }));
+        } else {
+            // Se falhar, podemos setar um estado de erro específico ou deixar o botão
+            // "Tentar Novamente" aparecer.
+            // Para UX, se falhar, não atualizamos o tempCoords, então o botão continua lá.
+            alert("Não foi possível encontrar este endereço no mapa.");
+        }
+    }
+    setLoadingFieldId(null);
   };
 
   const todayStr = new Date().toISOString().split('T')[0];
@@ -314,6 +315,9 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
             // Calculo de Distância em Metros
             let distMeters = -1;
 
+            // Verifica se este card específico está carregando
+            const isThisFieldLoading = loadingFieldId === field?.id;
+
             if (userCoords && field) {
               // Verifica se temos Lat/Lng no banco ou no estado temporário (geocoding dinâmico)
               const hasDbCoords = field.latitude !== 0 && field.longitude !== 0;
@@ -331,12 +335,12 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
             const currentCategory = slot.localTeamCategory || slot.bookedByTeamCategory;
 
             // Lógica para o texto e estado do botão de distância
-            let distanceBtnText = 'Ativar GPS';
+            let distanceBtnText = 'Calcular Distância';
             let distanceBtnIcon = <Locate className="w-3 h-3"/>;
             let distanceBtnStyle = 'bg-gray-100 text-gray-500 hover:bg-grass-50 hover:text-grass-600';
             let distanceDisabled = false;
 
-            if (gpsStatus === 'LOADING') {
+            if (gpsStatus === 'LOADING' || isThisFieldLoading) {
                 distanceBtnText = 'Calculando...';
                 distanceBtnIcon = <Locate className="w-3 h-3 animate-spin"/>;
                 distanceDisabled = true;
@@ -350,12 +354,10 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
                 distanceBtnIcon = <MapPin className="w-3 h-3"/>;
                 distanceBtnStyle = 'bg-grass-50 text-grass-600 border border-grass-100';
             } else if (gpsStatus === 'SUCCESS' && userCoords) {
-                // FALLBACK IMPORTANTE: Se o GPS funcionou, mas ainda não temos a distância,
-                // significa que o banco está sem coordenadas E a geocodificação inicial falhou.
-                // Mas não vamos bloquear o usuário! Mostramos o botão de tentar novamente a geocodificação
+                // GPS do usuário OK, mas sem distância para este campo
                 distanceBtnText = 'Calcular Distância';
                 distanceBtnIcon = <MapPin className="w-3 h-3"/>;
-                distanceBtnStyle = 'bg-blue-50 text-blue-600 border border-blue-100';
+                distanceBtnStyle = 'bg-blue-50 text-blue-600 border border-blue-100 hover:bg-blue-100';
             }
 
             return (
@@ -369,7 +371,7 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
                         <h3 className="font-black text-pitch text-lg leading-none uppercase truncate mr-2">{field?.name}</h3>
                         <div className="flex flex-col items-end gap-1">
                            <button 
-                             onClick={handleActivateGPS}
+                             onClick={() => field && handleCalculateDistanceForField(field)}
                              disabled={distanceDisabled}
                              className={`text-[10px] font-black uppercase flex items-center gap-2 px-3 py-2 rounded-xl transition-all active:scale-95 ${distanceBtnStyle}`}
                            >

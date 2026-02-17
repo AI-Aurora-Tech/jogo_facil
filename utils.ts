@@ -69,6 +69,28 @@ function toRad(deg: number) {
 const addressCache: Record<string, LatLng> = {};
 
 /**
+ * Busca dados do endereço via CEP (ViaCEP).
+ */
+export const fetchAddressByCEP = async (cep: string) => {
+  const cleanCep = cep.replace(/\D/g, '');
+  if (cleanCep.length !== 8) return null;
+
+  try {
+    const response = await fetch(`https://viacep.com.br/ws/${cleanCep}/json/`);
+    const data = await response.json();
+    if (data.erro) return null;
+    return {
+      logradouro: data.logradouro,
+      bairro: data.bairro,
+      localidade: data.localidade,
+      uf: data.uf
+    };
+  } catch (e) {
+    return null;
+  }
+};
+
+/**
  * Busca coordenadas (Lat/Lng) a partir de um endereço usando OpenStreetMap (Nominatim).
  * Inclui delay para respeitar rate limits se chamado em loop.
  */

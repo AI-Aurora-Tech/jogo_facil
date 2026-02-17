@@ -1,9 +1,9 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { User, UserRole, Field, TeamConfig, Gender } from '../types';
 import { Button } from './Button';
 import { X, User as UserIcon, Shield, Check, Plus, AlertCircle, Building2, MapPin, Smartphone, Camera, Trash2, LayoutGrid, Tag, Lock, PlusCircle, Globe, Search } from 'lucide-react';
-import { formatCategory, convertFileToBase64, geocodeAddress } from '../utils';
+import { formatCategory, convertFileToBase64, geocodeAddress, fetchAddressByCEP } from '../utils';
 
 interface EditProfileModalProps {
   categories: string[];
@@ -19,16 +19,56 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({ categories, 
   const [newPassword, setNewPassword] = useState('');
   const [teams, setTeams] = useState<TeamConfig[]>(user.teams || []);
   
+  // Arena State
   const [arenaName, setArenaName] = useState(field?.name || '');
-  const [arenaLocation, setArenaLocation] = useState(field?.location || '');
   const [arenaPrice, setArenaPrice] = useState(field?.hourlyRate || 0);
   const [arenaPhoto, setArenaPhoto] = useState(field?.imageUrl || '');
   const [courts, setCourts] = useState<string[]>(field?.courts || ['Principal']);
   const [newCourtName, setNewCourtName] = useState('');
   
+  // Address State (CEP Logic)
+  const [cep, setCep] = useState('');
+  const [street, setStreet] = useState('');
+  const [number, setNumber] = useState('');
+  const [neighborhood, setNeighborhood] = useState('');
+  const [city, setCity] = useState('');
+  const [state, setState] = useState('');
+  const [complement, setComplement] = useState('');
+  const [isLoadingCEP, setIsLoadingCEP] = useState(false);
+  
   const [isLoading, setIsLoading] = useState(false);
   const [categoryInputs, setCategoryInputs] = useState<string[]>(['', '']);
   const [error, setError] = useState('');
+
+  // Inicializa campos de endereço se já existir localização salva
+  useEffect(() => {
+    if (field?.location) {
+      // Tenta parsing simples, mas o usuário provavelmente vai usar o CEP para corrigir
+      const parts = field.location.split(',');
+      if (parts.length > 0 && !street) {
+        // Se já tem endereço salvo, mostramos no campo "Rua" como fallback
+        // Mas incentivamos o uso do CEP
+        setStreet(field.location); 
+      }
+    }
+  }, [field]);
+
+  const handleCEPBlur = async () => {
+    if (cep.length < 8) return;
+    setIsLoadingCEP(true);
+    const data = await fetchAddressByCEP(cep);
+    setIsLoadingCEP(false);
+    
+    if (data) {
+      setStreet(data.logradouro);
+      setNeighborhood(data.bairro);
+      setCity(data.localidade);
+      setState(data.uf);
+      setError('');
+    } else {
+      setError('CEP não encontrado.');
+    }
+  };
 
   const handleAddTeam = () => {
     if (teams.length >= 2) return;
@@ -101,13 +141,27 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({ categories, 
         let updatedField;
         if (user.role === UserRole.FIELD_OWNER && field) {
           
-          // Lógica de Geocoding Automático:
-          // Se o endereço mudou OU se as coordenadas atuais são 0, buscamos novamente.
+          // Constrói string final do endereço
+          let fullAddress = field.location;
+          
+          // Se o usuário preencheu o CEP e Rua, construímos o novo endereço padronizado
+          if (street && city) {
+             fullAddress = `${street}, ${number || 'S/N'}`;
+             if (neighborhood) fullAddress += ` - ${neighborhood}`;
+             fullAddress += ` - ${city} - ${state}`;
+             if (cep) fullAddress += `, ${cep}`;
+          } else if (street) {
+             // Caso fallback onde ele só editou o texto livre
+             fullAddress = street;
+          }
+
+          // Geocoding Automático
           let finalLat = field.latitude;
           let finalLng = field.longitude;
 
-          if (arenaLocation && (arenaLocation !== field.location || (finalLat === 0 && finalLng === 0))) {
-              const coords = await geocodeAddress(arenaLocation);
+          // Se o endereço mudou ou se não tem coordenadas, busca agora
+          if (fullAddress !== field.location || (finalLat === 0 && finalLng === 0)) {
+              const coords = await geocodeAddress(fullAddress);
               if (coords) {
                   finalLat = coords.lat;
                   finalLng = coords.lng;
@@ -116,7 +170,7 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({ categories, 
 
           updatedField = { 
             name: arenaName, 
-            location: arenaLocation, 
+            location: fullAddress, 
             hourlyRate: arenaPrice, 
             courts, 
             imageUrl: arenaPhoto,
@@ -197,10 +251,65 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({ categories, 
                 </div>
               </div>
               
-              <div className="bg-gray-50 p-4 rounded-2xl border">
-                 <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Endereço Completo</label>
-                 <input className="w-full bg-transparent font-bold text-pitch outline-none" placeholder="Ex: Rua das Flores, 123, São Paulo - SP" value={arenaLocation} onChange={e => setArenaLocation(e.target.value)} />
-                 <p className="text-[8px] font-bold text-gray-400 mt-2 flex items-center gap-1"><MapPin className="w-3 h-3" /> O sistema calculará o GPS automaticamente pelo endereço.</p>
+              {/* ADDRESS SECTION WITH CEP */}
+              <div className="bg-gray-50 p-6 rounded-[2rem] border space-y-4">
+                 <h5 className="text-[10px] font-black text-pitch uppercase tracking-widest flex items-center gap-2">
+                   <MapPin className="w-3 h-3 text-grass-500" /> Endereço
+                 </h5>
+                 
+                 <div className="grid grid-cols-3 gap-3">
+                    <div className="col-span-1 bg-white p-3 rounded-xl border relative">
+                       <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">CEP</label>
+                       <input 
+                         className="w-full bg-transparent font-bold text-pitch outline-none" 
+                         placeholder="00000-000"
+                         value={cep} 
+                         onChange={e => setCep(e.target.value.replace(/\D/g, '').slice(0, 8))}
+                         onBlur={handleCEPBlur}
+                       />
+                       {isLoadingCEP && <div className="absolute right-3 top-3 animate-spin rounded-full h-4 w-4 border-2 border-grass-500 border-t-transparent"></div>}
+                    </div>
+                    <div className="col-span-2 bg-white p-3 rounded-xl border">
+                       <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Cidade / UF</label>
+                       <input 
+                         className="w-full bg-transparent font-bold text-pitch outline-none disabled:text-gray-400" 
+                         value={city && state ? `${city} - ${state}` : ''} 
+                         readOnly
+                         placeholder="Preenchido via CEP"
+                       />
+                    </div>
+                 </div>
+
+                 <div className="bg-white p-3 rounded-xl border">
+                    <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Rua / Logradouro</label>
+                    <input 
+                      className="w-full bg-transparent font-bold text-pitch outline-none" 
+                      placeholder="Ex: Rua das Flores" 
+                      value={street} 
+                      onChange={e => setStreet(e.target.value)} 
+                    />
+                 </div>
+
+                 <div className="grid grid-cols-3 gap-3">
+                    <div className="col-span-1 bg-white p-3 rounded-xl border">
+                       <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Número</label>
+                       <input 
+                         className="w-full bg-transparent font-bold text-pitch outline-none" 
+                         placeholder="123" 
+                         value={number} 
+                         onChange={e => setNumber(e.target.value)} 
+                       />
+                    </div>
+                    <div className="col-span-2 bg-white p-3 rounded-xl border">
+                       <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Bairro</label>
+                       <input 
+                         className="w-full bg-transparent font-bold text-pitch outline-none" 
+                         value={neighborhood} 
+                         onChange={e => setNeighborhood(e.target.value)} 
+                       />
+                    </div>
+                 </div>
+                 <p className="text-[8px] text-gray-400 italic font-bold text-center">* Ao salvar, o GPS da arena será atualizado automaticamente.</p>
               </div>
 
               {/* GESTÃO DE QUADRAS */}
