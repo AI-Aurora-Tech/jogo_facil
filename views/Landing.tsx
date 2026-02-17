@@ -10,13 +10,13 @@ interface LandingProps {
 export const Landing: React.FC<LandingProps> = ({ onStart }) => {
   return (
     <div className="min-h-screen bg-gradient-to-br from-pitch to-grass-900 text-white pb-10">
-      {/* Navbar com Padding Safe para iOS */}
-      <nav className="p-6 pt-safe mt-4 md:mt-0 flex justify-between items-center container mx-auto relative z-10">
+      {/* Navbar com Padding Extra para iOS (pt-14 = 56px) */}
+      <nav className="p-6 pt-14 md:pt-8 flex justify-between items-center container mx-auto relative z-10">
          <div className="font-bold text-2xl flex items-center gap-2">
              <Trophy className="w-6 h-6 text-grass-500" /> Jogo Fácil
          </div>
-         <Button variant="outline" className="border-white text-white hover:bg-white hover:text-pitch" onClick={onStart}>
-            Entrar / Cadastrar
+         <Button variant="outline" className="border-white text-white hover:bg-white hover:text-pitch font-black text-xs uppercase px-4 py-2" onClick={onStart}>
+            Entrar
          </Button>
       </nav>
 
@@ -30,7 +30,7 @@ export const Landing: React.FC<LandingProps> = ({ onStart }) => {
         </p>
         
         <div className="flex justify-center">
-          <Button onClick={onStart} className="px-8 py-4 text-lg bg-grass-500 hover:bg-grass-600 shadow-2xl shadow-grass-500/50">
+          <Button onClick={onStart} className="px-8 py-4 text-lg bg-grass-500 hover:bg-grass-600 shadow-2xl shadow-grass-500/50 font-black uppercase rounded-2xl">
             Começar Agora <ArrowRight className="w-5 h-5" />
           </Button>
         </div>
@@ -38,24 +38,10 @@ export const Landing: React.FC<LandingProps> = ({ onStart }) => {
 
       {/* Features Cards */}
       <div className="container mx-auto px-6 py-4 grid md:grid-cols-3 gap-6">
-          <div className="bg-white/10 p-8 rounded-2xl backdrop-blur-md border border-white/20 hover:bg-white/20 transition">
+          <div className="bg-white/10 p-8 rounded-[2rem] backdrop-blur-md border border-white/20 hover:bg-white/20 transition">
             <Shield className="w-10 h-10 text-grass-400 mb-4" />
-            <h3 className="text-xl font-bold mb-2">Donos de Campo</h3>
+            <h3 className="text-xl font-bold mb-2 uppercase">Donos de Campo</h3>
             <p className="text-sm text-gray-300">Gerencie horários, crie jogos recorrentes e receba pagamentos com validação automática.</p>
           </div>
 
-          <div className="bg-white/10 p-8 rounded-2xl backdrop-blur-md border border-white/20 hover:bg-white/20 transition">
-            <Calendar className="w-10 h-10 text-yellow-400 mb-4" />
-            <h3 className="text-xl font-bold mb-2">Capitães de Time</h3>
-            <p className="text-sm text-gray-300">Encontre adversários, pague com segurança e garanta sua partida sem calotes.</p>
-          </div>
-          
-          <div className="bg-white/10 p-8 rounded-2xl backdrop-blur-md border border-white/20 hover:bg-white/20 transition">
-            <CreditCard className="w-10 h-10 text-blue-400 mb-4" />
-            <h3 className="text-xl font-bold mb-2">Assinatura Flexível</h3>
-            <p className="text-sm text-gray-300">Planos avulsos, mensais ou anuais. Pague apenas pelo tempo que utilizar a plataforma.</p>
-          </div>
-      </div>
-    </div>
-  );
-};
+          <div className="bg-white/10 p
