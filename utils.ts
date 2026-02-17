@@ -76,26 +76,41 @@ export const geocodeAddress = async (address: string): Promise<LatLng | null> =>
   if (!address) return null;
   if (addressCache[address]) return addressCache[address];
 
-  try {
-    // Adiciona "Brasil" para melhorar precisão se não houver
-    const query = address.toLowerCase().includes('brasil') ? address : `${address}, Brasil`;
-    
-    // Pequeno delay aleatório para evitar bater no rate limit se fizermos loop
-    await new Promise(r => setTimeout(r, Math.random() * 500));
+  // Helper interno para fetch
+  const doFetch = async (q: string) => {
+     try {
+       await new Promise(r => setTimeout(r, Math.random() * 500));
+       const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q)}&limit=1`, {
+          headers: { 'User-Agent': 'JogoFacilApp/1.0' }
+       });
+       const data = await response.json();
+       if (data && data.length > 0) {
+         return {
+           lat: parseFloat(data[0].lat),
+           lng: parseFloat(data[0].lon)
+         };
+       }
+       return null;
+     } catch (e) { return null; }
+  };
 
-    const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=1`, {
-        headers: {
-            'User-Agent': 'JogoFacilApp/1.0'
-        }
-    });
-    
-    const data = await response.json();
-    
-    if (data && data.length > 0) {
-      const result = {
-        lat: parseFloat(data[0].lat),
-        lng: parseFloat(data[0].lon)
-      };
+  try {
+    // 1. Tenta o endereço completo
+    const fullQuery = address.toLowerCase().includes('brasil') ? address : `${address}, Brasil`;
+    let result = await doFetch(fullQuery);
+
+    // 2. Fallback: Se falhar, tenta extrair partes (ex: remove CEP ou número muito específico)
+    if (!result && address.includes(',')) {
+       // Tenta pegar apenas (Rua, Cidade)
+       // Ex: "Rua X, 123, Bairro, Cidade - SP" -> Tenta partes
+       const parts = address.split(',');
+       if (parts.length >= 2) {
+          const simplified = `${parts[0]}, ${parts[parts.length-1]}, Brasil`; // Rua + Estado/Cidade
+          result = await doFetch(simplified);
+       }
+    }
+
+    if (result) {
       addressCache[address] = result;
       return result;
     }

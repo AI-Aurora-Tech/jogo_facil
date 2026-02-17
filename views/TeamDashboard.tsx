@@ -350,11 +350,12 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
                 distanceBtnIcon = <MapPin className="w-3 h-3"/>;
                 distanceBtnStyle = 'bg-grass-50 text-grass-600 border border-grass-100';
             } else if (gpsStatus === 'SUCCESS' && userCoords) {
-                // Se o GPS funcionou, mas ainda não temos distância, significa que o Geocoding falhou
-                distanceBtnText = 'Arena s/ Loc.';
-                distanceBtnIcon = <MapPinOff className="w-3 h-3"/>;
-                distanceBtnStyle = 'bg-gray-100 text-gray-400 opacity-70';
-                distanceDisabled = true;
+                // FALLBACK IMPORTANTE: Se o GPS funcionou, mas ainda não temos a distância,
+                // significa que o banco está sem coordenadas E a geocodificação inicial falhou.
+                // Mas não vamos bloquear o usuário! Mostramos o botão de tentar novamente a geocodificação
+                distanceBtnText = 'Calcular Distância';
+                distanceBtnIcon = <MapPin className="w-3 h-3"/>;
+                distanceBtnStyle = 'bg-blue-50 text-blue-600 border border-blue-100';
             }
 
             return (

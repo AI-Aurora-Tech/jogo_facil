@@ -21,14 +21,12 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({ categories, 
   
   const [arenaName, setArenaName] = useState(field?.name || '');
   const [arenaLocation, setArenaLocation] = useState(field?.location || '');
-  const [arenaLat, setArenaLat] = useState(field?.latitude || 0);
-  const [arenaLng, setArenaLng] = useState(field?.longitude || 0);
   const [arenaPrice, setArenaPrice] = useState(field?.hourlyRate || 0);
   const [arenaPhoto, setArenaPhoto] = useState(field?.imageUrl || '');
   const [courts, setCourts] = useState<string[]>(field?.courts || ['Principal']);
   const [newCourtName, setNewCourtName] = useState('');
-  const [isGeocoding, setIsGeocoding] = useState(false);
-
+  
+  const [isLoading, setIsLoading] = useState(false);
   const [categoryInputs, setCategoryInputs] = useState<string[]>(['', '']);
   const [error, setError] = useState('');
 
@@ -85,53 +83,54 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({ categories, 
     setCourts(courts.filter(c => c !== court));
   };
 
-  const handleGeocode = async () => {
-    if (!arenaLocation) {
-        setError("Digite um endereço primeiro para buscar as coordenadas.");
-        return;
-    }
-    setIsGeocoding(true);
-    setError('');
-    try {
-        const coords = await geocodeAddress(arenaLocation);
-        if (coords) {
-            setArenaLat(coords.lat);
-            setArenaLng(coords.lng);
-            // Opcional: Atualizar endereço com o formatado? Não, deixa o usuário escolher.
-        } else {
-            setError("Endereço não encontrado. Tente ser mais específico (Rua, Número, Cidade).");
-        }
-    } catch (e) {
-        setError("Erro ao buscar coordenadas.");
-    } finally {
-        setIsGeocoding(false);
-    }
-  };
-
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (teams.length === 0) {
       setError('Adicione pelo menos um time.');
       return;
     }
-    const updatedUser: User = { ...user, name, phoneNumber: phone, teams };
-    if (newPassword.trim()) {
-        updatedUser.password = newPassword.trim();
-    }
 
-    let updatedField;
-    if (user.role === UserRole.FIELD_OWNER && field) {
-      updatedField = { 
-        name: arenaName, 
-        location: arenaLocation, 
-        hourlyRate: arenaPrice, 
-        courts, 
-        imageUrl: arenaPhoto,
-        latitude: arenaLat,
-        longitude: arenaLng
-      };
+    setIsLoading(true);
+
+    try {
+        const updatedUser: User = { ...user, name, phoneNumber: phone, teams };
+        if (newPassword.trim()) {
+            updatedUser.password = newPassword.trim();
+        }
+
+        let updatedField;
+        if (user.role === UserRole.FIELD_OWNER && field) {
+          
+          // Lógica de Geocoding Automático:
+          // Se o endereço mudou OU se as coordenadas atuais são 0, buscamos novamente.
+          let finalLat = field.latitude;
+          let finalLng = field.longitude;
+
+          if (arenaLocation && (arenaLocation !== field.location || (finalLat === 0 && finalLng === 0))) {
+              const coords = await geocodeAddress(arenaLocation);
+              if (coords) {
+                  finalLat = coords.lat;
+                  finalLng = coords.lng;
+              }
+          }
+
+          updatedField = { 
+            name: arenaName, 
+            location: arenaLocation, 
+            hourlyRate: arenaPrice, 
+            courts, 
+            imageUrl: arenaPhoto,
+            latitude: finalLat,
+            longitude: finalLng
+          };
+        }
+        
+        onUpdate(updatedUser, updatedField);
+    } catch (e) {
+        setError("Erro ao salvar dados.");
+    } finally {
+        setIsLoading(false);
     }
-    onUpdate(updatedUser, updatedField);
   };
 
   return (
@@ -200,42 +199,8 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({ categories, 
               
               <div className="bg-gray-50 p-4 rounded-2xl border">
                  <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Endereço Completo</label>
-                 <input className="w-full bg-transparent font-bold text-pitch outline-none" placeholder="Rua, Número, Bairro, Cidade" value={arenaLocation} onChange={e => setArenaLocation(e.target.value)} />
-              </div>
-
-              {/* GEO LOCALIZAÇÃO */}
-              <div className={`bg-blue-50 p-4 rounded-2xl border ${arenaLat === 0 && arenaLng === 0 ? 'border-red-300 ring-2 ring-red-100' : 'border-blue-100'}`}>
-                 <div className="flex items-center justify-between mb-3">
-                   <div className="flex items-center gap-2">
-                      <Globe className="w-4 h-4 text-blue-500" />
-                      <h5 className="text-[10px] font-black text-blue-600 uppercase tracking-widest">Coordenadas GPS</h5>
-                   </div>
-                   <button 
-                     type="button" 
-                     onClick={handleGeocode} 
-                     disabled={isGeocoding}
-                     className="bg-blue-600 text-white px-3 py-1.5 rounded-xl text-[9px] font-black uppercase flex items-center gap-1 active:scale-95 transition-all disabled:opacity-50"
-                   >
-                      {isGeocoding ? <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white"/> : <Search className="w-3 h-3" />}
-                      Buscar GPS pelo Endereço
-                   </button>
-                 </div>
-                 
-                 {arenaLat === 0 && arenaLng === 0 && (
-                     <div className="bg-red-100 text-red-600 p-2 rounded-xl text-[9px] font-bold mb-3 flex items-center gap-2">
-                        <AlertCircle className="w-3 h-3" /> Clique em "Buscar GPS" acima para permitir cálculo de distância!
-                     </div>
-                 )}
-                 <div className="grid grid-cols-2 gap-4">
-                    <div>
-                       <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Latitude</label>
-                       <input className="w-full bg-white p-3 rounded-xl border font-bold text-pitch text-xs" type="number" step="any" value={arenaLat} onChange={e => setArenaLat(Number(e.target.value))} placeholder="0.000000" />
-                    </div>
-                    <div>
-                       <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Longitude</label>
-                       <input className="w-full bg-white p-3 rounded-xl border font-bold text-pitch text-xs" type="number" step="any" value={arenaLng} onChange={e => setArenaLng(Number(e.target.value))} placeholder="0.000000" />
-                    </div>
-                 </div>
+                 <input className="w-full bg-transparent font-bold text-pitch outline-none" placeholder="Ex: Rua das Flores, 123, São Paulo - SP" value={arenaLocation} onChange={e => setArenaLocation(e.target.value)} />
+                 <p className="text-[8px] font-bold text-gray-400 mt-2 flex items-center gap-1"><MapPin className="w-3 h-3" /> O sistema calculará o GPS automaticamente pelo endereço.</p>
               </div>
 
               {/* GESTÃO DE QUADRAS */}
@@ -332,7 +297,7 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({ categories, 
             </div>
           </section>
 
-          <Button type="submit" className="w-full py-5 rounded-[2rem] font-black uppercase text-xs shadow-xl active:scale-95">Salvar Todas as Configurações</Button>
+          <Button type="submit" isLoading={isLoading} className="w-full py-5 rounded-[2rem] font-black uppercase text-xs shadow-xl active:scale-95">Salvar Todas as Configurações</Button>
         </form>
       </div>
     </div>
