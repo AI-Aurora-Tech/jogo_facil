@@ -23,7 +23,7 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
   const [selectedCategory, setSelectedCategory] = useState('');
   const [showFilters, setShowFilters] = useState(false);
   
-  // Estado de GPS melhorado
+  // Estado de GPS
   const [userCoords, setUserCoords] = useState<LatLng | null>(null);
   const [gpsStatus, setGpsStatus] = useState<'IDLE' | 'LOADING' | 'SUCCESS' | 'ERROR'>('IDLE');
   const [gpsErrorMsg, setGpsErrorMsg] = useState<string>('');
@@ -34,18 +34,17 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
   // Armazena coordenadas temporárias calculadas via endereço (quando o banco não tem)
   const [tempFieldCoords, setTempFieldCoords] = useState<Record<string, LatLng>>({});
 
-  // States de Filtros
-  const [filterRange, setFilterRange] = useState<string>('ALL'); // ALL, TODAY, TOMORROW, 7DAYS, 15DAYS, SPECIFIC
-  const [filterDate, setFilterDate] = useState(''); // Usado apenas se filterRange === 'SPECIFIC'
+  const [filterRange, setFilterRange] = useState<string>('ALL');
+  const [filterDate, setFilterDate] = useState('');
   const [filterSport, setFilterSport] = useState('');
   const [filterCategory, setFilterCategory] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
-
   const [myGamesSubTab, setMyGamesSubTab] = useState<'FUTUROS' | 'HISTORICO'>('FUTUROS');
 
   // Função para pegar GPS do usuário (apenas)
   const fetchUserLocation = async () => {
     if (userCoords) return userCoords;
+    
     setGpsStatus('LOADING');
     setGpsErrorMsg('');
     try {
@@ -55,34 +54,38 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
       return coords;
     } catch (error: any) {
       const msg = error.message || "Erro GPS";
-      setGpsErrorMsg(msg.length > 15 ? "Erro GPS" : msg); 
+      setGpsErrorMsg(msg); 
       setGpsStatus('ERROR');
+      alert(`Não foi possível obter sua localização: ${msg}`);
       return null;
     }
   };
 
-  // FLUXO PRINCIPAL: Clicar no botão "Calcular Distância" de um card específico
+  // FLUXO PRINCIPAL: Clicar no botão "Calcular Distância"
   const handleCalculateDistanceForField = async (field: Field) => {
-    // 1. Garante que temos GPS do usuário
+    // 1. Obter GPS do Usuário
     const currentUserLoc = await fetchUserLocation();
-    if (!currentUserLoc) return;
+    if (!currentUserLoc) return; // Se falhar o GPS, para aqui e o alerta já foi exibido
 
-    // 2. Se o campo já tem coordenadas no banco ou temporárias, não precisa fazer nada (o render já calcula)
+    // 2. Se o campo já tem coordenadas no banco ou temporárias, não precisa recalcular (o render fará isso)
     const hasCoords = (field.latitude !== 0 && field.longitude !== 0) || !!tempFieldCoords[field.id];
+    
+    // Se já tem coordenadas, talvez o usuário queira atualizar sua posição GPS (se ele se moveu)
+    // Então deixamos prosseguir apenas se não tiver coords na arena.
+    // Se tiver coords na arena e o GPS do usuário atualizou, o cálculo é automático no render.
     if (hasCoords) return;
 
-    // 3. Se não tem, força o Geocoding
+    // 3. Se não tem coordenadas da Arena, força o Geocoding
     setLoadingFieldId(field.id);
     if (field.location && field.location.length > 5) {
         const fieldCoords = await geocodeAddress(field.location);
         if (fieldCoords) {
             setTempFieldCoords(prev => ({ ...prev, [field.id]: fieldCoords }));
         } else {
-            // Se falhar, podemos setar um estado de erro específico ou deixar o botão
-            // "Tentar Novamente" aparecer.
-            // Para UX, se falhar, não atualizamos o tempCoords, então o botão continua lá.
-            alert("Não foi possível encontrar este endereço no mapa.");
+            alert("Não conseguimos localizar este endereço no mapa automaticamente.\n\nVerifique se o endereço está escrito corretamente ou abra no Google Maps pelo link abaixo.");
         }
+    } else {
+        alert("Esta arena não possui um endereço válido cadastrado.");
     }
     setLoadingFieldId(null);
   };
@@ -91,22 +94,18 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
   const tomorrow = new Date();
   tomorrow.setDate(tomorrow.getDate() + 1);
   const tomorrowStr = tomorrow.toISOString().split('T')[0];
-
   const userAllCategories = currentUser.teams?.flatMap(t => t.categories) || [];
   const myTeamsNames = currentUser.teams?.map(t => t.name.toLowerCase()) || [];
 
   const filteredSlots = slots.filter(slot => {
     const field = fields.find(f => f.id === slot.fieldId);
     if (!field) return false;
-
     if (searchQuery && !field.name.toLowerCase().includes(searchQuery.toLowerCase())) return false;
     if (filterSport && slot.sport !== filterSport) return false;
-    
     if (filterCategory) {
         const baseCat = slot.localTeamCategory || slot.bookedByTeamCategory;
         if (baseCat && baseCat !== filterCategory) return false;
     }
-
     if (filterRange === 'SPECIFIC') {
         if (filterDate && slot.date !== filterDate) return false;
     } else if (filterRange === 'TODAY') {
@@ -128,20 +127,14 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
     if (viewMode === 'EXPLORE') {
       if (slot.date < todayStr) return false;
       if (field.ownerId === currentUser.id) return false;
-
       const hasFirstTeam = (slot.bookedByTeamName || slot.hasLocalTeam);
       const hasOpponent = !!slot.opponentTeamName;
-      
       if (hasFirstTeam && hasOpponent) return false;
-
       const isAwaitingAdversary = hasFirstTeam && !hasOpponent;
       const isFullyAvailable = slot.status === 'available' && !hasFirstTeam;
-      
       if (!isAwaitingAdversary && !isFullyAvailable) return false;
-
       const allowedCats = slot.allowedOpponentCategories || [];
       const baseCategory = slot.localTeamCategory || slot.bookedByTeamCategory;
-
       if (baseCategory || allowedCats.length > 0) {
           const canMatch = userAllCategories.some(cat => allowedCats.includes(cat) || cat === baseCategory);
           if (!canMatch) return false;
@@ -149,15 +142,11 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
     } else {
       const isMyTeamInSlot = (slot.bookedByTeamName && myTeamsNames.includes(slot.bookedByTeamName.toLowerCase())) ||
                              (slot.opponentTeamName && myTeamsNames.includes(slot.opponentTeamName.toLowerCase()));
-      
       const isMyBooking = slot.bookedByUserId === currentUser.id || isMyTeamInSlot;
-      
       if (!isMyBooking) return false;
-
       if (myGamesSubTab === 'FUTUROS' && slot.date < todayStr) return false;
       if (myGamesSubTab === 'HISTORICO' && slot.date >= todayStr) return false;
     }
-
     return true;
   }).sort((a,b) => new Date(`${a.date}T${a.time}`).getTime() - new Date(`${b.date}T${b.time}`).getTime());
 
@@ -202,7 +191,6 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
       }
 
       await api.updateSlot(selectedSlot.id, updateData);
-
       if (field) {
         await api.createNotification({
           userId: field.ownerId,
@@ -211,7 +199,6 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
           type: 'info'
         });
       }
-
       setSelectedSlot(null);
       onRefresh();
       alert("Solicitação enviada com sucesso!");
@@ -241,21 +228,11 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
           
           {showFilters && (
             <div className="animate-in slide-in-from-top-2 duration-300 space-y-3 bg-gray-50 p-4 rounded-2xl border">
-               <input 
-                  placeholder="Nome da Arena..." 
-                  value={searchQuery} 
-                  onChange={e => setSearchQuery(e.target.value)} 
-                  className="w-full bg-white p-3 rounded-xl border font-bold text-[10px] uppercase outline-none"
-                />
-               
+               <input placeholder="Nome da Arena..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} className="w-full bg-white p-3 rounded-xl border font-bold text-[10px] uppercase outline-none" />
                <div className="grid grid-cols-2 gap-2">
                    <div className="bg-white p-3 rounded-xl border flex items-center gap-2">
                       <Calendar className="w-4 h-4 text-gray-400" />
-                      <select 
-                        value={filterRange} 
-                        onChange={e => setFilterRange(e.target.value)} 
-                        className="bg-transparent w-full font-bold text-[10px] uppercase outline-none"
-                      >
+                      <select value={filterRange} onChange={e => setFilterRange(e.target.value)} className="bg-transparent w-full font-bold text-[10px] uppercase outline-none">
                          <option value="ALL">Qualquer Data</option>
                          <option value="TODAY">Hoje</option>
                          <option value="TOMORROW">Amanhã</option>
@@ -264,7 +241,6 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
                          <option value="SPECIFIC">Data Específica</option>
                       </select>
                    </div>
-                   
                    {filterRange === 'SPECIFIC' ? (
                       <input type="date" value={filterDate} onChange={e => setFilterDate(e.target.value)} className="bg-white p-3 rounded-xl border font-bold text-[10px] uppercase w-full" />
                    ) : (
@@ -273,7 +249,6 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
                       </div>
                    )}
                </div>
-
                <div className="grid grid-cols-2 gap-2">
                   <select value={filterSport} onChange={e => setFilterSport(e.target.value)} className="bg-white p-3 rounded-xl border font-bold text-[10px] uppercase w-full">
                      <option value="">Todos Esportes</option>
@@ -284,7 +259,6 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
                     {CATEGORY_ORDER.map(c => <option key={c} value={c}>{c}</option>)}
                   </select>
                </div>
-               
                <button onClick={() => { setFilterRange('ALL'); setFilterDate(''); setFilterSport(''); setFilterCategory(''); setSearchQuery(''); }} className="text-[8px] font-black text-red-500 uppercase w-full text-right mt-2">Limpar Filtros</button>
             </div>
           )}
@@ -312,14 +286,11 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
           filteredSlots.map(slot => {
             const field = fields.find(f => f.id === slot.fieldId);
             
-            // Calculo de Distância em Metros
+            // Calculo de Distância
             let distMeters = -1;
-
-            // Verifica se este card específico está carregando
             const isThisFieldLoading = loadingFieldId === field?.id;
 
             if (userCoords && field) {
-              // Verifica se temos Lat/Lng no banco ou no estado temporário (geocoding dinâmico)
               const hasDbCoords = field.latitude !== 0 && field.longitude !== 0;
               const hasTempCoords = !!tempFieldCoords[field.id];
               
@@ -334,7 +305,7 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
             const status = getStatusBadge(slot);
             const currentCategory = slot.localTeamCategory || slot.bookedByTeamCategory;
 
-            // Lógica para o texto e estado do botão de distância
+            // Estados do Botão
             let distanceBtnText = 'Calcular Distância';
             let distanceBtnIcon = <Locate className="w-3 h-3"/>;
             let distanceBtnStyle = 'bg-gray-100 text-gray-500 hover:bg-grass-50 hover:text-grass-600';
@@ -346,7 +317,7 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
                 distanceDisabled = true;
                 distanceBtnStyle = 'bg-gray-100 text-gray-400';
             } else if (gpsStatus === 'ERROR') {
-                distanceBtnText = gpsErrorMsg || 'Tentar Novamente';
+                distanceBtnText = 'Tentar Novamente';
                 distanceBtnIcon = <RotateCcw className="w-3 h-3"/>;
                 distanceBtnStyle = 'bg-red-50 text-red-500 border border-red-100';
             } else if (distMeters > -1) {
@@ -354,7 +325,7 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
                 distanceBtnIcon = <MapPin className="w-3 h-3"/>;
                 distanceBtnStyle = 'bg-grass-50 text-grass-600 border border-grass-100';
             } else if (gpsStatus === 'SUCCESS' && userCoords) {
-                // GPS do usuário OK, mas sem distância para este campo
+                // GPS OK, mas sem distância (Geocoding da arena falhou ou ainda não foi pedido)
                 distanceBtnText = 'Calcular Distância';
                 distanceBtnIcon = <MapPin className="w-3 h-3"/>;
                 distanceBtnStyle = 'bg-blue-50 text-blue-600 border border-blue-100 hover:bg-blue-100';
@@ -371,7 +342,10 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
                         <h3 className="font-black text-pitch text-lg leading-none uppercase truncate mr-2">{field?.name}</h3>
                         <div className="flex flex-col items-end gap-1">
                            <button 
-                             onClick={() => field && handleCalculateDistanceForField(field)}
+                             onClick={(e) => {
+                               e.stopPropagation(); // Evita conflitos de clique
+                               if(field) handleCalculateDistanceForField(field);
+                             }}
                              disabled={distanceDisabled}
                              className={`text-[10px] font-black uppercase flex items-center gap-2 px-3 py-2 rounded-xl transition-all active:scale-95 ${distanceBtnStyle}`}
                            >

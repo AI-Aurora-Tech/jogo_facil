@@ -33,7 +33,6 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({ categories, 
   const [neighborhood, setNeighborhood] = useState('');
   const [city, setCity] = useState('');
   const [state, setState] = useState('');
-  const [complement, setComplement] = useState('');
   const [isLoadingCEP, setIsLoadingCEP] = useState(false);
   
   const [isLoading, setIsLoading] = useState(false);
@@ -47,7 +46,6 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({ categories, 
       const parts = field.location.split(',');
       if (parts.length > 0 && !street) {
         // Se já tem endereço salvo, mostramos no campo "Rua" como fallback
-        // Mas incentivamos o uso do CEP
         setStreet(field.location); 
       }
     }

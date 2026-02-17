@@ -1,10 +1,10 @@
 
 import React, { useState } from 'react';
-import { UserRole, SubscriptionPlan, CATEGORY_ORDER } from '../types';
+import { UserRole, SubscriptionPlan, CATEGORY_ORDER, Gender } from '../types';
 import { Button } from '../components/Button';
-import { Shield, MapPin, AlertCircle, KeyRound, ChevronLeft, Camera } from 'lucide-react';
+import { Shield, MapPin, AlertCircle, KeyRound, ChevronLeft, Camera, LayoutGrid, Loader2 } from 'lucide-react';
 import { api } from '../api';
-import { convertFileToBase64 } from '../utils';
+import { convertFileToBase64, fetchAddressByCEP } from '../utils';
 
 interface AuthProps {
   categories: string[];
@@ -21,27 +21,54 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, onCancel }) => {
   const [successMsg, setSuccessMsg] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
-  // Form States
+  // Common Form States
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
+
+  // Field Owner Specific States
   const [arenaName, setArenaName] = useState('');
-  const [address, setAddress] = useState('');
+  const [arenaPrice, setArenaPrice] = useState('');
+  const [arenaPhoto, setArenaPhoto] = useState('');
+  // Address / CEP
+  const [cep, setCep] = useState('');
+  const [street, setStreet] = useState('');
+  const [number, setNumber] = useState('');
+  const [neighborhood, setNeighborhood] = useState('');
+  const [city, setCity] = useState('');
+  const [state, setState] = useState('');
+  const [isLoadingCEP, setIsLoadingCEP] = useState(false);
+
+  // Captain Specific States
   const [teamName, setTeamName] = useState('');
   const [teamCategories, setTeamCategories] = useState<string[]>([]);
-  
-  // Photo States
+  const [teamGender, setTeamGender] = useState<Gender>('MASCULINO');
   const [teamLogo, setTeamLogo] = useState('');
-  const [arenaPhoto, setArenaPhoto] = useState('');
 
   const toggleCategory = (cat: string) => {
     if (teamCategories.includes(cat)) {
       setTeamCategories(teamCategories.filter(c => c !== cat));
     } else {
-      // SEM LIMITE DE CATEGORIAS
       setTeamCategories([...teamCategories, cat]);
       setError('');
+    }
+  };
+
+  const handleCEPBlur = async () => {
+    if (cep.length < 8) return;
+    setIsLoadingCEP(true);
+    const data = await fetchAddressByCEP(cep);
+    setIsLoadingCEP(false);
+    
+    if (data) {
+      setStreet(data.logradouro);
+      setNeighborhood(data.bairro);
+      setCity(data.localidade);
+      setState(data.uf);
+      setError('');
+    } else {
+      setError('CEP não encontrado.');
     }
   };
 
@@ -56,7 +83,7 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, onCancel }) => {
          return;
       }
 
-      // Validação específica para DONO DE TIME (Capitão)
+      // Validação CAPITÃO
       if (role === UserRole.TEAM_CAPTAIN) {
         if (!teamName) {
           setError('O nome do time é obrigatório.');
@@ -68,10 +95,16 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, onCancel }) => {
         }
       }
 
-      // Validação específica para DONO DE CAMPO
-      if (role === UserRole.FIELD_OWNER && (!arenaName || !address)) {
-        setError('Os dados da arena são obrigatórios.');
-        return;
+      // Validação DONO DE CAMPO
+      if (role === UserRole.FIELD_OWNER) {
+        if (!arenaName) {
+            setError('O nome da arena é obrigatório.');
+            return;
+        }
+        if (!cep || !street || !number || !city) {
+            setError('O endereço da arena precisa estar completo (CEP, Rua, Número).');
+            return;
+        }
       }
     }
 
@@ -85,6 +118,15 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, onCancel }) => {
     setIsLoading(true);
     try {
       if (mode === 'REGISTER') {
+        
+        // Constrói o endereço completo para salvar no banco
+        let fullAddress = '';
+        if (role === UserRole.FIELD_OWNER) {
+            fullAddress = `${street}, ${number}`;
+            if (neighborhood) fullAddress += ` - ${neighborhood}`;
+            fullAddress += ` - ${city} - ${state}, ${cep}`;
+        }
+
         const payload = {
           email: email.toLowerCase().trim(),
           password,
@@ -92,13 +134,19 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, onCancel }) => {
           name,
           phoneNumber: phone,
           subscription: SubscriptionPlan.FREE,
-          teams: role === UserRole.TEAM_CAPTAIN ? [{ name: teamName, categories: teamCategories, logoUrl: teamLogo }] : [],
+          teams: role === UserRole.TEAM_CAPTAIN ? [{ 
+              name: teamName, 
+              categories: teamCategories, 
+              logoUrl: teamLogo,
+              gender: teamGender 
+          }] : [],
           teamLogoUrl: role === UserRole.TEAM_CAPTAIN ? teamLogo : undefined,
           fieldData: role === UserRole.FIELD_OWNER ? {
             name: arenaName,
-            location: address,
+            location: fullAddress,
             contactPhone: phone,
-            imageUrl: arenaPhoto
+            imageUrl: arenaPhoto,
+            hourlyRate: Number(arenaPrice) || 0
           } : undefined
         };
         const newUser = await api.register(payload);
@@ -144,7 +192,7 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, onCancel }) => {
               <div className="grid grid-cols-2 gap-3 mb-6">
                 <button type="button" onClick={() => setRole(UserRole.TEAM_CAPTAIN)} className={`p-4 rounded-[1.5rem] border-2 flex flex-col items-center gap-2 transition-all ${role === UserRole.TEAM_CAPTAIN ? 'border-pitch bg-pitch text-white' : 'border-gray-100 text-gray-300'}`}>
                    <Shield className="w-6 h-6" />
-                   <span className="text-[10px] font-black uppercase">Capitão</span>
+                   <span className="text-[10px] font-black uppercase">Sou Capitão</span>
                 </button>
                 <button type="button" onClick={() => setRole(UserRole.FIELD_OWNER)} className={`p-4 rounded-[1.5rem] border-2 flex flex-col items-center gap-2 transition-all ${role === UserRole.FIELD_OWNER ? 'border-pitch bg-pitch text-white' : 'border-gray-100 text-gray-300'}`}>
                    <MapPin className="w-6 h-6" />
@@ -154,14 +202,14 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, onCancel }) => {
 
               <div className="space-y-3">
                 <input className="w-full p-4 bg-gray-50 rounded-2xl border font-bold outline-none" placeholder="Nome Completo" value={name} onChange={e => setName(e.target.value)} required />
-                <input className="w-full p-4 bg-gray-50 rounded-2xl border font-bold outline-none" placeholder="WhatsApp" value={phone} onChange={e => setPhone(e.target.value)} required />
+                <input className="w-full p-4 bg-gray-50 rounded-2xl border font-bold outline-none" placeholder="WhatsApp (com DDD)" value={phone} onChange={e => setPhone(e.target.value)} required />
                 <input className="w-full p-4 bg-gray-50 rounded-2xl border font-bold outline-none" placeholder="E-mail" type="email" value={email} onChange={e => setEmail(e.target.value)} required />
                 <input className="w-full p-4 bg-gray-50 rounded-2xl border font-bold outline-none" placeholder="Senha" type="password" value={password} onChange={e => setPassword(e.target.value)} required />
                 
                 {/* Campos para Capitão do Time */}
                 {role === UserRole.TEAM_CAPTAIN && (
                   <div className="bg-gray-50 p-5 rounded-[2rem] border-2 border-dashed border-gray-200 mt-4 animate-in slide-in-from-top-2">
-                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3">Dados da Equipe</p>
+                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3">Dados do Seu Time</p>
                     
                     <div className="flex flex-col items-center mb-4">
                        <div className="w-20 h-20 bg-white rounded-2xl border-2 border-dashed border-gray-200 flex items-center justify-center relative overflow-hidden group">
@@ -174,8 +222,17 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, onCancel }) => {
                        <span className="text-[8px] font-black text-gray-400 uppercase mt-2">Logo do Time</span>
                     </div>
 
-                    <input className="w-full bg-transparent border-b-2 border-gray-100 p-2 font-black text-lg outline-none focus:border-pitch transition-colors mb-4" placeholder="Nome do seu Time" value={teamName} onChange={e => setTeamName(e.target.value)} required />
+                    <input className="w-full bg-transparent border-b-2 border-gray-100 p-2 font-black text-lg outline-none focus:border-pitch transition-colors mb-4" placeholder="Nome do Time" value={teamName} onChange={e => setTeamName(e.target.value)} required />
                     
+                    <div className="mb-4">
+                        <p className="text-[9px] font-bold text-gray-400 uppercase mb-2">Gênero do Time</p>
+                        <div className="flex gap-1 p-1 bg-white rounded-xl border">
+                            {['MASCULINO', 'FEMININO', 'MISTO'].map((g: any) => (
+                              <button key={g} type="button" onClick={() => setTeamGender(g)} className={`flex-1 py-2 text-[8px] font-black uppercase rounded-lg transition-all ${teamGender === g ? 'bg-pitch text-white' : 'text-gray-300 hover:text-gray-400'}`}>{g}</button>
+                            ))}
+                        </div>
+                    </div>
+
                     <p className="text-[9px] font-bold text-gray-400 uppercase mb-2">Quais categorias seu time joga?</p>
                     <div className="grid grid-cols-4 gap-2">
                        {CATEGORY_ORDER.map(cat => (
@@ -207,8 +264,54 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, onCancel }) => {
                        </div>
                     </div>
 
-                    <input className="w-full bg-transparent border-b-2 border-gray-100 p-2 font-black text-lg outline-none" placeholder="Nome da Arena" value={arenaName} onChange={e => setArenaName(e.target.value)} required />
-                    <input className="w-full bg-transparent border-b-2 border-gray-100 p-2 font-bold text-sm outline-none" placeholder="Endereço Completo" value={address} onChange={e => setAddress(e.target.value)} required />
+                    <div className="grid grid-cols-2 gap-3">
+                        <div className="bg-white p-3 rounded-xl border">
+                           <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Nome da Arena</label>
+                           <input className="w-full bg-transparent font-bold text-pitch outline-none" value={arenaName} onChange={e => setArenaName(e.target.value)} required />
+                        </div>
+                        <div className="bg-white p-3 rounded-xl border">
+                           <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Preço/Hora</label>
+                           <input className="w-full bg-transparent font-bold text-pitch outline-none" type="number" placeholder="R$" value={arenaPrice} onChange={e => setArenaPrice(e.target.value)} required />
+                        </div>
+                    </div>
+
+                    {/* SEÇÃO DE ENDEREÇO COM CEP */}
+                    <div className="bg-white p-4 rounded-xl border space-y-3">
+                         <div className="grid grid-cols-3 gap-2">
+                             <div className="relative">
+                               <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">CEP</label>
+                               <input 
+                                  className="w-full bg-gray-50 p-2 rounded-lg font-bold text-xs outline-none" 
+                                  placeholder="00000-000" 
+                                  value={cep} 
+                                  onChange={e => setCep(e.target.value.replace(/\D/g, '').slice(0, 8))} 
+                                  onBlur={handleCEPBlur}
+                                  required
+                               />
+                               {isLoadingCEP && <div className="absolute right-2 top-6 animate-spin"><Loader2 className="w-3 h-3 text-pitch"/></div>}
+                             </div>
+                             <div className="col-span-2">
+                               <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Cidade / Estado</label>
+                               <input className="w-full bg-gray-50 p-2 rounded-lg font-bold text-xs outline-none text-gray-500" value={`${city}${state ? ' - ' + state : ''}`} readOnly tabIndex={-1} placeholder="Automático" />
+                             </div>
+                         </div>
+                         
+                         <div>
+                            <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Rua / Logradouro</label>
+                            <input className="w-full bg-gray-50 p-2 rounded-lg font-bold text-xs outline-none" value={street} onChange={e => setStreet(e.target.value)} placeholder="Endereço" required />
+                         </div>
+
+                         <div className="grid grid-cols-3 gap-2">
+                             <div>
+                               <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Número</label>
+                               <input className="w-full bg-gray-50 p-2 rounded-lg font-bold text-xs outline-none" value={number} onChange={e => setNumber(e.target.value)} placeholder="123" required />
+                             </div>
+                             <div className="col-span-2">
+                               <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Bairro</label>
+                               <input className="w-full bg-gray-50 p-2 rounded-lg font-bold text-xs outline-none" value={neighborhood} onChange={e => setNeighborhood(e.target.value)} placeholder="Bairro" required />
+                             </div>
+                         </div>
+                    </div>
                   </div>
                 )}
               </div>

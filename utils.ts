@@ -28,7 +28,7 @@ export const getCurrentPosition = (options?: PositionOptions): Promise<LatLng> =
       
       // Fallback: Tenta novamente com precisão menor e timeout maior
       if (options?.enableHighAccuracy !== false) {
-          console.log("Tentando fallback com baixa precisão...");
+          // console.log("Tentando fallback com baixa precisão...");
           navigator.geolocation.getCurrentPosition(
             success,
             (errFinal) => {
@@ -43,7 +43,7 @@ export const getCurrentPosition = (options?: PositionOptions): Promise<LatLng> =
       }
     };
 
-    // Tenta primeiro com alta precisão, mas com timeout razoável (10s)
+    // Tenta primeiro com alta precisão
     navigator.geolocation.getCurrentPosition(
       success,
       error,
@@ -54,10 +54,10 @@ export const getCurrentPosition = (options?: PositionOptions): Promise<LatLng> =
 
 function getFriendlyErrorMessage(err: GeolocationPositionError): string {
   switch(err.code) {
-    case 1: return "GPS Permissão Negada";
-    case 2: return "Sinal GPS Indisponível";
-    case 3: return "Tempo limite GPS";
-    default: return "Erro desconhecido GPS";
+    case 1: return "GPS Permissão Negada. Ative a localização no seu navegador/celular.";
+    case 2: return "Sinal GPS Indisponível.";
+    case 3: return "Tempo limite do GPS esgotado.";
+    default: return "Erro ao obter localização.";
   }
 }
 
@@ -92,17 +92,17 @@ export const fetchAddressByCEP = async (cep: string) => {
 
 /**
  * Busca coordenadas (Lat/Lng) a partir de um endereço usando OpenStreetMap (Nominatim).
- * Inclui delay para respeitar rate limits se chamado em loop.
  */
 export const geocodeAddress = async (address: string): Promise<LatLng | null> => {
   if (!address) return null;
   if (addressCache[address]) return addressCache[address];
 
-  // Helper interno para fetch
   const doFetch = async (q: string) => {
      try {
-       await new Promise(r => setTimeout(r, Math.random() * 500));
-       const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q)}&limit=1`, {
+       // Pequeno delay para evitar rate limit
+       await new Promise(r => setTimeout(r, 300));
+       const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q)}&limit=1`;
+       const response = await fetch(url, {
           headers: { 'User-Agent': 'JogoFacilApp/1.0' }
        });
        const data = await response.json();
@@ -117,19 +117,32 @@ export const geocodeAddress = async (address: string): Promise<LatLng | null> =>
   };
 
   try {
-    // 1. Tenta o endereço completo
-    const fullQuery = address.toLowerCase().includes('brasil') ? address : `${address}, Brasil`;
+    // 1. Limpeza do endereço (Troca traços por vírgulas para ajudar o Nominatim)
+    // Ex: "Rua X - Bairro Y" vira "Rua X, Bairro Y"
+    const cleanAddress = address.replace(/ - /g, ', ').replace(/-/g, ', ');
+    
+    // Tenta query completa
+    const fullQuery = cleanAddress.toLowerCase().includes('brasil') ? cleanAddress : `${cleanAddress}, Brasil`;
     let result = await doFetch(fullQuery);
 
-    // 2. Fallback: Se falhar, tenta extrair partes (ex: remove CEP ou número muito específico)
+    // 2. Fallback: Tenta simplificar se falhar
     if (!result && address.includes(',')) {
-       // Tenta pegar apenas (Rua, Cidade)
-       // Ex: "Rua X, 123, Bairro, Cidade - SP" -> Tenta partes
        const parts = address.split(',');
+       // Tenta pegar: Parte 1 (Rua) + Última Parte (Cidade/Estado)
        if (parts.length >= 2) {
-          const simplified = `${parts[0]}, ${parts[parts.length-1]}, Brasil`; // Rua + Estado/Cidade
-          result = await doFetch(simplified);
+          const simplified = `${parts[0]}, ${parts[parts.length-1]}`.replace(/ - /g, ', ');
+          result = await doFetch(simplified + ", Brasil");
        }
+    }
+    
+    // 3. Fallback agressivo: Tenta apenas a primeira parte (Nome da Rua) + Cidade se possível
+    if (!result && address.includes('-')) {
+        const parts = address.split('-');
+        if (parts.length >= 2) {
+             // Tenta: Rua + Cidade (assumindo que a última parte é cidade/estado)
+             const simplified = `${parts[0].trim()}, ${parts[parts.length-1].trim()}, Brasil`;
+             result = await doFetch(simplified);
+        }
     }
 
     if (result) {
@@ -147,7 +160,6 @@ export const geocodeAddress = async (address: string): Promise<LatLng | null> =>
  * Calcula a distância em metros usando a fórmula de Haversine.
  */
 export const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
-  // Converte para número caso venha string do banco
   const nLat1 = Number(lat1);
   const nLon1 = Number(lon1);
   const nLat2 = Number(lat2);
@@ -155,11 +167,10 @@ export const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2
 
   if (isNaN(nLat1) || isNaN(nLon1) || isNaN(nLat2) || isNaN(nLon2)) return -1;
   
-  // Ignora coordenadas zeradas (0,0 é no meio do oceano, indica falta de cadastro)
   if ((Math.abs(nLat1) < 0.0001 && Math.abs(nLon1) < 0.0001) || 
       (Math.abs(nLat2) < 0.0001 && Math.abs(nLon2) < 0.0001)) return -1;
 
-  const R = 6371000; // Raio da Terra em metros
+  const R = 6371000;
   const dLat = toRad(nLat2 - nLat1);
   const dLon = toRad(nLon2 - nLon1);
 
