@@ -4,7 +4,7 @@ import { Search, MapPin, Clock, Swords, Filter, X, Check, MessageCircle, Phone, 
 import { Button } from '../components/Button';
 import { Field, MatchSlot, User, CATEGORY_ORDER, SPORTS, Gender } from '../types';
 import { api } from '../api';
-import { calculateDistance, getCurrentPosition, formatDistance, LatLng, getNeighboringCategories } from '../utils';
+import { calculateDistance, getCurrentPosition, formatDistance, LatLng, getNeighboringCategories, geocodeAddress } from '../utils';
 
 interface TeamDashboardProps {
   categories: string[];
@@ -28,6 +28,9 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
   const [gpsStatus, setGpsStatus] = useState<'IDLE' | 'LOADING' | 'SUCCESS' | 'ERROR'>('IDLE');
   const [gpsErrorMsg, setGpsErrorMsg] = useState<string>('');
   
+  // Armazena coordenadas temporárias calculadas via endereço (quando o banco não tem)
+  const [tempFieldCoords, setTempFieldCoords] = useState<Record<string, LatLng>>({});
+
   // States de Filtros
   const [filterRange, setFilterRange] = useState<string>('ALL'); // ALL, TODAY, TOMORROW, 7DAYS, 15DAYS, SPECIFIC
   const [filterDate, setFilterDate] = useState(''); // Usado apenas se filterRange === 'SPECIFIC'
@@ -37,22 +40,49 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
 
   const [myGamesSubTab, setMyGamesSubTab] = useState<'FUTUROS' | 'HISTORICO'>('FUTUROS');
 
-  const fetchLocation = async () => {
+  // FLUXO PRINCIPAL DE LOCALIZAÇÃO
+  const handleActivateGPS = async () => {
     if (gpsStatus === 'LOADING') return;
     
     setGpsStatus('LOADING');
     setGpsErrorMsg('');
     
     try {
+      // 1. Obter GPS do Usuário
       const coords = await getCurrentPosition();
       setUserCoords(coords);
+
+      // 2. Tentar resolver coordenadas das arenas visíveis que não possuem Lat/Lng
+      // Filtramos apenas as arenas únicas que estão sendo exibidas e não têm coords
+      const visibleFieldIds = new Set(filteredSlots.map(s => s.fieldId));
+      const fieldsToGeocode = fields.filter(f => 
+        visibleFieldIds.has(f.id) && 
+        (f.latitude === 0 || f.longitude === 0) &&
+        !tempFieldCoords[f.id] // Se já não calculamos antes
+      );
+
+      if (fieldsToGeocode.length > 0) {
+          // Processa em paralelo mas com cuidado
+          const updates: Record<string, LatLng> = {};
+          
+          await Promise.all(fieldsToGeocode.map(async (field) => {
+             if (field.location && field.location.length > 5) {
+                const fieldCoords = await geocodeAddress(field.location);
+                if (fieldCoords) {
+                   updates[field.id] = fieldCoords;
+                }
+             }
+          }));
+          
+          setTempFieldCoords(prev => ({ ...prev, ...updates }));
+      }
+
       setGpsStatus('SUCCESS');
     } catch (error: any) {
       console.error("Falha na localização:", error);
       const msg = error.message || "Erro GPS";
-      setGpsErrorMsg(msg.length > 15 ? "Erro GPS" : msg); // Mensagem curta para o botão
+      setGpsErrorMsg(msg.length > 15 ? "Erro GPS" : msg); 
       setGpsStatus('ERROR');
-      // Opcional: alert(msg); // Não usar alert, feedback no botão é melhor
     }
   };
 
@@ -283,10 +313,18 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
             
             // Calculo de Distância em Metros
             let distMeters = -1;
-            const hasFieldCoords = field && field.latitude !== 0 && field.longitude !== 0;
 
-            if (userCoords && hasFieldCoords && field) {
-              distMeters = calculateDistance(userCoords.lat, userCoords.lng, field.latitude, field.longitude);
+            if (userCoords && field) {
+              // Verifica se temos Lat/Lng no banco ou no estado temporário (geocoding dinâmico)
+              const hasDbCoords = field.latitude !== 0 && field.longitude !== 0;
+              const hasTempCoords = !!tempFieldCoords[field.id];
+              
+              if (hasDbCoords) {
+                  distMeters = calculateDistance(userCoords.lat, userCoords.lng, field.latitude, field.longitude);
+              } else if (hasTempCoords) {
+                  const tmp = tempFieldCoords[field.id];
+                  distMeters = calculateDistance(userCoords.lat, userCoords.lng, tmp.lat, tmp.lng);
+              }
             }
             
             const status = getStatusBadge(slot);
@@ -307,13 +345,12 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
                 distanceBtnText = gpsErrorMsg || 'Tentar Novamente';
                 distanceBtnIcon = <RotateCcw className="w-3 h-3"/>;
                 distanceBtnStyle = 'bg-red-50 text-red-500 border border-red-100';
-                // Permite clicar para tentar de novo
             } else if (distMeters > -1) {
                 distanceBtnText = formatDistance(distMeters);
                 distanceBtnIcon = <MapPin className="w-3 h-3"/>;
                 distanceBtnStyle = 'bg-grass-50 text-grass-600 border border-grass-100';
-            } else if (gpsStatus === 'SUCCESS' && userCoords && !hasFieldCoords) {
-                // Usuário tem GPS, mas a Arena não cadastrou coordenadas
+            } else if (gpsStatus === 'SUCCESS' && userCoords) {
+                // Se o GPS funcionou, mas ainda não temos distância, significa que o Geocoding falhou
                 distanceBtnText = 'Arena s/ Loc.';
                 distanceBtnIcon = <MapPinOff className="w-3 h-3"/>;
                 distanceBtnStyle = 'bg-gray-100 text-gray-400 opacity-70';
@@ -331,7 +368,7 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
                         <h3 className="font-black text-pitch text-lg leading-none uppercase truncate mr-2">{field?.name}</h3>
                         <div className="flex flex-col items-end gap-1">
                            <button 
-                             onClick={fetchLocation}
+                             onClick={handleActivateGPS}
                              disabled={distanceDisabled}
                              className={`text-[10px] font-black uppercase flex items-center gap-2 px-3 py-2 rounded-xl transition-all active:scale-95 ${distanceBtnStyle}`}
                            >
