@@ -44,4 +44,18 @@ export const Landing: React.FC<LandingProps> = ({ onStart }) => {
             <p className="text-sm text-gray-300">Gerencie horários, crie jogos recorrentes e receba pagamentos com validação automática.</p>
           </div>
 
-          <div className="bg-white/10 p
+          <div className="bg-white/10 p-8 rounded-[2rem] backdrop-blur-md border border-white/20 hover:bg-white/20 transition">
+            <Calendar className="w-10 h-10 text-grass-400 mb-4" />
+            <h3 className="text-xl font-bold mb-2 uppercase">Times e Capitães</h3>
+            <p className="text-sm text-gray-300">Encontre adversários, organize a agenda do time e receba notificações de jogos.</p>
+          </div>
+
+          <div className="bg-white/10 p-8 rounded-[2rem] backdrop-blur-md border border-white/20 hover:bg-white/20 transition">
+            <CreditCard className="w-10 h-10 text-grass-400 mb-4" />
+            <h3 className="text-xl font-bold mb-2 uppercase">Pagamentos Inteligentes</h3>
+            <p className="text-sm text-gray-300">Sistema automatizado de verificação de comprovantes usando Inteligência Artificial.</p>
+          </div>
+      </div>
+    </div>
+  );
+};
