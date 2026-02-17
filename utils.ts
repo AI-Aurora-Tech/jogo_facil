@@ -12,7 +12,7 @@ export interface LatLng {
 export const getCurrentPosition = (options?: PositionOptions): Promise<LatLng> => {
   return new Promise((resolve, reject) => {
     if (!("geolocation" in navigator)) {
-      reject(new Error("Geolocalização não suportada neste dispositivo."));
+      reject(new Error("Geolocalização não suportada."));
       return;
     }
 
@@ -25,15 +25,17 @@ export const getCurrentPosition = (options?: PositionOptions): Promise<LatLng> =
 
     const error = (err: GeolocationPositionError) => {
       console.warn(`Erro GPS Primário (${err.code}): ${err.message}`);
-      // Fallback para baixa precisão se alta falhar
+      
+      // Fallback: Tenta novamente com precisão menor e timeout maior
       if (options?.enableHighAccuracy !== false) {
+          console.log("Tentando fallback com baixa precisão...");
           navigator.geolocation.getCurrentPosition(
             success,
             (errFinal) => {
                 const msg = getFriendlyErrorMessage(errFinal);
                 reject(new Error(msg));
             },
-            { ...options, enableHighAccuracy: false, timeout: 10000, maximumAge: 0 }
+            { maximumAge: 0, timeout: 15000, enableHighAccuracy: false }
           );
       } else {
         const msg = getFriendlyErrorMessage(err);
@@ -41,20 +43,21 @@ export const getCurrentPosition = (options?: PositionOptions): Promise<LatLng> =
       }
     };
 
+    // Tenta primeiro com alta precisão, mas com timeout razoável (10s)
     navigator.geolocation.getCurrentPosition(
       success,
       error,
-      { enableHighAccuracy: true, timeout: 5000, maximumAge: 0, ...options }
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0, ...options }
     );
   });
 };
 
 function getFriendlyErrorMessage(err: GeolocationPositionError): string {
   switch(err.code) {
-    case 1: return "Permissão de localização negada. Ative o GPS do navegador.";
-    case 2: return "Sinal de GPS indisponível.";
-    case 3: return "Tempo limite esgotado ao buscar GPS.";
-    default: return `Erro de GPS: ${err.message}`;
+    case 1: return "GPS Permissão Negada";
+    case 2: return "Sinal GPS Indisponível";
+    case 3: return "Tempo limite GPS";
+    default: return "Erro desconhecido GPS";
   }
 }
 

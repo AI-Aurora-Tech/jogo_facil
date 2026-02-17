@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { Search, MapPin, Clock, Swords, Filter, X, Check, MessageCircle, Phone, Navigation, Trophy, ChevronDown, Smartphone, Settings, AlertTriangle, ExternalLink, Activity, History as HistoryIcon, CalendarCheck, CalendarX, Locate, MapPinOff, Calendar } from 'lucide-react';
+import { Search, MapPin, Clock, Swords, Filter, X, Check, MessageCircle, Phone, Navigation, Trophy, ChevronDown, Smartphone, Settings, AlertTriangle, ExternalLink, Activity, History as HistoryIcon, CalendarCheck, CalendarX, Locate, MapPinOff, Calendar, RotateCcw } from 'lucide-react';
 import { Button } from '../components/Button';
 import { Field, MatchSlot, User, CATEGORY_ORDER, SPORTS, Gender } from '../types';
 import { api } from '../api';
@@ -22,9 +22,11 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
   const [selectedTeamIdx, setSelectedTeamIdx] = useState(0);
   const [selectedCategory, setSelectedCategory] = useState('');
   const [showFilters, setShowFilters] = useState(false);
+  
+  // Estado de GPS melhorado
   const [userCoords, setUserCoords] = useState<LatLng | null>(null);
-  const [isLocating, setIsLocating] = useState(false);
-  const [locationError, setLocationError] = useState<string | null>(null);
+  const [gpsStatus, setGpsStatus] = useState<'IDLE' | 'LOADING' | 'SUCCESS' | 'ERROR'>('IDLE');
+  const [gpsErrorMsg, setGpsErrorMsg] = useState<string>('');
   
   // States de Filtros
   const [filterRange, setFilterRange] = useState<string>('ALL'); // ALL, TODAY, TOMORROW, 7DAYS, 15DAYS, SPECIFIC
@@ -36,19 +38,21 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
   const [myGamesSubTab, setMyGamesSubTab] = useState<'FUTUROS' | 'HISTORICO'>('FUTUROS');
 
   const fetchLocation = async () => {
-    if (isLocating) return;
-    setIsLocating(true);
-    setLocationError(null);
+    if (gpsStatus === 'LOADING') return;
+    
+    setGpsStatus('LOADING');
+    setGpsErrorMsg('');
+    
     try {
       const coords = await getCurrentPosition();
       setUserCoords(coords);
+      setGpsStatus('SUCCESS');
     } catch (error: any) {
       console.error("Falha na localização:", error);
-      const msg = error.message || "Não foi possível obter sua localização.";
-      setLocationError(msg);
-      alert(msg);
-    } finally {
-      setIsLocating(false);
+      const msg = error.message || "Erro GPS";
+      setGpsErrorMsg(msg.length > 15 ? "Erro GPS" : msg); // Mensagem curta para o botão
+      setGpsStatus('ERROR');
+      // Opcional: alert(msg); // Não usar alert, feedback no botão é melhor
     }
   };
 
@@ -288,21 +292,27 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
             const status = getStatusBadge(slot);
             const currentCategory = slot.localTeamCategory || slot.bookedByTeamCategory;
 
-            // Lógica para o texto do botão de distância
+            // Lógica para o texto e estado do botão de distância
             let distanceBtnText = 'Ativar GPS';
             let distanceBtnIcon = <Locate className="w-3 h-3"/>;
             let distanceBtnStyle = 'bg-gray-100 text-gray-500 hover:bg-grass-50 hover:text-grass-600';
             let distanceDisabled = false;
 
-            if (isLocating) {
+            if (gpsStatus === 'LOADING') {
                 distanceBtnText = 'Calculando...';
                 distanceBtnIcon = <Locate className="w-3 h-3 animate-spin"/>;
                 distanceDisabled = true;
+                distanceBtnStyle = 'bg-gray-100 text-gray-400';
+            } else if (gpsStatus === 'ERROR') {
+                distanceBtnText = gpsErrorMsg || 'Tentar Novamente';
+                distanceBtnIcon = <RotateCcw className="w-3 h-3"/>;
+                distanceBtnStyle = 'bg-red-50 text-red-500 border border-red-100';
+                // Permite clicar para tentar de novo
             } else if (distMeters > -1) {
                 distanceBtnText = formatDistance(distMeters);
                 distanceBtnIcon = <MapPin className="w-3 h-3"/>;
                 distanceBtnStyle = 'bg-grass-50 text-grass-600 border border-grass-100';
-            } else if (userCoords && !hasFieldCoords) {
+            } else if (gpsStatus === 'SUCCESS' && userCoords && !hasFieldCoords) {
                 // Usuário tem GPS, mas a Arena não cadastrou coordenadas
                 distanceBtnText = 'Arena s/ Loc.';
                 distanceBtnIcon = <MapPinOff className="w-3 h-3"/>;
