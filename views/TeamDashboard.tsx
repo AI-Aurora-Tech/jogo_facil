@@ -36,12 +36,11 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
   const [myGamesSubTab, setMyGamesSubTab] = useState<'FUTUROS' | 'HISTORICO'>('FUTUROS');
 
   const fetchLocation = async () => {
+    if (isLocating) return;
     setIsLocating(true);
     setLocationError(null);
     try {
-      // Usa a nova função robusta do utils.ts
       const coords = await getCurrentPosition();
-      console.log("Localização obtida com sucesso:", coords);
       setUserCoords(coords);
     } catch (error: any) {
       console.error("Falha na localização:", error);
@@ -52,11 +51,6 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
       setIsLocating(false);
     }
   };
-
-  // Tenta pegar localização ao iniciar se já estiver permitida, mas sem forçar erro
-  useEffect(() => {
-    // Check rápido de permissão se possível (não suportado em todos browsers, então apenas deixamos manual por enquanto para evitar bloqueio)
-  }, []);
 
   const todayStr = new Date().toISOString().split('T')[0];
   const tomorrow = new Date();
@@ -70,10 +64,7 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
     const field = fields.find(f => f.id === slot.fieldId);
     if (!field) return false;
 
-    // Filtro de Texto (Nome da Arena)
     if (searchQuery && !field.name.toLowerCase().includes(searchQuery.toLowerCase())) return false;
-    
-    // Filtros Específicos
     if (filterSport && slot.sport !== filterSport) return false;
     
     if (filterCategory) {
@@ -81,7 +72,6 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
         if (baseCat && baseCat !== filterCategory) return false;
     }
 
-    // Filtro de Data/Período
     if (filterRange === 'SPECIFIC') {
         if (filterDate && slot.date !== filterDate) return false;
     } else if (filterRange === 'TODAY') {
@@ -104,20 +94,16 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
       if (slot.date < todayStr) return false;
       if (field.ownerId === currentUser.id) return false;
 
-      // Logica: Mostrar se está vago OU se tem 1 time esperando adversário (mesmo se for mensalista/confirmado)
       const hasFirstTeam = (slot.bookedByTeamName || slot.hasLocalTeam);
       const hasOpponent = !!slot.opponentTeamName;
       
-      // Se já tem os dois times, não aparece no Explorar
       if (hasFirstTeam && hasOpponent) return false;
 
-      // Status deve permitir agendamento (available ou um agendamento incompleto)
       const isAwaitingAdversary = hasFirstTeam && !hasOpponent;
       const isFullyAvailable = slot.status === 'available' && !hasFirstTeam;
       
       if (!isAwaitingAdversary && !isFullyAvailable) return false;
 
-      // Verificação de Matchmaking de Categorias
       const allowedCats = slot.allowedOpponentCategories || [];
       const baseCategory = slot.localTeamCategory || slot.bookedByTeamCategory;
 
@@ -126,8 +112,6 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
           if (!canMatch) return false;
       }
     } else {
-      // ABA: MEUS JOGOS
-      // Verificamos por ID ou pelos Nomes dos Times para evitar que suma após confirmação
       const isMyTeamInSlot = (slot.bookedByTeamName && myTeamsNames.includes(slot.bookedByTeamName.toLowerCase())) ||
                              (slot.opponentTeamName && myTeamsNames.includes(slot.opponentTeamName.toLowerCase()));
       
@@ -229,7 +213,6 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
                   className="w-full bg-white p-3 rounded-xl border font-bold text-[10px] uppercase outline-none"
                 />
                
-               {/* Filtro de Período/Data */}
                <div className="grid grid-cols-2 gap-2">
                    <div className="bg-white p-3 rounded-xl border flex items-center gap-2">
                       <Calendar className="w-4 h-4 text-gray-400" />
@@ -296,7 +279,9 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
             
             // Calculo de Distância em Metros
             let distMeters = -1;
-            if (userCoords && field && field.latitude != null && field.longitude != null) {
+            const hasFieldCoords = field && field.latitude !== 0 && field.longitude !== 0;
+
+            if (userCoords && hasFieldCoords && field) {
               distMeters = calculateDistance(userCoords.lat, userCoords.lng, field.latitude, field.longitude);
             }
             
@@ -304,7 +289,7 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
             const currentCategory = slot.localTeamCategory || slot.bookedByTeamCategory;
 
             // Lógica para o texto do botão de distância
-            let distanceBtnText = 'Calcular Distância';
+            let distanceBtnText = 'Ativar GPS';
             let distanceBtnIcon = <Locate className="w-3 h-3"/>;
             let distanceBtnStyle = 'bg-gray-100 text-gray-500 hover:bg-grass-50 hover:text-grass-600';
             let distanceDisabled = false;
@@ -317,12 +302,11 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
                 distanceBtnText = formatDistance(distMeters);
                 distanceBtnIcon = <MapPin className="w-3 h-3"/>;
                 distanceBtnStyle = 'bg-grass-50 text-grass-600 border border-grass-100';
-                distanceDisabled = false; // Permite clicar novamente para atualizar
-            } else if (userCoords) {
-                // Temos GPS, mas deu erro no cálculo (provavelmente arena com lat/lng = 0)
-                distanceBtnText = 'Sem Mapa';
+            } else if (userCoords && !hasFieldCoords) {
+                // Usuário tem GPS, mas a Arena não cadastrou coordenadas
+                distanceBtnText = 'Arena s/ Loc.';
                 distanceBtnIcon = <MapPinOff className="w-3 h-3"/>;
-                distanceBtnStyle = 'bg-red-50 text-red-400 cursor-not-allowed opacity-70';
+                distanceBtnStyle = 'bg-gray-100 text-gray-400 opacity-70';
                 distanceDisabled = true;
             }
 

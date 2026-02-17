@@ -8,18 +8,14 @@ export interface LatLng {
 
 /**
  * Obtém a posição atual com sistema de fallback.
- * 1. Tenta GPS (Alta precisão) por 5 segundos.
- * 2. Se falhar ou der timeout, tenta Wi-Fi/Torres (Baixa precisão) automaticamente.
  */
 export const getCurrentPosition = (options?: PositionOptions): Promise<LatLng> => {
   return new Promise((resolve, reject) => {
-    // 1. Verificação básica
     if (!("geolocation" in navigator)) {
       reject(new Error("Geolocalização não suportada neste dispositivo."));
       return;
     }
 
-    // Callback de sucesso
     const success = (pos: GeolocationPosition) => {
       resolve({
         lat: pos.coords.latitude,
@@ -27,25 +23,17 @@ export const getCurrentPosition = (options?: PositionOptions): Promise<LatLng> =
       });
     };
 
-    // Callback de erro com Fallback Inteligente
     const error = (err: GeolocationPositionError) => {
       console.warn(`Erro GPS Primário (${err.code}): ${err.message}`);
-      
-      // Se a falha foi no modo High Accuracy (timeout ou indisponível), tenta Low Accuracy
+      // Fallback para baixa precisão se alta falhar
       if (options?.enableHighAccuracy !== false) {
-          console.log("Tentando geolocalização aproximada (fallback)...");
           navigator.geolocation.getCurrentPosition(
             success,
             (errFinal) => {
                 const msg = getFriendlyErrorMessage(errFinal);
                 reject(new Error(msg));
             },
-            { 
-              ...options, 
-              enableHighAccuracy: false, 
-              timeout: 10000, 
-              maximumAge: 0 
-            }
+            { ...options, enableHighAccuracy: false, timeout: 10000, maximumAge: 0 }
           );
       } else {
         const msg = getFriendlyErrorMessage(err);
@@ -53,26 +41,20 @@ export const getCurrentPosition = (options?: PositionOptions): Promise<LatLng> =
       }
     };
 
-    // 2. Primeira tentativa: Alta precisão com Timeout Curto
     navigator.geolocation.getCurrentPosition(
       success,
       error,
-      {
-        enableHighAccuracy: true,
-        timeout: 5000, // 5 segundos para tentar pegar satélite
-        maximumAge: 0,
-        ...options,
-      }
+      { enableHighAccuracy: true, timeout: 5000, maximumAge: 0, ...options }
     );
   });
 };
 
 function getFriendlyErrorMessage(err: GeolocationPositionError): string {
   switch(err.code) {
-    case 1: return "Permissão de localização negada. Verifique as configurações do seu navegador.";
-    case 2: return "Sinal de GPS indisponível. Vá para um local a céu aberto.";
-    case 3: return "Tempo limite esgotado. O sinal está fraco.";
-    default: return `Erro desconhecido: ${err.message}`;
+    case 1: return "Permissão de localização negada. Ative o GPS do navegador.";
+    case 2: return "Sinal de GPS indisponível.";
+    case 3: return "Tempo limite esgotado ao buscar GPS.";
+    default: return `Erro de GPS: ${err.message}`;
   }
 }
 
@@ -81,22 +63,50 @@ function toRad(deg: number) {
 }
 
 /**
+ * Busca coordenadas (Lat/Lng) a partir de um endereço usando OpenStreetMap (Nominatim).
+ */
+export const geocodeAddress = async (address: string): Promise<LatLng | null> => {
+  try {
+    // Adiciona "Brasil" para melhorar precisão se não houver
+    const query = address.toLowerCase().includes('brasil') ? address : `${address}, Brasil`;
+    const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=1`);
+    const data = await response.json();
+    
+    if (data && data.length > 0) {
+      return {
+        lat: parseFloat(data[0].lat),
+        lng: parseFloat(data[0].lon)
+      };
+    }
+    return null;
+  } catch (error) {
+    console.error("Erro ao geocodificar:", error);
+    return null;
+  }
+};
+
+/**
  * Calcula a distância em metros usando a fórmula de Haversine.
  */
 export const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
-  if (lat1 === null || lon1 === null || lat2 === null || lon2 === null) return -1;
-  if (isNaN(lat1) || isNaN(lon1) || isNaN(lat2) || isNaN(lon2)) return -1;
+  // Converte para número caso venha string do banco
+  const nLat1 = Number(lat1);
+  const nLon1 = Number(lon1);
+  const nLat2 = Number(lat2);
+  const nLon2 = Number(lon2);
+
+  if (isNaN(nLat1) || isNaN(nLon1) || isNaN(nLat2) || isNaN(nLon2)) return -1;
   
-  // Ignora coordenadas padrão (0,0)
-  if ((Math.abs(lat1) < 0.0001 && Math.abs(lon1) < 0.0001) || 
-      (Math.abs(lat2) < 0.0001 && Math.abs(lon2) < 0.0001)) return -1;
+  // Ignora coordenadas zeradas (0,0 é no meio do oceano, indica falta de cadastro)
+  if ((Math.abs(nLat1) < 0.0001 && Math.abs(nLon1) < 0.0001) || 
+      (Math.abs(nLat2) < 0.0001 && Math.abs(nLon2) < 0.0001)) return -1;
 
   const R = 6371000; // Raio da Terra em metros
-  const dLat = toRad(lat2 - lat1);
-  const dLon = toRad(lon2 - lon1);
+  const dLat = toRad(nLat2 - nLat1);
+  const dLon = toRad(nLon2 - nLon1);
 
-  const aLat1 = toRad(lat1);
-  const aLat2 = toRad(lat2);
+  const aLat1 = toRad(nLat1);
+  const aLat2 = toRad(nLat2);
 
   const h =
     Math.sin(dLat / 2) * Math.sin(dLat / 2) +
@@ -136,11 +146,8 @@ export const convertFileToBase64 = (file: File): Promise<string> => {
 export const formatCategory = (input: string): string => {
   let cleaned = input.trim().toLowerCase();
   if (!cleaned) return '';
-
   const subMatch = cleaned.match(/^(?:sub\s*i?|s|categoria\s*)(\d+)$/i);
   if (subMatch) return `Sub-${subMatch[1]}`;
-
   if (/^\d+$/.test(cleaned)) return `Sub-${cleaned}`;
-
   return cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
 };
