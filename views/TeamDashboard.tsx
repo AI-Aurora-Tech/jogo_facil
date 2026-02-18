@@ -1,6 +1,6 @@
 
-import React, { useState } from 'react';
-import { Search, MapPin, Clock, Swords, Filter, X, Check, MessageCircle, Phone, Navigation, Trophy, ChevronDown, Smartphone, Settings, AlertTriangle, ExternalLink, Activity, History as HistoryIcon, CalendarCheck, CalendarX, Locate, MapPinOff, Calendar, RotateCcw } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { Search, MapPin, Clock, Swords, Filter, X, Check, MessageCircle, Phone, Navigation, Trophy, ChevronDown, Smartphone, Settings, AlertTriangle, ExternalLink, Activity, History as HistoryIcon, CalendarCheck, CalendarX, Locate, MapPinOff, Calendar, RotateCcw, ArrowUpDown, SlidersHorizontal } from 'lucide-react';
 import { Button } from '../components/Button';
 import { Field, MatchSlot, User, CATEGORY_ORDER, SPORTS, Gender } from '../types';
 import { api } from '../api';
@@ -17,69 +17,90 @@ interface TeamDashboardProps {
   onRefresh: () => void;
 }
 
+type SortOption = 'DISTANCE_ASC' | 'DISTANCE_DESC' | 'PRICE_ASC' | 'PRICE_DESC' | 'NAME_ASC' | 'NAME_DESC';
+
 export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, fields, slots, viewMode, onRefresh, onCancelBooking }) => {
   const [selectedSlot, setSelectedSlot] = useState<MatchSlot | null>(null);
   const [selectedTeamIdx, setSelectedTeamIdx] = useState(0);
   const [selectedCategory, setSelectedCategory] = useState('');
   const [showFilters, setShowFilters] = useState(false);
   
-  // Estado de GPS
+  // Estado de GPS e Distâncias
   const [userCoords, setUserCoords] = useState<LatLng | null>(null);
-  const [loadingFieldId, setLoadingFieldId] = useState<string | null>(null);
-  const [tempFieldCoords, setTempFieldCoords] = useState<Record<string, LatLng>>({});
+  const [fieldDistances, setFieldDistances] = useState<Record<string, number>>({});
+  const [isCalculatingDistances, setIsCalculatingDistances] = useState(false);
+  const [gpsError, setGpsError] = useState(false);
 
+  // Filtros
   const [filterRange, setFilterRange] = useState<string>('ALL');
   const [filterDate, setFilterDate] = useState('');
   const [filterSport, setFilterSport] = useState('');
   const [filterCategory, setFilterCategory] = useState('');
+  const [filterMaxDistance, setFilterMaxDistance] = useState<number | ''>(''); // km
   const [searchQuery, setSearchQuery] = useState('');
+  const [sortBy, setSortBy] = useState<SortOption>('DISTANCE_ASC');
+  
   const [myGamesSubTab, setMyGamesSubTab] = useState<'FUTUROS' | 'HISTORICO'>('FUTUROS');
 
-  // Função Robusta de Cálculo de Distância
-  const handleCalculateDistanceForField = async (field: Field) => {
-    setLoadingFieldId(field.id);
+  // Ao montar ou mudar fields, tenta calcular distâncias se já tiver userCoords
+  useEffect(() => {
+    if (userCoords) {
+      calculateAllDistances(userCoords);
+    }
+  }, [userCoords, fields]);
+
+  const activateGPS = async () => {
+    setIsCalculatingDistances(true);
+    setGpsError(false);
+    try {
+      const coords = await getCurrentPosition();
+      setUserCoords(coords);
+      // O useEffect acima vai disparar o cálculo
+    } catch (error: any) {
+      console.error(error);
+      setGpsError(true);
+      alert("Não foi possível obter sua localização. Verifique as permissões do navegador.");
+      setIsCalculatingDistances(false);
+    }
+  };
+
+  const calculateAllDistances = async (origin: LatLng) => {
+    setIsCalculatingDistances(true);
+    const newDistances: Record<string, number> = {};
     
-    // Passo 1: Obter Localização do Usuário (GPS)
-    let currentUserLoc = userCoords;
-    if (!currentUserLoc) {
-      try {
-        currentUserLoc = await getCurrentPosition();
-        setUserCoords(currentUserLoc);
-      } catch (error: any) {
-        alert(`ERRO DE GPS:\n${error.message}\n\nDicas:\n1. Verifique se o GPS está ativo.\n2. Permita o acesso à localização.`);
-        setLoadingFieldId(null);
-        return;
+    // Processamento em lote
+    const uniqueFieldIds = Array.from(new Set(slots.map(s => s.fieldId)));
+    
+    for (const fieldId of uniqueFieldIds) {
+      const field = fields.find(f => f.id === fieldId);
+      if (!field) continue;
+
+      let lat = field.latitude;
+      let lng = field.longitude;
+
+      // Se não tem coordenada no banco, tenta geocodificar agora (apenas se tiver endereço)
+      if ((!lat || !lng || (Math.abs(lat) < 0.0001)) && field.location && field.location.length > 5) {
+         try {
+            const geo = await geocodeAddress(field.location);
+            if (geo) {
+              lat = geo.lat;
+              lng = geo.lng;
+            }
+         } catch (e) {
+           console.warn(`Falha ao geocodificar ${field.name}`);
+         }
+      }
+
+      if (lat && lng && Math.abs(lat) > 0.0001) {
+        const dist = calculateDistance(origin.lat, origin.lng, lat, lng);
+        if (dist >= 0) {
+          newDistances[fieldId] = dist;
+        }
       }
     }
 
-    // Passo 2: Obter Localização da Arena
-    let arenaLoc: LatLng | null = null;
-    
-    // Tenta usar coords do banco se existirem e forem válidas
-    if (field.latitude && field.longitude && (Math.abs(field.latitude) > 0.0001)) {
-        arenaLoc = { lat: field.latitude, lng: field.longitude };
-    } 
-    // Se já calculamos temporariamente antes
-    else if (tempFieldCoords[field.id]) {
-        arenaLoc = tempFieldCoords[field.id];
-    } 
-    // Se não tem, tenta buscar pelo endereço agora
-    else if (field.location && field.location.length > 5) {
-        arenaLoc = await geocodeAddress(field.location);
-        if (arenaLoc) {
-            setTempFieldCoords(prev => ({ ...prev, [field.id]: arenaLoc! }));
-        }
-    }
-
-    setLoadingFieldId(null);
-
-    // Passo 3: Feedback APENAS se falhar completamente
-    if (!arenaLoc) {
-        const confirmOpen = confirm(`SUCESSO NO GPS DO USUÁRIO ✅\nFALHA NA ARENA ❌\n\nNão conseguimos localizar o endereço exato no mapa automático.\n\nDeseja abrir este endereço no Google Maps para ver a localização?`);
-        if (confirmOpen) {
-            window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(field.location)}`, '_blank');
-        }
-    }
+    setFieldDistances(prev => ({ ...prev, ...newDistances }));
+    setIsCalculatingDistances(false);
   };
 
   const todayStr = new Date().toISOString().split('T')[0];
@@ -89,58 +110,105 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
   const userAllCategories = currentUser.teams?.flatMap(t => t.categories) || [];
   const myTeamsNames = currentUser.teams?.map(t => t.name.toLowerCase()) || [];
 
-  const filteredSlots = slots.filter(slot => {
-    const field = fields.find(f => f.id === slot.fieldId);
-    if (!field) return false;
-    if (searchQuery && !field.name.toLowerCase().includes(searchQuery.toLowerCase())) return false;
-    if (filterSport && slot.sport !== filterSport) return false;
-    if (filterCategory) {
-        const baseCat = slot.localTeamCategory || slot.bookedByTeamCategory;
-        if (baseCat && baseCat !== filterCategory) return false;
-    }
-    if (filterRange === 'SPECIFIC') {
-        if (filterDate && slot.date !== filterDate) return false;
-    } else if (filterRange === 'TODAY') {
-        if (slot.date !== todayStr) return false;
-    } else if (filterRange === 'TOMORROW') {
-        if (slot.date !== tomorrowStr) return false;
-    } else if (filterRange === '7DAYS') {
-        const limit = new Date();
-        limit.setDate(limit.getDate() + 7);
-        const limitStr = limit.toISOString().split('T')[0];
-        if (slot.date < todayStr || slot.date > limitStr) return false;
-    } else if (filterRange === '15DAYS') {
-        const limit = new Date();
-        limit.setDate(limit.getDate() + 15);
-        const limitStr = limit.toISOString().split('T')[0];
-        if (slot.date < todayStr || slot.date > limitStr) return false;
-    }
+  // Filtragem e Ordenação
+  const processedSlots = useMemo(() => {
+    let result = slots.filter(slot => {
+      const field = fields.find(f => f.id === slot.fieldId);
+      if (!field) return false;
 
-    if (viewMode === 'EXPLORE') {
-      if (slot.date < todayStr) return false;
-      if (field.ownerId === currentUser.id) return false;
-      const hasFirstTeam = (slot.bookedByTeamName || slot.hasLocalTeam);
-      const hasOpponent = !!slot.opponentTeamName;
-      if (hasFirstTeam && hasOpponent) return false;
-      const isAwaitingAdversary = hasFirstTeam && !hasOpponent;
-      const isFullyAvailable = slot.status === 'available' && !hasFirstTeam;
-      if (!isAwaitingAdversary && !isFullyAvailable) return false;
-      const allowedCats = slot.allowedOpponentCategories || [];
-      const baseCategory = slot.localTeamCategory || slot.bookedByTeamCategory;
-      if (baseCategory || allowedCats.length > 0) {
-          const canMatch = userAllCategories.some(cat => allowedCats.includes(cat) || cat === baseCategory);
-          if (!canMatch) return false;
+      // Filtros Básicos
+      if (searchQuery && !field.name.toLowerCase().includes(searchQuery.toLowerCase())) return false;
+      if (filterSport && slot.sport !== filterSport) return false;
+      if (filterCategory) {
+          const baseCat = slot.localTeamCategory || slot.bookedByTeamCategory;
+          if (baseCat && baseCat !== filterCategory) return false;
       }
-    } else {
-      const isMyTeamInSlot = (slot.bookedByTeamName && myTeamsNames.includes(slot.bookedByTeamName.toLowerCase())) ||
-                             (slot.opponentTeamName && myTeamsNames.includes(slot.opponentTeamName.toLowerCase()));
-      const isMyBooking = slot.bookedByUserId === currentUser.id || isMyTeamInSlot;
-      if (!isMyBooking) return false;
-      if (myGamesSubTab === 'FUTUROS' && slot.date < todayStr) return false;
-      if (myGamesSubTab === 'HISTORICO' && slot.date >= todayStr) return false;
-    }
-    return true;
-  }).sort((a,b) => new Date(`${a.date}T${a.time}`).getTime() - new Date(`${b.date}T${b.time}`).getTime());
+
+      // Filtro de Data
+      if (filterRange === 'SPECIFIC') {
+          if (filterDate && slot.date !== filterDate) return false;
+      } else if (filterRange === 'TODAY') {
+          if (slot.date !== todayStr) return false;
+      } else if (filterRange === 'TOMORROW') {
+          if (slot.date !== tomorrowStr) return false;
+      } else if (filterRange === '7DAYS') {
+          const limit = new Date();
+          limit.setDate(limit.getDate() + 7);
+          const limitStr = limit.toISOString().split('T')[0];
+          if (slot.date < todayStr || slot.date > limitStr) return false;
+      } else if (filterRange === '15DAYS') {
+          const limit = new Date();
+          limit.setDate(limit.getDate() + 15);
+          const limitStr = limit.toISOString().split('T')[0];
+          if (slot.date < todayStr || slot.date > limitStr) return false;
+      }
+
+      // Filtro de Distância
+      if (filterMaxDistance !== '') {
+        const dist = fieldDistances[field.id as string];
+        // Se não temos a distância calculada, mostramos ou escondemos?
+        // Vamos esconder se o usuário exigiu um filtro de distância
+        if (dist === undefined) return false;
+        if ((dist / 1000) > Number(filterMaxDistance)) return false;
+      }
+
+      // Filtros de View Mode (Explorar vs Meus Jogos)
+      if (viewMode === 'EXPLORE') {
+        if (slot.date < todayStr) return false;
+        if (field.ownerId === currentUser.id) return false;
+        const hasFirstTeam = (slot.bookedByTeamName || slot.hasLocalTeam);
+        const hasOpponent = !!slot.opponentTeamName;
+        if (hasFirstTeam && hasOpponent) return false;
+        const isAwaitingAdversary = hasFirstTeam && !hasOpponent;
+        const isFullyAvailable = slot.status === 'available' && !hasFirstTeam;
+        if (!isAwaitingAdversary && !isFullyAvailable) return false;
+        const allowedCats = slot.allowedOpponentCategories || [];
+        const baseCategory = slot.localTeamCategory || slot.bookedByTeamCategory;
+        if (baseCategory || allowedCats.length > 0) {
+            const canMatch = userAllCategories.some(cat => allowedCats.includes(cat) || cat === baseCategory);
+            if (!canMatch) return false;
+        }
+      } else {
+        const isMyTeamInSlot = (slot.bookedByTeamName && myTeamsNames.includes(slot.bookedByTeamName.toLowerCase())) ||
+                               (slot.opponentTeamName && myTeamsNames.includes(slot.opponentTeamName.toLowerCase()));
+        const isMyBooking = slot.bookedByUserId === currentUser.id || isMyTeamInSlot;
+        if (!isMyBooking) return false;
+        if (myGamesSubTab === 'FUTUROS' && slot.date < todayStr) return false;
+        if (myGamesSubTab === 'HISTORICO' && slot.date >= todayStr) return false;
+      }
+      return true;
+    });
+
+    // Ordenação
+    result.sort((a, b) => {
+      const fieldA = fields.find(f => f.id === a.fieldId);
+      const fieldB = fields.find(f => f.id === b.fieldId);
+      const distA = fieldDistances[a.fieldId] ?? 99999999;
+      const distB = fieldDistances[b.fieldId] ?? 99999999;
+
+      switch (sortBy) {
+        case 'PRICE_ASC':
+          return a.price - b.price;
+        case 'PRICE_DESC':
+          return b.price - a.price;
+        case 'NAME_ASC':
+          return (fieldA?.name || '').localeCompare(fieldB?.name || '');
+        case 'NAME_DESC':
+          return (fieldB?.name || '').localeCompare(fieldA?.name || '');
+        case 'DISTANCE_ASC':
+          // Se as distâncias forem iguais (ex: infinitas), desempata por data
+          if (distA === distB) return new Date(`${a.date}T${a.time}`).getTime() - new Date(`${b.date}T${b.time}`).getTime();
+          return distA - distB;
+        case 'DISTANCE_DESC':
+           if (distA === distB) return new Date(`${a.date}T${a.time}`).getTime() - new Date(`${b.date}T${b.time}`).getTime();
+           return distB - distA;
+        default:
+          return new Date(`${a.date}T${a.time}`).getTime() - new Date(`${b.date}T${b.time}`).getTime();
+      }
+    });
+
+    return result;
+  }, [slots, fields, searchQuery, filterSport, filterCategory, filterRange, filterDate, filterMaxDistance, sortBy, viewMode, myGamesSubTab, userAllCategories, currentUser, fieldDistances]);
 
   const getStatusBadge = (slot: MatchSlot) => {
     if (slot.status === 'confirmed') {
@@ -207,20 +275,56 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
              <div className="flex items-center gap-2">
                 <Search className="w-5 h-5 text-pitch" />
                 <span className="text-xs font-black uppercase text-pitch">Explorar Arenas</span>
+             </div>
+             <div className="flex gap-2">
+                {!userCoords && (
+                  <button onClick={activateGPS} disabled={isCalculatingDistances} className={`text-[10px] font-black uppercase flex items-center gap-1 p-2 rounded-lg active:scale-95 transition-all ${gpsError ? 'bg-red-50 text-red-500' : 'bg-green-50 text-green-700'}`}>
+                    {isCalculatingDistances ? <Locate className="w-3 h-3 animate-spin"/> : <Locate className="w-3 h-3"/>}
+                    {isCalculatingDistances ? 'Buscando...' : 'Ativar GPS'}
+                  </button>
+                )}
                 {userCoords && (
                    <span className="flex items-center gap-1 bg-green-100 text-green-700 px-2 py-0.5 rounded-full text-[8px] font-bold uppercase animate-in fade-in">
                      <Locate className="w-3 h-3" /> GPS Ativo
                    </span>
                 )}
+                <button onClick={() => setShowFilters(!showFilters)} className="text-[10px] font-black uppercase text-grass-600 flex items-center gap-1 p-2 bg-gray-50 rounded-lg active:scale-95 transition-all">
+                   <SlidersHorizontal className="w-3 h-3" /> Filtros
+                </button>
              </div>
-             <button onClick={() => setShowFilters(!showFilters)} className="text-[10px] font-black uppercase text-grass-600 flex items-center gap-1 p-2 bg-gray-50 rounded-lg active:scale-95 transition-all">
-                Filtros <ChevronDown className={`w-3 h-3 ${showFilters ? 'rotate-180' : ''}`} />
-             </button>
           </div>
           
           {showFilters && (
             <div className="animate-in slide-in-from-top-2 duration-300 space-y-3 bg-gray-50 p-4 rounded-2xl border">
                <input placeholder="Nome da Arena..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} className="w-full bg-white p-3 rounded-xl border font-bold text-[10px] uppercase outline-none" />
+               
+               <div className="grid grid-cols-2 gap-2">
+                   {/* Ordenação */}
+                   <div className="bg-white p-3 rounded-xl border flex items-center gap-2">
+                      <ArrowUpDown className="w-4 h-4 text-gray-400" />
+                      <select value={sortBy} onChange={e => setSortBy(e.target.value as SortOption)} className="bg-transparent w-full font-bold text-[10px] uppercase outline-none">
+                         <option value="DISTANCE_ASC">Mais Próximos</option>
+                         <option value="DISTANCE_DESC">Mais Distantes</option>
+                         <option value="PRICE_ASC">Menor Preço</option>
+                         <option value="PRICE_DESC">Maior Preço</option>
+                         <option value="NAME_ASC">Nome (A-Z)</option>
+                         <option value="NAME_DESC">Nome (Z-A)</option>
+                      </select>
+                   </div>
+                   {/* Filtro de Distância */}
+                   <div className="bg-white p-3 rounded-xl border flex items-center gap-2">
+                      <MapPin className="w-4 h-4 text-gray-400" />
+                      <select value={filterMaxDistance} onChange={e => setFilterMaxDistance(e.target.value === '' ? '' : Number(e.target.value))} className="bg-transparent w-full font-bold text-[10px] uppercase outline-none">
+                         <option value="">Raio: Indiferente</option>
+                         <option value="1">Até 1 km</option>
+                         <option value="3">Até 3 km</option>
+                         <option value="5">Até 5 km</option>
+                         <option value="10">Até 10 km</option>
+                         <option value="20">Até 20 km</option>
+                      </select>
+                   </div>
+               </div>
+
                <div className="grid grid-cols-2 gap-2">
                    <div className="bg-white p-3 rounded-xl border flex items-center gap-2">
                       <Calendar className="w-4 h-4 text-gray-400" />
@@ -251,7 +355,7 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
                     {CATEGORY_ORDER.map(c => <option key={c} value={c}>{c}</option>)}
                   </select>
                </div>
-               <button onClick={() => { setFilterRange('ALL'); setFilterDate(''); setFilterSport(''); setFilterCategory(''); setSearchQuery(''); }} className="text-[8px] font-black text-red-500 uppercase w-full text-right mt-2">Limpar Filtros</button>
+               <button onClick={() => { setFilterRange('ALL'); setFilterDate(''); setFilterSport(''); setFilterCategory(''); setSearchQuery(''); setFilterMaxDistance(''); setSortBy('DISTANCE_ASC'); }} className="text-[8px] font-black text-red-500 uppercase w-full text-right mt-2">Limpar Filtros</button>
             </div>
           )}
         </div>
@@ -269,55 +373,23 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
       )}
 
       <div className="p-6 space-y-6">
-        {filteredSlots.length === 0 ? (
+        {processedSlots.length === 0 ? (
           <div className="py-20 text-center flex flex-col items-center">
              <Activity className="w-12 h-12 text-gray-200 mb-4" />
              <p className="text-gray-300 font-black uppercase text-[10px]">Nenhuma partida encontrada</p>
+             {userCoords && filterMaxDistance && (
+               <p className="text-red-400 text-[9px] mt-2 font-bold">Tente aumentar o raio de distância.</p>
+             )}
           </div>
         ) : (
-          filteredSlots.map(slot => {
+          processedSlots.map(slot => {
             const field = fields.find(f => f.id === slot.fieldId);
             
-            // Calculo de Distância
-            let distMeters = -1;
-            const isThisFieldLoading = loadingFieldId === field?.id;
-
-            if (userCoords && field) {
-              const hasDbCoords = field.latitude !== 0 && field.longitude !== 0;
-              const hasTempCoords = !!tempFieldCoords[field.id];
-              
-              if (hasDbCoords) {
-                  distMeters = calculateDistance(userCoords.lat, userCoords.lng, field.latitude, field.longitude);
-              } else if (hasTempCoords) {
-                  const tmp = tempFieldCoords[field.id];
-                  distMeters = calculateDistance(userCoords.lat, userCoords.lng, tmp.lat, tmp.lng);
-              }
-            }
+            // Distância já calculada no batch
+            const distMeters = fieldDistances[field?.id || ''] || -1;
             
             const status = getStatusBadge(slot);
             const currentCategory = slot.localTeamCategory || slot.bookedByTeamCategory;
-
-            // Estados do Botão
-            let distanceBtnText = 'Calcular Distância';
-            let distanceBtnIcon = <Locate className="w-3 h-3"/>;
-            let distanceBtnStyle = 'bg-gray-100 text-gray-500 hover:bg-grass-50 hover:text-grass-600';
-            let distanceDisabled = false;
-
-            if (isThisFieldLoading) {
-                distanceBtnText = 'Calculando...';
-                distanceBtnIcon = <Locate className="w-3 h-3 animate-spin"/>;
-                distanceDisabled = true;
-                distanceBtnStyle = 'bg-gray-100 text-gray-400';
-            } else if (distMeters > -1) {
-                distanceBtnText = formatDistance(distMeters);
-                distanceBtnIcon = <MapPin className="w-3 h-3"/>;
-                distanceBtnStyle = 'bg-grass-50 text-grass-600 border border-grass-100';
-            } else if (userCoords) {
-                // GPS OK, mas sem distância (Aguardando clique para tentar geocode)
-                distanceBtnText = 'Calcular Distância';
-                distanceBtnIcon = <MapPin className="w-3 h-3"/>;
-                distanceBtnStyle = 'bg-blue-50 text-blue-600 border border-blue-100 hover:bg-blue-100';
-            }
 
             return (
               <div key={slot.id} className="bg-white rounded-[2.5rem] border shadow-sm overflow-hidden group hover:border-pitch transition-all relative">
@@ -328,18 +400,16 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
                   <div className="flex-1 min-w-0">
                      <div className="flex justify-between items-start">
                         <h3 className="font-black text-pitch text-lg leading-none uppercase truncate mr-2">{field?.name}</h3>
-                        <div className="flex flex-col items-end gap-1">
-                           <button 
-                             onClick={(e) => {
-                               e.stopPropagation(); 
-                               if(field) handleCalculateDistanceForField(field);
-                             }}
-                             disabled={distanceDisabled}
-                             className={`text-[10px] font-black uppercase flex items-center gap-2 px-3 py-2 rounded-xl transition-all active:scale-95 ${distanceBtnStyle}`}
-                           >
-                             {distanceBtnIcon} {distanceBtnText}
-                           </button>
-                        </div>
+                        
+                        {/* DISTÂNCIA BADGE */}
+                        {distMeters >= 0 ? (
+                           <div className="flex items-center gap-1 bg-green-50 text-green-700 px-2 py-1 rounded-lg border border-green-100">
+                             <MapPin className="w-3 h-3" />
+                             <span className="text-[9px] font-black uppercase">{formatDistance(distMeters)}</span>
+                           </div>
+                        ) : userCoords && isCalculatingDistances ? (
+                           <div className="text-[8px] font-bold text-gray-400 animate-pulse">Calc...</div>
+                        ) : null}
                      </div>
                      <div className="flex flex-wrap gap-2 mt-2">
                         <span className="text-[9px] font-black bg-gray-100 px-2 py-1 rounded-xl flex items-center gap-1 uppercase">
@@ -353,7 +423,7 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
                         onClick={() => handleOpenMap(field?.location || '')}
                         className="text-[9px] font-bold text-blue-500 uppercase mt-3 flex items-center gap-1 hover:underline text-left p-1"
                       >
-                        <MapPin className="w-3 h-3" /> {field?.location}
+                        <Navigation className="w-3 h-3" /> {field?.location}
                       </button>
                   </div>
                 </div>
