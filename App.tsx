@@ -1,18 +1,19 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { UserRole, Field, MatchSlot, User, Notification } from './types';
+import { UserRole, Field, MatchSlot, User, Notification, SubscriptionPlan } from './types';
 import { Landing } from './views/Landing';
 import { Auth } from './views/Auth';
 import { FieldDashboard } from './views/FieldDashboard';
 import { TeamDashboard } from './views/TeamDashboard';
+import { Subscription } from './views/Subscription';
 import { EditProfileModal } from './components/EditProfileModal';
 import { api } from './api';
-import { RefreshCw, Settings, Building2, Shield, Search, Loader2, Bell, X, Info, History, KeyRound, Eye, LogOut, Smartphone, Download, Share, Trophy } from 'lucide-react';
-import { supabase } from './supabaseClient'; // Importação direta para Realtime
+import { RefreshCw, Settings, Building2, Shield, Search, Loader2, Bell, X, Info, History, KeyRound, Eye, LogOut, Smartphone, Download, Share, Trophy, Crown } from 'lucide-react';
+import { supabase } from './supabaseClient';
 
 const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
-  const [view, setView] = useState<'LANDING' | 'AUTH' | 'APP'>('LANDING');
+  const [view, setView] = useState<'LANDING' | 'AUTH' | 'APP' | 'SUBSCRIPTION'>('LANDING');
   const [activeTab, setActiveTab] = useState<'EXPLORE' | 'MY_GAMES' | 'ADMIN' | 'PROFILE' | 'SUPER'>('EXPLORE');
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
@@ -32,11 +33,48 @@ const App: React.FC = () => {
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [showInstallBanner, setShowInstallBanner] = useState(false);
   
-  // Detectar iOS na inicialização para layout
   const [isIOS] = useState(() => /iphone|ipad|ipod/.test(window.navigator.userAgent.toLowerCase()));
   const [isStandalone, setIsStandalone] = useState(false);
 
-  // Função para atualizar o Badge do App (Contador no ícone)
+  // Verifica retorno do Mercado Pago
+  useEffect(() => {
+    const checkPaymentReturn = async () => {
+      const query = new URLSearchParams(window.location.search);
+      // O Mercado Pago retorna 'status' ou 'collection_status'
+      const status = query.get('status') || query.get('collection_status');
+      
+      if (status === 'approved' && user) {
+        setIsLoading(true);
+        try {
+           // Remove parametros da URL para não processar novamente
+           window.history.replaceState({}, document.title, window.location.pathname);
+           
+           const planType = user.role === UserRole.FIELD_OWNER ? SubscriptionPlan.PRO_FIELD : SubscriptionPlan.PRO_TEAM;
+           const updatedUser = await api.confirmProSubscription(user.id, planType);
+           
+           setUser(updatedUser);
+           localStorage.setItem('jf_session_user', JSON.stringify(updatedUser));
+           
+           alert("Pagamento Confirmado! Bem-vindo ao Plano PRO com 60 dias grátis! 🚀");
+           await api.createNotification({
+             userId: user.id,
+             title: "Assinatura Ativa 🏆",
+             description: "Sua assinatura PRO foi ativada com sucesso. Aproveite os 60 dias de teste!",
+             type: 'success'
+           });
+        } catch (e) {
+           alert("Erro ao confirmar assinatura. Entre em contato com o suporte.");
+        } finally {
+           setIsLoading(false);
+        }
+      }
+    };
+
+    if (user) {
+      checkPaymentReturn();
+    }
+  }, [user]);
+
   const updateAppBadge = (count: number) => {
     if ('setAppBadge' in navigator) {
       try {
@@ -52,7 +90,6 @@ const App: React.FC = () => {
   };
 
   useEffect(() => {
-    // Detectar evento de instalação (Android/Desktop)
     window.addEventListener('beforeinstallprompt', (e) => {
       e.preventDefault();
       setDeferredPrompt(e);
@@ -64,7 +101,6 @@ const App: React.FC = () => {
       setDeferredPrompt(null);
     });
 
-    // Verificar se já está rodando como app (standalone)
     const isInStandaloneMode = ('standalone' in window.navigator && (window.navigator as any).standalone) || 
                                (window.matchMedia('(display-mode: standalone)').matches);
     
@@ -132,12 +168,10 @@ const App: React.FC = () => {
     }
   }, [impersonatingUser]);
 
-  // Efeito para Supabase Realtime (Notificações Automáticas)
   useEffect(() => {
     const currentUser = impersonatingUser || user;
     if (!currentUser) return;
 
-    // Canal para ouvir INSERT na tabela 'notification' para este usuário
     const channel = supabase
       .channel('realtime-notifications')
       .on(
@@ -328,12 +362,21 @@ const App: React.FC = () => {
     );
   }
 
+  if (view === 'SUBSCRIPTION') {
+      return (
+         <Subscription 
+            userRole={user?.role || UserRole.TEAM_CAPTAIN} 
+            onSubscribe={() => {}} // Lógica interna do componente
+            onBack={() => setView('APP')} 
+         />
+      );
+  }
+
   const currentUserContext = impersonatingUser || user;
   const unreadNotifs = notifications.filter(n => !n.read).length;
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col pb-safe relative">
-      {/* PWA Install Banner */}
       {showInstallBanner && !isStandalone && (
         <div className={`bg-grass-600 text-white p-4 flex items-center justify-between animate-in slide-in-from-top duration-500 sticky top-0 z-[100] shadow-lg ${isIOS ? 'pt-12' : 'pt-safe'}`}>
            <div className="flex items-center gap-3">
@@ -360,7 +403,6 @@ const App: React.FC = () => {
         </div>
       )}
 
-      {/* Impersonation Banner */}
       {impersonatingUser && (
         <div className={`bg-red-500 text-white text-xs font-black uppercase tracking-widest p-2 text-center flex justify-between items-center px-4 ${isIOS ? 'pt-12' : 'pt-safe'}`}>
            <span>Acessando como: {impersonatingUser.name}</span>
@@ -368,7 +410,6 @@ const App: React.FC = () => {
         </div>
       )}
 
-      {/* HEADER Ajustado para iOS - pt-12 (48px) garante que fique abaixo da ilha dinâmica */}
       <header className={`bg-white/95 backdrop-blur-md px-6 flex justify-between items-center sticky top-0 z-50 border-b shadow-sm transition-all ${isIOS ? 'pt-12 pb-4' : 'pt-safe py-4'}`}>
           <div className="mt-2 w-full flex justify-between items-center">
             <div className="flex flex-col">
@@ -376,7 +417,16 @@ const App: React.FC = () => {
                   <Trophy className="w-6 h-6 text-grass-600" />
                   <span className="text-xl font-black text-[#022c22] italic uppercase leading-none">JOGO FÁCIL</span>
                 </div>
-                {user && <span className="text-[8px] font-bold text-gray-400 uppercase tracking-widest mt-1">Olá, {currentUserContext?.name.split(' ')[0]}</span>}
+                {user && (
+                    <div className="flex items-center gap-2 mt-1">
+                        <span className="text-[8px] font-bold text-gray-400 uppercase tracking-widest">Olá, {currentUserContext?.name.split(' ')[0]}</span>
+                        {currentUserContext?.subscription && currentUserContext.subscription !== 'FREE' && (
+                           <span className="bg-yellow-400 text-pitch px-2 py-0.5 rounded-full text-[8px] font-black uppercase flex items-center gap-1">
+                              <Crown className="w-2 h-2" /> PRO
+                           </span>
+                        )}
+                    </div>
+                )}
             </div>
             <div className="flex items-center gap-2">
               <button 
@@ -524,7 +574,14 @@ const App: React.FC = () => {
                   {currentUserContext.name.charAt(0)}
                 </div>
                 <h2 className="text-2xl font-black text-pitch italic uppercase tracking-tighter leading-none">{currentUserContext.name}</h2>
-                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mt-2">{currentUserContext.role}</p>
+                <div className="flex items-center gap-2 mt-2">
+                   <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{currentUserContext.role}</p>
+                   {currentUserContext.subscription !== SubscriptionPlan.FREE && (
+                      <span className="bg-yellow-400 text-pitch px-2 py-0.5 rounded-full text-[8px] font-black uppercase flex items-center gap-1">
+                          <Crown className="w-2 h-2" /> PRO
+                      </span>
+                   )}
+                </div>
                 
                 <div className="w-full mt-10 space-y-3">
                   {!isStandalone && (deferredPrompt || isIOS) && (
@@ -535,6 +592,16 @@ const App: React.FC = () => {
                       <Download className="w-5 h-5" /> {isIOS ? 'Instalar no iPhone' : 'Instalar Aplicativo'}
                     </button>
                   )}
+                  
+                  {currentUserContext.subscription === SubscriptionPlan.FREE && (
+                    <button 
+                        onClick={() => setView('SUBSCRIPTION')}
+                        className="w-full py-5 bg-gradient-to-r from-yellow-400 to-orange-500 text-pitch rounded-3xl font-black flex items-center justify-center gap-3 uppercase text-xs shadow-xl active:scale-95 transition-transform"
+                    >
+                        <Crown className="w-5 h-5" /> Assinar Plano PRO
+                    </button>
+                  )}
+
                   <button onClick={() => setShowProfileModal(true)} className="w-full py-5 bg-[#022c22] text-white rounded-3xl font-black flex items-center justify-center gap-3 uppercase text-xs shadow-xl active:scale-95 transition-transform">
                       <Settings className="w-5 h-5 text-[#10b981]" /> Configurações
                   </button>
@@ -544,7 +611,6 @@ const App: React.FC = () => {
         )}
       </main>
 
-      {/* NAV INFERIOR com pb-safe para respeitar a área de gesto do iPhone */}
       <nav className="fixed bottom-0 left-0 right-0 bg-white border-t p-4 pb-safe flex justify-around z-50 shadow-[0_-5px_20px_rgba(0,0,0,0.05)]">
           <button onClick={() => setActiveTab('EXPLORE')} className={`flex flex-col items-center gap-1 ${activeTab === 'EXPLORE' ? 'text-[#10b981]' : 'text-gray-300'}`}>
             <Search className="w-6 h-6" />

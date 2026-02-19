@@ -100,6 +100,25 @@ export const api = {
     return mapUserFromDb(data);
   },
 
+  confirmProSubscription: async (userId: string, planType: 'PRO_FIELD' | 'PRO_TEAM'): Promise<User> => {
+    // Define validade para 60 dias (Período de teste)
+    const expiry = new Date();
+    expiry.setDate(expiry.getDate() + 60);
+
+    const { data, error } = await supabase
+      .from('user')
+      .update({ 
+        subscription: planType,
+        subscription_expiry: expiry.toISOString()
+      })
+      .eq('id', userId)
+      .select()
+      .single();
+
+    if (error) throw error;
+    return mapUserFromDb(data);
+  },
+
   getNotifications: async (userId: string): Promise<Notification[]> => {
     const { data, error } = await supabase.from('notification').select('*').eq('user_id', userId).order('created_at', { ascending: false });
     if (error) return [];
@@ -186,8 +205,8 @@ export const api = {
         pixConfig: { key: f.pix_key || '', name: f.pix_name || '' },
         imageUrl: f.image_url,
         contactPhone: f.contact_phone,
-        latitude: f.latitude,
-        longitude: f.longitude,
+        latitude: Number(f.latitude) || 0,
+        longitude: Number(f.longitude) || 0,
         courts: f.courts || ['Principal']
     }));
   },
@@ -201,6 +220,10 @@ export const api = {
     if (updates.contactPhone !== undefined) payload.contact_phone = updates.contactPhone;
     if (updates.courts !== undefined) payload.courts = updates.courts;
     
+    // Adicionando suporte para atualização de coordenadas
+    if (updates.latitude !== undefined) payload.latitude = updates.latitude;
+    if (updates.longitude !== undefined) payload.longitude = updates.longitude;
+
     if (updates.pixConfig) {
       payload.pix_key = updates.pixConfig.key;
       payload.pix_name = updates.pixConfig.name;

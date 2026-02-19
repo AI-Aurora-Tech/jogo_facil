@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo } from 'react';
 import { Search, MapPin, Clock, Swords, Filter, X, Check, MessageCircle, Phone, Navigation, Trophy, ChevronDown, Smartphone, Settings, AlertTriangle, ExternalLink, Activity, History as HistoryIcon, CalendarCheck, CalendarX, Locate, MapPinOff, Calendar, RotateCcw, ArrowUpDown, SlidersHorizontal } from 'lucide-react';
 import { Button } from '../components/Button';
@@ -69,7 +68,8 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
     const newDistances: Record<string, number> = {};
     
     // Processamento em lote
-    const uniqueFieldIds = Array.from(new Set(slots.map(s => s.fieldId)));
+    // Explicit type to string[] to avoid 'unknown' index type error
+    const uniqueFieldIds: string[] = Array.from(new Set(slots.map(s => s.fieldId)));
     
     for (const fieldId of uniqueFieldIds) {
       const field = fields.find(f => f.id === fieldId);
