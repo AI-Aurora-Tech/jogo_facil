@@ -162,3 +162,28 @@ CREATE POLICY "Allow Public Access" ON pending_update FOR ALL USING (true);
 
 ALTER TABLE category ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Allow Public Access" ON category FOR ALL USING (true);
+
+
+--------------------------------------------------------------------------------
+-- SCRIPT DE RESET PARA PRODUÇÃO (Execute este bloco APENAS para limpar tudo)
+--------------------------------------------------------------------------------
+
+-- 1. Limpa todas as tabelas (Mantendo a estrutura)
+TRUNCATE TABLE notification, pending_update, registered_team, match_slot, field, "user" RESTART IDENTITY CASCADE;
+
+-- 2. Insere o Super Admin (Senha temporária: 'admin123' -> Altere no primeiro login)
+INSERT INTO "user" (
+    email, 
+    password, 
+    name, 
+    phone_number, 
+    role, 
+    subscription
+) VALUES (
+    'pedro@auroratech.com',
+    'admin123', 
+    'Pedro Super Admin',
+    '11999999999',
+    'SUPER_ADMIN',
+    'PRO_TEAM' -- Define como PRO para não cair no bloqueio de pagamento ao testar
+);

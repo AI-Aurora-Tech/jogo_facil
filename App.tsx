@@ -27,6 +27,7 @@ const App: React.FC = () => {
   
   // Super Admin Search State
   const [adminSearch, setAdminSearch] = useState('');
+  const [adminFilterRole, setAdminFilterRole] = useState<'ALL' | 'FIELD_OWNER' | 'TEAM_CAPTAIN'>('FIELD_OWNER');
 
   const [isLoading, setIsLoading] = useState(false);
   const [isInitialLoading, setIsInitialLoading] = useState(true);
@@ -522,8 +523,28 @@ const App: React.FC = () => {
              </div>
              
              {/* Barra de Busca Super Admin */}
-             <div className="bg-white p-4 rounded-[2rem] border shadow-sm">
-                <div className="flex items-center gap-3">
+             <div className="bg-white p-4 rounded-[2rem] border shadow-sm space-y-3">
+                <div className="flex p-1 bg-gray-100 rounded-2xl">
+                    <button 
+                      onClick={() => setAdminFilterRole('FIELD_OWNER')} 
+                      className={`flex-1 py-2 px-3 text-[10px] font-black uppercase rounded-xl transition-all ${adminFilterRole === 'FIELD_OWNER' ? 'bg-white text-pitch shadow-sm' : 'text-gray-400'}`}
+                    >
+                      <Building2 className="w-3 h-3 inline-block mr-1 mb-0.5" /> Arenas
+                    </button>
+                    <button 
+                      onClick={() => setAdminFilterRole('TEAM_CAPTAIN')} 
+                      className={`flex-1 py-2 px-3 text-[10px] font-black uppercase rounded-xl transition-all ${adminFilterRole === 'TEAM_CAPTAIN' ? 'bg-white text-pitch shadow-sm' : 'text-gray-400'}`}
+                    >
+                      <Shield className="w-3 h-3 inline-block mr-1 mb-0.5" /> Times
+                    </button>
+                    <button 
+                      onClick={() => setAdminFilterRole('ALL')} 
+                      className={`flex-1 py-2 px-3 text-[10px] font-black uppercase rounded-xl transition-all ${adminFilterRole === 'ALL' ? 'bg-white text-pitch shadow-sm' : 'text-gray-400'}`}
+                    >
+                      Todos
+                    </button>
+                </div>
+                <div className="flex items-center gap-3 bg-gray-50 p-3 rounded-xl border">
                    <Search className="w-5 h-5 text-gray-400 ml-2" />
                    <input 
                       className="w-full bg-transparent font-bold outline-none text-pitch placeholder-gray-300 uppercase text-xs"
@@ -537,6 +558,7 @@ const App: React.FC = () => {
              <div className="space-y-4">
                {allUsers
                   .filter(u => u.id !== user.id)
+                  .filter(u => adminFilterRole === 'ALL' || u.role === adminFilterRole)
                   .filter(u => {
                       if (!adminSearch) return true;
                       const search = adminSearch.toLowerCase();
@@ -552,7 +574,7 @@ const App: React.FC = () => {
                         <h4 className="font-black text-pitch text-sm truncate">{u.name}</h4>
                         <p className="text-[9px] font-bold text-gray-400 uppercase truncate">{u.email}</p>
                         <div className="flex items-center gap-2 mt-1">
-                           <span className="text-[8px] font-black bg-gray-100 px-2 py-0.5 rounded-md uppercase">{u.role}</span>
+                           <span className="text-[8px] font-black bg-gray-100 px-2 py-0.5 rounded-md uppercase">{u.role === UserRole.FIELD_OWNER ? 'Dono de Campo' : 'Capitão'}</span>
                            <span className={`text-[8px] font-black px-2 py-0.5 rounded-md uppercase ${u.subscription !== SubscriptionPlan.FREE && u.subscription !== SubscriptionPlan.NONE ? 'bg-yellow-100 text-yellow-700' : 'bg-gray-100 text-gray-400'}`}>
                              {u.subscription === SubscriptionPlan.NONE ? 'Sem Plano' : u.subscription}
                            </span>
