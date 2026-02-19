@@ -133,7 +133,8 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, onCancel }) => {
           role,
           name,
           phoneNumber: phone,
-          subscription: SubscriptionPlan.FREE,
+          // CHANGE: Define subscription as NONE initially to force payment flow
+          subscription: SubscriptionPlan.NONE,
           teams: role === UserRole.TEAM_CAPTAIN ? [{ 
               name: teamName, 
               categories: teamCategories, 

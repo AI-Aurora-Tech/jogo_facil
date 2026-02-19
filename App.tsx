@@ -25,6 +25,9 @@ const App: React.FC = () => {
   const [allUsers, setAllUsers] = useState<User[]>([]);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   
+  // Super Admin Search State
+  const [adminSearch, setAdminSearch] = useState('');
+
   const [isLoading, setIsLoading] = useState(false);
   const [isInitialLoading, setIsInitialLoading] = useState(true);
   const [impersonatingUser, setImpersonatingUser] = useState<User | null>(null);
@@ -35,6 +38,19 @@ const App: React.FC = () => {
   
   const [isIOS] = useState(() => /iphone|ipad|ipod/.test(window.navigator.userAgent.toLowerCase()));
   const [isStandalone, setIsStandalone] = useState(false);
+
+  // Efeito "Gatekeeper": Se logado mas sem plano, forçar tela de assinatura
+  useEffect(() => {
+    if (user && !impersonatingUser) {
+      // Se a assinatura for NONE ou FREE (legado), manda para o fluxo de pagamento obrigatório
+      if (user.subscription === SubscriptionPlan.NONE || user.subscription === SubscriptionPlan.FREE) {
+        setView('SUBSCRIPTION');
+      } else if (view === 'SUBSCRIPTION' && user.subscription !== SubscriptionPlan.NONE && user.subscription !== SubscriptionPlan.FREE) {
+        // Se já pagou e ainda está na tela de assinatura, manda pro App
+        setView('APP');
+      }
+    }
+  }, [user, impersonatingUser]);
 
   // Verifica retorno do Mercado Pago
   useEffect(() => {
@@ -54,6 +70,9 @@ const App: React.FC = () => {
            
            setUser(updatedUser);
            localStorage.setItem('jf_session_user', JSON.stringify(updatedUser));
+           
+           // Força a mudança de view após a atualização
+           setView('APP');
            
            alert("Pagamento Confirmado! Bem-vindo ao Plano PRO com 60 dias grátis! 🚀");
            await api.createNotification({
@@ -202,7 +221,8 @@ const App: React.FC = () => {
           const u = JSON.parse(saved);
           if (u && u.id) {
             setUser(u);
-            setView('APP');
+            // A view inicial depende da assinatura, mas deixamos o useEffect Gatekeeper decidir
+            setView('APP'); 
             if (u.role === UserRole.SUPER_ADMIN) setActiveTab('SUPER');
             else if (u.role === UserRole.FIELD_OWNER) setActiveTab('ADMIN');
             else setActiveTab('EXPLORE');
@@ -350,6 +370,7 @@ const App: React.FC = () => {
         categories={categories} 
         onLogin={(u) => { 
           setUser(u); 
+          // O useEffect vai checar a assinatura e redirecionar se for NONE
           setView('APP'); 
           localStorage.setItem('jf_session_user', JSON.stringify(u)); 
           if(u.role === UserRole.SUPER_ADMIN) setActiveTab('SUPER');
@@ -366,8 +387,15 @@ const App: React.FC = () => {
       return (
          <Subscription 
             userRole={user?.role || UserRole.TEAM_CAPTAIN} 
-            onSubscribe={() => {}} // Lógica interna do componente
-            onBack={() => setView('APP')} 
+            onSubscribe={() => {}} // Lógica via link direto
+            onBack={() => {
+              // Bloqueia voltar se a assinatura for obrigatória
+              if (user?.subscription !== SubscriptionPlan.NONE && user?.subscription !== SubscriptionPlan.FREE) {
+                 setView('APP');
+              } else {
+                 handleLogout(); // Se tentar voltar sem pagar, faz logout
+              }
+            }} 
          />
       );
   }
@@ -493,8 +521,28 @@ const App: React.FC = () => {
                 <p className="text-xs text-grass-500 font-bold uppercase tracking-widest mt-1">Gerenciamento de Contas</p>
              </div>
              
+             {/* Barra de Busca Super Admin */}
+             <div className="bg-white p-4 rounded-[2rem] border shadow-sm">
+                <div className="flex items-center gap-3">
+                   <Search className="w-5 h-5 text-gray-400 ml-2" />
+                   <input 
+                      className="w-full bg-transparent font-bold outline-none text-pitch placeholder-gray-300 uppercase text-xs"
+                      placeholder="Buscar por Nome ou Email..."
+                      value={adminSearch}
+                      onChange={e => setAdminSearch(e.target.value)}
+                   />
+                </div>
+             </div>
+
              <div className="space-y-4">
-               {allUsers.filter(u => u.id !== user.id).map(u => (
+               {allUsers
+                  .filter(u => u.id !== user.id)
+                  .filter(u => {
+                      if (!adminSearch) return true;
+                      const search = adminSearch.toLowerCase();
+                      return u.name.toLowerCase().includes(search) || u.email.toLowerCase().includes(search);
+                  })
+                  .map(u => (
                  <div key={u.id} className="bg-white p-5 rounded-[2rem] border flex flex-col gap-4 shadow-sm hover:border-pitch transition-all">
                     <div className="flex items-center gap-4">
                       <div className={`w-12 h-12 rounded-2xl flex items-center justify-center font-black text-white ${u.role === UserRole.FIELD_OWNER ? 'bg-indigo-500' : 'bg-grass-500'}`}>
@@ -503,7 +551,12 @@ const App: React.FC = () => {
                       <div className="flex-1 min-w-0">
                         <h4 className="font-black text-pitch text-sm truncate">{u.name}</h4>
                         <p className="text-[9px] font-bold text-gray-400 uppercase truncate">{u.email}</p>
-                        <span className="text-[8px] font-black bg-gray-100 px-2 py-0.5 rounded-md mt-1 inline-block uppercase">{u.role}</span>
+                        <div className="flex items-center gap-2 mt-1">
+                           <span className="text-[8px] font-black bg-gray-100 px-2 py-0.5 rounded-md uppercase">{u.role}</span>
+                           <span className={`text-[8px] font-black px-2 py-0.5 rounded-md uppercase ${u.subscription !== SubscriptionPlan.FREE && u.subscription !== SubscriptionPlan.NONE ? 'bg-yellow-100 text-yellow-700' : 'bg-gray-100 text-gray-400'}`}>
+                             {u.subscription === SubscriptionPlan.NONE ? 'Sem Plano' : u.subscription}
+                           </span>
+                        </div>
                       </div>
                     </div>
                     
@@ -523,6 +576,9 @@ const App: React.FC = () => {
                     </div>
                  </div>
                ))}
+               {allUsers.length === 0 && (
+                   <div className="text-center text-gray-400 font-bold uppercase text-[10px] mt-10">Nenhum usuário encontrado.</div>
+               )}
              </div>
           </div>
         )}
@@ -593,14 +649,7 @@ const App: React.FC = () => {
                     </button>
                   )}
                   
-                  {currentUserContext.subscription === SubscriptionPlan.FREE && (
-                    <button 
-                        onClick={() => setView('SUBSCRIPTION')}
-                        className="w-full py-5 bg-gradient-to-r from-yellow-400 to-orange-500 text-pitch rounded-3xl font-black flex items-center justify-center gap-3 uppercase text-xs shadow-xl active:scale-95 transition-transform"
-                    >
-                        <Crown className="w-5 h-5" /> Assinar Plano PRO
-                    </button>
-                  )}
+                  {/* Botão de assinatura removido pois agora é obrigatória a partir da criação */}
 
                   <button onClick={() => setShowProfileModal(true)} className="w-full py-5 bg-[#022c22] text-white rounded-3xl font-black flex items-center justify-center gap-3 uppercase text-xs shadow-xl active:scale-95 transition-transform">
                       <Settings className="w-5 h-5 text-[#10b981]" /> Configurações

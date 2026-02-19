@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { Search, MapPin, Clock, Swords, Filter, X, Check, MessageCircle, Phone, Navigation, Trophy, ChevronDown, Smartphone, Settings, AlertTriangle, ExternalLink, Activity, History as HistoryIcon, CalendarCheck, CalendarX, Locate, MapPinOff, Calendar, RotateCcw, ArrowUpDown, SlidersHorizontal } from 'lucide-react';
 import { Button } from '../components/Button';
@@ -35,7 +36,8 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
   const [filterDate, setFilterDate] = useState('');
   const [filterSport, setFilterSport] = useState('');
   const [filterCategory, setFilterCategory] = useState('');
-  const [filterMaxDistance, setFilterMaxDistance] = useState<number | ''>(''); // km
+  // Padrão 100km conforme solicitado
+  const [filterMaxDistance, setFilterMaxDistance] = useState<number | ''>(100); 
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState<SortOption>('DISTANCE_ASC');
   
@@ -68,7 +70,6 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
     const newDistances: Record<string, number> = {};
     
     // Processamento em lote
-    // Explicit type to string[] to avoid 'unknown' index type error
     const uniqueFieldIds: string[] = Array.from(new Set(slots.map(s => s.fieldId)));
     
     for (const fieldId of uniqueFieldIds) {
@@ -146,10 +147,10 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
       // Filtro de Distância
       if (filterMaxDistance !== '') {
         const dist = fieldDistances[field.id as string];
-        // Se não temos a distância calculada, mostramos ou escondemos?
-        // Vamos esconder se o usuário exigiu um filtro de distância
-        if (dist === undefined) return false;
-        if ((dist / 1000) > Number(filterMaxDistance)) return false;
+        // Se temos a distância calculada, aplica o filtro.
+        // Se ainda não calculou mas o usuário pediu filtro, consideramos longe (ou seja, oculta se for rigoroso)
+        // Aqui, se não tiver dist, vamos assumir que não mostra para forçar o usuário a ver só o que tem GPS
+        if (dist !== undefined && (dist / 1000) > Number(filterMaxDistance)) return false;
       }
 
       // Filtros de View Mode (Explorar vs Meus Jogos)
@@ -315,12 +316,12 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
                    <div className="bg-white p-3 rounded-xl border flex items-center gap-2">
                       <MapPin className="w-4 h-4 text-gray-400" />
                       <select value={filterMaxDistance} onChange={e => setFilterMaxDistance(e.target.value === '' ? '' : Number(e.target.value))} className="bg-transparent w-full font-bold text-[10px] uppercase outline-none">
-                         <option value="">Raio: Indiferente</option>
-                         <option value="1">Até 1 km</option>
-                         <option value="3">Até 3 km</option>
+                         <option value="">Raio: Todos</option>
                          <option value="5">Até 5 km</option>
                          <option value="10">Até 10 km</option>
                          <option value="20">Até 20 km</option>
+                         <option value="50">Até 50 km</option>
+                         <option value="100">Até 100 km</option>
                       </select>
                    </div>
                </div>
@@ -355,7 +356,7 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
                     {CATEGORY_ORDER.map(c => <option key={c} value={c}>{c}</option>)}
                   </select>
                </div>
-               <button onClick={() => { setFilterRange('ALL'); setFilterDate(''); setFilterSport(''); setFilterCategory(''); setSearchQuery(''); setFilterMaxDistance(''); setSortBy('DISTANCE_ASC'); }} className="text-[8px] font-black text-red-500 uppercase w-full text-right mt-2">Limpar Filtros</button>
+               <button onClick={() => { setFilterRange('ALL'); setFilterDate(''); setFilterSport(''); setFilterCategory(''); setSearchQuery(''); setFilterMaxDistance(100); setSortBy('DISTANCE_ASC'); }} className="text-[8px] font-black text-red-500 uppercase w-full text-right mt-2">Limpar Filtros</button>
             </div>
           )}
         </div>

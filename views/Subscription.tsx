@@ -10,30 +10,26 @@ interface SubscriptionProps {
   onBack: () => void;
 }
 
-// ⚠️ SUBSTITUA PELO SEU LINK DO MERCADO PAGO AQUI
-// Exemplo: https://www.mercadopago.com.br/subscriptions/checkout?preapproval_plan_id=...
-const MERCADO_PAGO_SUBSCRIBE_LINK = "https://www.mercadopago.com.br/subscriptions/checkout?preapproval_plan_id=YOUR_PLAN_ID";
+// ⬇️⬇️⬇️ COLE O LINK DO SEU PLANO DO MERCADO PAGO ABAIXO ⬇️⬇️⬇️
+// Link atualizado conforme solicitado
+const MERCADO_PAGO_SUBSCRIBE_LINK: string = "https://www.mercadopago.com.br/subscriptions/checkout?preapproval_plan_id=5efc581a3ff84478bf1a349617285115"; 
 
 export const Subscription: React.FC<SubscriptionProps> = ({ userRole, onSubscribe, onBack }) => {
   const isFieldOwner = userRole === UserRole.FIELD_OWNER;
 
   const handleSubscribeClick = () => {
-    if (MERCADO_PAGO_SUBSCRIBE_LINK.includes("YOUR_PLAN_ID")) {
-      alert("Configuração necessária: O desenvolvedor precisa adicionar o link do plano no código (views/Subscription.tsx).");
-      return;
-    }
-    // Abre o Mercado Pago em nova aba
+    // Abre o Mercado Pago na mesma aba para garantir o retorno correto
     window.location.href = MERCADO_PAGO_SUBSCRIBE_LINK;
   };
 
   return (
     <div className="min-h-screen bg-gray-50 py-12 px-6 flex flex-col items-center justify-center">
       <div className="max-w-md text-center mb-10">
-        <h2 className="text-4xl font-black text-pitch mb-4 tracking-tight">Evolua seu jogo</h2>
+        <h2 className="text-4xl font-black text-pitch mb-4 tracking-tight">Ative sua conta</h2>
         <p className="text-lg text-gray-500">
           {isFieldOwner 
-            ? "Automatize sua gestão e receba pagamentos com segurança." 
-            : "Tenha acesso exclusivo aos melhores horários e adversários."}
+            ? "Para gerenciar sua arena, ative o plano PRO." 
+            : "Para agendar jogos, ative o plano PRO."}
         </p>
       </div>
 
@@ -41,7 +37,7 @@ export const Subscription: React.FC<SubscriptionProps> = ({ userRole, onSubscrib
         {/* Banner Promocional */}
         <div className="bg-gradient-to-r from-yellow-400 to-orange-500 text-pitch text-center py-3 text-sm font-black uppercase tracking-widest flex items-center justify-center gap-2">
           <Sparkles className="w-4 h-4" /> 
-          Oferta: 60 Dias Grátis
+          Teste Grátis de 60 Dias
         </div>
         
         <div className="p-10 relative">
@@ -56,7 +52,7 @@ export const Subscription: React.FC<SubscriptionProps> = ({ userRole, onSubscrib
                 </div>
             </div>
             <p className="text-[10px] text-yellow-400 font-black uppercase mt-2 bg-white/10 inline-block px-3 py-1 rounded-full">
-              Cobrança inicia em 60 dias
+              Cobrança inicia somente após 60 dias
             </p>
           </div>
           
@@ -85,16 +81,18 @@ export const Subscription: React.FC<SubscriptionProps> = ({ userRole, onSubscrib
             className="w-full mt-10 py-5 text-lg rounded-[2rem] bg-[#10b981] text-pitch font-black hover:bg-[#059669] hover:text-white transition-all shadow-lg shadow-green-900/50"
             onClick={handleSubscribeClick}
           >
-            Assinar Agora
+            Iniciar Teste Grátis
           </Button>
           
           <p className="text-[9px] text-gray-500 text-center mt-4">
-            Cancelamento gratuito a qualquer momento durante o período de teste.
+            Você não será cobrado hoje. Cancele quando quiser pelo painel do Mercado Pago.
           </p>
         </div>
       </div>
       
-      <button onClick={onBack} className="mt-10 text-gray-400 font-bold hover:text-pitch uppercase text-xs">Voltar</button>
+      <button onClick={onBack} className="mt-10 text-red-400 font-bold hover:text-red-600 uppercase text-[10px] tracking-widest border-b border-red-200 pb-1">
+         Sair e cancelar
+      </button>
     </div>
   );
 };

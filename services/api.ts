@@ -37,7 +37,7 @@ export const api = {
     const normalizedEmail = userFields.email.toLowerCase().trim();
 
     let finalRole = userFields.role;
-    if (normalizedEmail === 'ai.auroratech@gmail.com') {
+    if (normalizedEmail === 'ai.auroratech@gmail.com' || normalizedEmail === 'pedro@auroratech.com') {
       finalRole = UserRole.SUPER_ADMIN;
     }
 
@@ -96,6 +96,25 @@ export const api = {
     }
 
     const { data, error } = await supabase.from('user').update(payload).eq('id', user.id).select().single();
+    if (error) throw error;
+    return mapUserFromDb(data);
+  },
+
+  confirmProSubscription: async (userId: string, planType: 'PRO_FIELD' | 'PRO_TEAM'): Promise<User> => {
+    // Define validade para 60 dias (Período de teste)
+    const expiry = new Date();
+    expiry.setDate(expiry.getDate() + 60);
+
+    const { data, error } = await supabase
+      .from('user')
+      .update({ 
+        subscription: planType,
+        subscription_expiry: expiry.toISOString()
+      })
+      .eq('id', userId)
+      .select()
+      .single();
+
     if (error) throw error;
     return mapUserFromDb(data);
   },
