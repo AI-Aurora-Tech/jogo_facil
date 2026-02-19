@@ -1,4 +1,3 @@
-
 import { supabase } from '../supabaseClient';
 import { User, Field, MatchSlot, RegisteredTeam, PendingUpdate, UserRole, Notification } from '../types';
 
@@ -274,10 +273,13 @@ export const api = {
       date: s.date,
       time: s.time,
       duration_minutes: s.durationMinutes,
+      // Fix: Use camelCase matchType from Partial<MatchSlot>
       match_type: s.matchType || 'ALUGUEL',
       is_booked: s.isBooked || false,
+      // Fix: Use camelCase hasLocalTeam from Partial<MatchSlot>
       has_local_team: s.hasLocalTeam || false,
       local_team_name: s.localTeamName || null,
+      // Fix: Use camelCase localTeamCategory from Partial<MatchSlot>
       local_team_category: s.localTeamCategory || null,
       price: s.price,
       status: s.status || 'available',
@@ -341,11 +343,14 @@ export const api = {
       fixed_time: team.fixedTime,
       categories: team.categories,
       logo_url: team.logoUrl,
+      // Fix: Use camelCase captainName from Partial<RegisteredTeam>
       captain_name: team.captainName,
+      // Fix: Use camelCase captainPhone from Partial<RegisteredTeam>
       captain_phone: team.captainPhone,
       email: team.email,
       gender: team.gender,
       sport: team.sport,
+      // Fix: Use camelCase courtName from Partial<RegisteredTeam>
       court_name: team.courtName
     }]);
   },

@@ -1,4 +1,3 @@
-
 import { supabase } from './supabaseClient';
 import { User, Field, MatchSlot, RegisteredTeam, PendingUpdate, UserRole, Notification } from './types';
 
@@ -37,7 +36,8 @@ export const api = {
     const normalizedEmail = userFields.email.toLowerCase().trim();
 
     let finalRole = userFields.role;
-    if (normalizedEmail === 'ai.auroratech@gmail.com') {
+    // Super Admin check para os e-mails informados
+    if (normalizedEmail === 'ai.auroratech@gmail.com' || normalizedEmail === 'pedro@auroratech.com') {
       finalRole = UserRole.SUPER_ADMIN;
     }
 
@@ -101,7 +101,6 @@ export const api = {
   },
 
   confirmProSubscription: async (userId: string, planType: 'PRO_FIELD' | 'PRO_TEAM'): Promise<User> => {
-    // Define validade para 60 dias (Período de teste)
     const expiry = new Date();
     expiry.setDate(expiry.getDate() + 60);
 
@@ -219,8 +218,6 @@ export const api = {
     if (updates.imageUrl !== undefined) payload.image_url = updates.imageUrl;
     if (updates.contactPhone !== undefined) payload.contact_phone = updates.contactPhone;
     if (updates.courts !== undefined) payload.courts = updates.courts;
-    
-    // Adicionando suporte para atualização de coordenadas
     if (updates.latitude !== undefined) payload.latitude = updates.latitude;
     if (updates.longitude !== undefined) payload.longitude = updates.longitude;
 
@@ -274,10 +271,13 @@ export const api = {
       date: s.date,
       time: s.time,
       duration_minutes: s.durationMinutes,
+      // Fix: Use camelCase properties on Partial<MatchSlot> object
       match_type: s.matchType || 'ALUGUEL',
       is_booked: s.isBooked || false,
+      // Fix: Use camelCase properties on Partial<MatchSlot> object
       has_local_team: s.hasLocalTeam || false,
       local_team_name: s.localTeamName || null,
+      // Fix: Use camelCase properties on Partial<MatchSlot> object
       local_team_category: s.localTeamCategory || null,
       price: s.price,
       status: s.status || 'available',
@@ -341,11 +341,14 @@ export const api = {
       fixed_time: team.fixedTime,
       categories: team.categories,
       logo_url: team.logoUrl,
+      // Fix: Use camelCase properties on Partial<RegisteredTeam> object
       captain_name: team.captainName,
+      // Fix: Use camelCase properties on Partial<RegisteredTeam> object
       captain_phone: team.captainPhone,
       email: team.email,
       gender: team.gender,
       sport: team.sport,
+      // Fix: Use camelCase properties on Partial<RegisteredTeam> object
       court_name: team.courtName
     }]);
   },
