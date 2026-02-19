@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { User, UserRole, Field, TeamConfig, Gender } from '../types';
 import { Button } from './Button';
-import { X, User as UserIcon, Shield, Check, Plus, AlertCircle, Building2, MapPin, Smartphone, Camera, Trash2, LayoutGrid, Tag, Lock, PlusCircle, Globe, Search } from 'lucide-react';
+import { X, User as UserIcon, Shield, Check, Plus, AlertCircle, Building2, MapPin, Smartphone, Camera, Trash2, LayoutGrid, Tag, Lock, PlusCircle, Globe, Search, Eye, EyeOff } from 'lucide-react';
 import { formatCategory, convertFileToBase64, geocodeAddress, fetchAddressByCEP } from '../utils';
 
 interface EditProfileModalProps {
@@ -18,6 +18,7 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({ categories, 
   const [phone, setPhone] = useState(user.phoneNumber);
   const [newPassword, setNewPassword] = useState('');
   const [teams, setTeams] = useState<TeamConfig[]>(user.teams || []);
+  const [showPassword, setShowPassword] = useState(false);
   
   // Arena State
   const [arenaName, setArenaName] = useState(field?.name || '');
@@ -74,10 +75,7 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({ categories, 
   };
 
   const handleRemoveTeam = (index: number) => {
-    if (teams.length <= 1) {
-      setError('Você precisa ter pelo menos um time.');
-      return;
-    }
+    // Permite remover todos os times (pois Super Admin e Donos de Campo não precisam)
     setTeams(teams.filter((_, i) => i !== index));
   };
 
@@ -123,11 +121,6 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({ categories, 
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (teams.length === 0) {
-      setError('Adicione pelo menos um time.');
-      return;
-    }
-
     setIsLoading(true);
 
     try {
@@ -211,15 +204,18 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({ categories, 
             
             <div className="bg-orange-50 p-4 rounded-2xl border border-orange-100 flex items-center gap-2">
                 <Lock className="w-4 h-4 text-orange-400" />
-                <div className="flex-1">
+                <div className="flex-1 relative">
                     <label className="text-[8px] font-black text-orange-400 uppercase block mb-1">Alterar Senha (Opcional)</label>
                     <input 
-                        className="w-full bg-transparent font-bold outline-none text-pitch placeholder-orange-200" 
+                        className="w-full bg-transparent font-bold outline-none text-pitch placeholder-orange-200 pr-8" 
                         placeholder="Digite a nova senha para alterar" 
-                        type="password"
+                        type={showPassword ? "text" : "password"}
                         value={newPassword} 
                         onChange={e => setNewPassword(e.target.value)} 
                     />
+                    <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-0 top-1/2 -translate-y-1/2 text-orange-400 hover:text-orange-600">
+                        {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
                 </div>
             </div>
           </section>
@@ -345,13 +341,16 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({ categories, 
             </div>
 
             <div className="grid gap-6">
+              {teams.length === 0 && (
+                 <div className="p-4 bg-gray-50 border rounded-2xl text-[10px] text-gray-400 font-bold uppercase text-center">
+                    Você não possui times cadastrados.
+                 </div>
+              )}
               {teams.map((team, idx) => (
                 <div key={idx} className="bg-gray-50 p-6 rounded-[2.5rem] border border-gray-200 relative space-y-4 group shadow-sm">
-                  {teams.length > 1 && (
-                    <button type="button" onClick={() => handleRemoveTeam(idx)} className="absolute top-4 right-4 text-red-400 hover:text-red-600 transition-colors">
-                      <Trash2 className="w-5 h-5"/>
-                    </button>
-                  )}
+                  <button type="button" onClick={() => handleRemoveTeam(idx)} className="absolute top-4 right-4 text-red-400 hover:text-red-600 transition-colors">
+                    <Trash2 className="w-5 h-5"/>
+                  </button>
                   
                   <div className="flex items-center gap-4">
                     <div className="w-20 h-20 bg-white rounded-2xl border-2 border-dashed border-gray-200 flex items-center justify-center relative overflow-hidden group">

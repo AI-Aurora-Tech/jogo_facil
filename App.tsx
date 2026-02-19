@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback } from 'react';
 import { UserRole, Field, MatchSlot, User, Notification, SubscriptionPlan } from './types';
 import { Landing } from './views/Landing';
@@ -8,7 +7,7 @@ import { TeamDashboard } from './views/TeamDashboard';
 import { Subscription } from './views/Subscription';
 import { EditProfileModal } from './components/EditProfileModal';
 import { api } from './api';
-import { RefreshCw, Settings, Building2, Shield, Search, Loader2, Bell, X, Info, History, KeyRound, Eye, LogOut, Smartphone, Download, Share, Trophy, Crown } from 'lucide-react';
+import { RefreshCw, Settings, Building2, Shield, Search, Loader2, Bell, X, Info, History, KeyRound, Eye, LogOut, Smartphone, Download, Share, Trophy, Crown, Users } from 'lucide-react';
 import { supabase } from './supabaseClient';
 
 const App: React.FC = () => {
@@ -46,7 +45,7 @@ const App: React.FC = () => {
       // Se a assinatura for NONE ou FREE (legado), manda para o fluxo de pagamento obrigatório
       if (user.subscription === SubscriptionPlan.NONE || user.subscription === SubscriptionPlan.FREE) {
         setView('SUBSCRIPTION');
-      } else if (view === 'SUBSCRIPTION' && user.subscription !== SubscriptionPlan.NONE && user.subscription !== SubscriptionPlan.FREE) {
+      } else if (view === 'SUBSCRIPTION') {
         // Se já pagou e ainda está na tela de assinatura, manda pro App
         setView('APP');
       }
@@ -683,21 +682,30 @@ const App: React.FC = () => {
       </main>
 
       <nav className="fixed bottom-0 left-0 right-0 bg-white border-t p-4 pb-safe flex justify-around z-50 shadow-[0_-5px_20px_rgba(0,0,0,0.05)]">
-          <button onClick={() => setActiveTab('EXPLORE')} className={`flex flex-col items-center gap-1 ${activeTab === 'EXPLORE' ? 'text-[#10b981]' : 'text-gray-300'}`}>
-            <Search className="w-6 h-6" />
-            <span className="text-[8px] font-black uppercase">Explorar</span>
-          </button>
-          
-          {currentUserContext?.role === UserRole.TEAM_CAPTAIN ? (
-            <button onClick={() => setActiveTab('MY_GAMES')} className={`flex flex-col items-center gap-1 ${activeTab === 'MY_GAMES' ? 'text-[#10b981]' : 'text-gray-300'}`}>
-              <History className="w-6 h-6" />
-              <span className="text-[8px] font-black uppercase">Meus Jogos</span>
-            </button>
+          {currentUserContext?.role === UserRole.SUPER_ADMIN ? (
+             <button onClick={() => setActiveTab('SUPER')} className={`flex flex-col items-center gap-1 ${activeTab === 'SUPER' ? 'text-[#10b981]' : 'text-gray-300'}`}>
+                <Users className="w-6 h-6" />
+                <span className="text-[8px] font-black uppercase">Gerenciamento</span>
+             </button>
           ) : (
-            <button onClick={() => setActiveTab('ADMIN')} className={`flex flex-col items-center gap-1 ${activeTab === 'ADMIN' ? 'text-[#10b981]' : 'text-gray-300'}`}>
-              <Building2 className="w-6 h-6" />
-              <span className="text-[8px] font-black uppercase">Arena</span>
-            </button>
+            <>
+              <button onClick={() => setActiveTab('EXPLORE')} className={`flex flex-col items-center gap-1 ${activeTab === 'EXPLORE' ? 'text-[#10b981]' : 'text-gray-300'}`}>
+                <Search className="w-6 h-6" />
+                <span className="text-[8px] font-black uppercase">Explorar</span>
+              </button>
+              
+              {currentUserContext?.role === UserRole.TEAM_CAPTAIN ? (
+                <button onClick={() => setActiveTab('MY_GAMES')} className={`flex flex-col items-center gap-1 ${activeTab === 'MY_GAMES' ? 'text-[#10b981]' : 'text-gray-300'}`}>
+                  <History className="w-6 h-6" />
+                  <span className="text-[8px] font-black uppercase">Meus Jogos</span>
+                </button>
+              ) : (
+                <button onClick={() => setActiveTab('ADMIN')} className={`flex flex-col items-center gap-1 ${activeTab === 'ADMIN' ? 'text-[#10b981]' : 'text-gray-300'}`}>
+                  <Building2 className="w-6 h-6" />
+                  <span className="text-[8px] font-black uppercase">Arena</span>
+                </button>
+              )}
+            </>
           )}
 
           <button onClick={() => setActiveTab('PROFILE')} className={`flex flex-col items-center gap-1 ${activeTab === 'PROFILE' ? 'text-[#10b981]' : 'text-gray-300'}`}>

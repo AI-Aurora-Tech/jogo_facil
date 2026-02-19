@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { UserRole, SubscriptionPlan, CATEGORY_ORDER, Gender } from '../types';
 import { Button } from '../components/Button';
-import { Shield, MapPin, AlertCircle, KeyRound, ChevronLeft, Camera, LayoutGrid, Loader2 } from 'lucide-react';
+import { Shield, MapPin, AlertCircle, KeyRound, ChevronLeft, Camera, LayoutGrid, Loader2, Eye, EyeOff } from 'lucide-react';
 import { api } from '../api';
 import { convertFileToBase64, fetchAddressByCEP } from '../utils';
 
@@ -20,6 +20,7 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, onCancel }) => {
   const [error, setError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   // Common Form States
   const [email, setEmail] = useState('');
@@ -138,7 +139,7 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, onCancel }) => {
           teams: role === UserRole.TEAM_CAPTAIN ? [{ 
               name: teamName, 
               categories: teamCategories, 
-              logoUrl: teamLogo,
+              logoUrl: teamLogo, 
               gender: teamGender 
           }] : [],
           teamLogoUrl: role === UserRole.TEAM_CAPTAIN ? teamLogo : undefined,
@@ -205,7 +206,13 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, onCancel }) => {
                 <input className="w-full p-4 bg-gray-50 rounded-2xl border font-bold outline-none" placeholder="Nome Completo" value={name} onChange={e => setName(e.target.value)} required />
                 <input className="w-full p-4 bg-gray-50 rounded-2xl border font-bold outline-none" placeholder="WhatsApp (com DDD)" value={phone} onChange={e => setPhone(e.target.value)} required />
                 <input className="w-full p-4 bg-gray-50 rounded-2xl border font-bold outline-none" placeholder="E-mail" type="email" value={email} onChange={e => setEmail(e.target.value)} required />
-                <input className="w-full p-4 bg-gray-50 rounded-2xl border font-bold outline-none" placeholder="Senha" type="password" value={password} onChange={e => setPassword(e.target.value)} required />
+                
+                <div className="relative">
+                   <input className="w-full p-4 bg-gray-50 rounded-2xl border font-bold outline-none pr-10" placeholder="Senha" type={showPassword ? "text" : "password"} value={password} onChange={e => setPassword(e.target.value)} required />
+                   <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-pitch">
+                     {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                   </button>
+                </div>
                 
                 {/* Campos para Capitão do Time */}
                 {role === UserRole.TEAM_CAPTAIN && (
@@ -323,8 +330,11 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, onCancel }) => {
             <div className="space-y-4">
               <input className="w-full p-5 bg-gray-50 rounded-2xl border font-bold outline-none" placeholder="Seu e-mail" type="email" value={email} onChange={e => setEmail(e.target.value)} required />
               <div className="relative">
-                 <input className="w-full p-5 bg-gray-50 rounded-2xl border font-bold outline-none" placeholder="Sua senha" type="password" value={password} onChange={e => setPassword(e.target.value)} required />
-                 <button type="button" onClick={() => { setMode('FORGOT_PASSWORD'); setError(''); }} className="absolute right-4 top-1/2 -translate-y-1/2 text-[9px] font-black text-gray-400 uppercase hover:text-pitch">Esqueci a senha</button>
+                 <input className="w-full p-5 bg-gray-50 rounded-2xl border font-bold outline-none pr-10" placeholder="Sua senha" type={showPassword ? "text" : "password"} value={password} onChange={e => setPassword(e.target.value)} required />
+                 <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-pitch">
+                     {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                 </button>
+                 <button type="button" onClick={() => { setMode('FORGOT_PASSWORD'); setError(''); }} className="absolute right-4 bottom-2 text-[9px] font-black text-gray-400 uppercase hover:text-pitch transform translate-y-full">Esqueci a senha</button>
               </div>
             </div>
           )}
@@ -335,7 +345,12 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, onCancel }) => {
                  Informe seu e-mail cadastrado e a nova senha desejada.
               </div>
               <input className="w-full p-5 bg-gray-50 rounded-2xl border font-bold outline-none" placeholder="Seu e-mail cadastrado" type="email" value={email} onChange={e => setEmail(e.target.value)} required />
-              <input className="w-full p-5 bg-gray-50 rounded-2xl border font-bold outline-none" placeholder="Nova senha" type="password" value={password} onChange={e => setPassword(e.target.value)} required />
+              <div className="relative">
+                 <input className="w-full p-5 bg-gray-50 rounded-2xl border font-bold outline-none pr-10" placeholder="Nova senha" type={showPassword ? "text" : "password"} value={password} onChange={e => setPassword(e.target.value)} required />
+                 <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-pitch">
+                    {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                 </button>
+              </div>
             </div>
           )}
 
