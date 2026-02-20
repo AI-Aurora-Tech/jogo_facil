@@ -256,9 +256,11 @@ export const api = {
       opponentTeamLogoUrl: s.opponent_team_logo_url,
       opponentTeamGender: s.opponent_team_gender,
       status: s.status,
+      homeTeamType: s.home_team_type || 'LOCAL',
       price: s.price,
       allowedOpponentCategories: s.allowed_opponent_categories || [],
       receiptUrl: s.receipt_url,
+      receiptUploadedAt: s.receipt_uploaded_at,
       aiVerificationResult: s.ai_verification_result,
       courtName: s.court_name,
       sport: s.sport
@@ -271,13 +273,11 @@ export const api = {
       date: s.date,
       time: s.time,
       duration_minutes: s.durationMinutes,
-      // Fix: Use camelCase properties on Partial<MatchSlot> object
       match_type: s.matchType || 'ALUGUEL',
+      home_team_type: s.homeTeamType || 'LOCAL',
       is_booked: s.isBooked || false,
-      // Fix: Use camelCase properties on Partial<MatchSlot> object
       has_local_team: s.hasLocalTeam || false,
       local_team_name: s.localTeamName || null,
-      // Fix: Use camelCase properties on Partial<MatchSlot> object
       local_team_category: s.localTeamCategory || null,
       price: s.price,
       status: s.status || 'available',
@@ -292,7 +292,8 @@ export const api = {
     const payload: any = {};
     if (data.status) payload.status = data.status;
     if (data.isBooked !== undefined) payload.is_booked = data.isBooked;
-    if (data.receiptUrl) payload.receipt_url = data.receiptUrl;
+    if (data.receiptUrl !== undefined) payload.receipt_url = data.receiptUrl;
+    if (data.receiptUploadedAt !== undefined) payload.receipt_uploaded_at = data.receiptUploadedAt;
     if (data.bookedByTeamName !== undefined) payload.booked_by_team_name = data.bookedByTeamName;
     if (data.opponentTeamName !== undefined) payload.opponent_team_name = data.opponentTeamName;
     if (data.opponentTeamCategory !== undefined) payload.opponent_team_category = data.opponentTeamCategory;
@@ -301,12 +302,18 @@ export const api = {
     if (data.opponentTeamGender !== undefined) payload.opponent_team_gender = data.opponentTeamGender;
     if (data.bookedByUserId !== undefined) payload.booked_by_user_id = data.bookedByUserId;
     if (data.bookedByTeamCategory !== undefined) payload.booked_by_category = data.bookedByTeamCategory;
+    if (data.homeTeamType !== undefined) payload.home_team_type = data.homeTeamType;
     
     if (data.bookedByTeamCategory && !payload.local_team_category) {
         payload.local_team_category = data.bookedByTeamCategory;
     }
 
     await supabase.from('match_slot').update(payload).eq('id', slotId);
+  },
+
+  getWhatsAppLink: (phone: string, message: string) => {
+    const cleanPhone = phone.replace(/\D/g, '');
+    return `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`;
   },
 
   deleteSlot: async (slotId: string): Promise<void> => {

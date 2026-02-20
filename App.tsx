@@ -630,8 +630,13 @@ const App: React.FC = () => {
                 onAddSlot={async s => { await api.createSlots(s); refreshData(); }}
                 onRefreshData={refreshData}
                 onDeleteSlot={async id => { await api.deleteSlot(id); refreshData(); }}
-                onConfirmBooking={async id => { await api.updateSlot(id, { status: 'confirmed', isBooked: true }); refreshData(); }}
-                onRejectBooking={async id => { await api.updateSlot(id, { status: 'available', receiptUrl: null as any }); refreshData(); }}
+                onConfirmBooking={async id => { 
+                  const slot = slots.find(s => s.id === id);
+                  const newStatus = slot?.status === 'pending_verification' ? 'confirmed' : 'pending_payment';
+                  await api.updateSlot(id, { status: newStatus, isBooked: true }); 
+                  refreshData(); 
+                }}
+                onRejectBooking={async id => { await api.updateSlot(id, { status: 'rejected', isBooked: false, receiptUrl: null as any }); refreshData(); }}
                 onUpdateField={async (id, u) => { await api.updateField(id, u); refreshData(); return true; }}
                 onRateTeam={() => {}}
                 forceTab={fieldDashForceTab}

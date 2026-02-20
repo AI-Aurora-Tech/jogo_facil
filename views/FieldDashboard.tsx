@@ -126,18 +126,28 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
     setIsLoading(true);
     try {
       if (action === 'confirm') {
-        await onConfirmBooking(slot.id);
+        // Se for pending_verification, o dono do campo está confirmando o PIX
+        // Se for pending_field_approval, o dono do campo está confirmando o jogo (após o mandante aprovar ou se for time local)
+        const newStatus = slot.status === 'pending_verification' ? 'confirmed' : 'pending_payment';
+        
+        await api.updateSlot(slot.id, { status: newStatus });
+        
         if (slot.bookedByUserId) {
+          const title = newStatus === 'confirmed' ? "Pagamento Confirmado! ⚽" : "Desafio Aceito! 💸";
+          const desc = newStatus === 'confirmed' 
+            ? `Seu pagamento para o jogo na arena ${field.name} foi validado!` 
+            : `A arena ${field.name} aceitou seu desafio. Realize o pagamento via PIX para confirmar.`;
+            
           await api.createNotification({
             userId: slot.bookedByUserId,
-            title: "Desafio Confirmado! ⚽",
-            description: `Seu jogo na arena ${field.name} dia ${slot.date.split('-').reverse().join('/')} foi confirmado!`,
+            title,
+            description: desc,
             type: 'success'
           });
         }
-        alert("Agendamento confirmado com sucesso!");
+        alert(newStatus === 'confirmed' ? "Pagamento confirmado!" : "Desafio aceito! Aguardando pagamento.");
       } else {
-        await onRejectBooking(slot.id);
+        await api.updateSlot(slot.id, { status: 'rejected', isBooked: false });
         if (slot.bookedByUserId) {
           await api.createNotification({
             userId: slot.bookedByUserId,
@@ -311,28 +321,24 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
     const hasOpponent = !!slot.opponentTeamName;
     const hasAtLeastOneTeam = !!(slot.bookedByTeamName || slot.hasLocalTeam);
 
-    // Regra: Jogo com os dois times agendados (Local + Externo ou Externo + Externo)
-    if (hasOpponent) {
+    if (slot.status === 'confirmed') {
       badges.push({ label: 'JOGO CONFIRMADO', color: 'bg-grass-500 text-white', icon: <CheckCircle className="w-3 h-3"/> });
-      if (isLocal) {
-        badges.push({ label: 'TIME LOCAL', color: 'bg-indigo-600 text-white', icon: <UserCheck className="w-3 h-3"/> });
-      }
-    } 
-    // Regra: Apenas um time (Mandante ou Externo) aguardando adversário
-    else if (hasAtLeastOneTeam) {
-      if (slot.status === 'pending_verification') {
-        badges.push({ label: 'SOLICITAÇÃO PENDENTE', color: 'bg-orange-500 text-white', icon: <AlertCircle className="w-3 h-3"/> });
-      } else {
-        badges.push({ label: 'AGUARDANDO ADVERSÁRIO', color: 'bg-yellow-400 text-pitch font-black', icon: <Swords className="w-3 h-3"/> });
-      }
-      
-      if (isLocal) {
-        badges.push({ label: 'TIME LOCAL', color: 'bg-indigo-100 text-indigo-700', icon: <UserPlus className="w-3 h-3"/> });
-      }
-    } 
-    // Regra: Ninguém agendado
-    else {
+    } else if (slot.status === 'pending_verification') {
+      badges.push({ label: 'AGUARDANDO VALIDAÇÃO PIX', color: 'bg-orange-500 text-white', icon: <AlertCircle className="w-3 h-3"/> });
+    } else if (slot.status === 'pending_payment') {
+      badges.push({ label: 'AGUARDANDO PAGAMENTO', color: 'bg-blue-500 text-white', icon: <Clock className="w-3 h-3"/> });
+    } else if (slot.status === 'pending_field_approval') {
+      badges.push({ label: 'AGUARDANDO SUA APROVAÇÃO', color: 'bg-orange-400 text-white', icon: <UserCheck className="w-3 h-3"/> });
+    } else if (slot.status === 'pending_home_approval') {
+      badges.push({ label: 'AGUARDANDO APROVAÇÃO DO MANDANTE', color: 'bg-yellow-400 text-pitch', icon: <Clock className="w-3 h-3"/> });
+    } else if (hasAtLeastOneTeam) {
+      badges.push({ label: 'AGUARDANDO ADVERSÁRIO', color: 'bg-yellow-400 text-pitch font-black', icon: <Swords className="w-3 h-3"/> });
+    } else {
       badges.push({ label: 'DISPONÍVEL', color: 'bg-gray-100 text-gray-400', icon: <Clock className="w-3 h-3"/> });
+    }
+
+    if (isLocal) {
+      badges.push({ label: 'TIME LOCAL', color: 'bg-indigo-100 text-indigo-700', icon: <UserPlus className="w-3 h-3"/> });
     }
 
     return badges;
@@ -365,7 +371,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
               {tab === 'AGENDA' && <CalendarDays className="w-3 h-3 inline-block mr-1 mb-0.5" />}
               {tab === 'SOLICITACOES' && <div className="relative inline-block">
                 <MessageCircle className="w-3 h-3 inline-block mr-1 mb-0.5" />
-                {slots.some(s => s.status === 'pending_verification') && <span className="absolute -top-1 -right-1 w-2 h-2 bg-red-500 rounded-full border-2 border-white animate-pulse"></span>}
+                {slots.some(s => s.status === 'pending_verification' || s.status === 'pending_field_approval') && <span className="absolute -top-1 -right-1 w-2 h-2 bg-red-500 rounded-full border-2 border-white animate-pulse"></span>}
               </div>}
               {tab === 'MENSALISTAS' && <UserCheck className="w-3 h-3 inline-block mr-1 mb-0.5" />}
               {tab === 'HISTORICO' && <HistoryIcon className="w-3 h-3 inline-block mr-1 mb-0.5" />}
@@ -461,7 +467,20 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                            <button onClick={() => handleEditSlot(slot)} className="p-3 bg-gray-50 text-pitch rounded-xl hover:bg-pitch hover:text-white transition-all"><Edit className="w-4 h-4"/></button>
                            <button onClick={() => { if(confirm("Remover este horário?")) onDeleteSlot(slot.id); }} className="p-3 text-red-500 hover:bg-red-50 rounded-xl bg-gray-50"><Trash2 className="w-4 h-4"/></button>
                         </div>
-                        {slot.status === 'pending_verification' && (
+                        {slot.status === 'confirmed' && (
+                           <button 
+                             onClick={() => {
+                               const msg = `Olá! Confirmando a partida na arena ${field.name} dia ${slot.date.split('-').reverse().join('/')} às ${slot.time}. Bom jogo!`;
+                               const phone = slot.opponentTeamPhone || slot.bookedByUserPhone || slot.localTeamPhone;
+                               if (phone) window.open(api.getWhatsAppLink(phone, msg), '_blank');
+                             }} 
+                             className="p-3 bg-grass-50 text-grass-600 rounded-xl hover:bg-grass-500 hover:text-white transition-all flex items-center gap-2"
+                           >
+                             <MessageCircle className="w-4 h-4"/>
+                             <span className="text-[8px] font-black uppercase">Notificar WhatsApp</span>
+                           </button>
+                        )}
+                        {(slot.status === 'pending_verification' || slot.status === 'pending_field_approval') && (
                            <button onClick={() => setActiveTab('SOLICITACOES')} className="bg-orange-500 text-white text-[8px] font-black uppercase px-3 py-2 rounded-lg animate-pulse">Ver Solicitação</button>
                         )}
                       </div>
@@ -475,15 +494,27 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
 
         {activeTab === 'SOLICITACOES' && (
            <div className="space-y-4">
-              {slots.filter(s => s.status === 'pending_verification').map(slot => (
+              {slots.filter(s => s.status === 'pending_verification' || s.status === 'pending_field_approval').map(slot => (
                  <div key={slot.id} className="bg-white rounded-[2.5rem] border-2 border-orange-100 shadow-md p-6 space-y-6">
                     <div className="flex justify-between items-start">
                        <div>
-                          <span className="bg-orange-100 text-orange-600 px-3 py-1 rounded-full text-[8px] font-black uppercase">Novo Desafio Recebido</span>
+                          <span className="bg-orange-100 text-orange-600 px-3 py-1 rounded-full text-[8px] font-black uppercase">
+                            {slot.status === 'pending_verification' ? 'Comprovante PIX Enviado' : 'Novo Desafio Recebido'}
+                          </span>
                           <h4 className="text-lg font-black text-pitch uppercase mt-2">{slot.date.split('-').reverse().join('/')} às {slot.time}</h4>
                        </div>
                        <div className="p-3 bg-gray-50 rounded-xl text-pitch"><Swords className="w-5 h-5" /></div>
                     </div>
+                    
+                    {slot.status === 'pending_verification' && slot.receiptUrl && (
+                      <div className="space-y-2">
+                        <p className="text-[10px] font-black text-gray-400 uppercase">Comprovante PIX:</p>
+                        <a href={slot.receiptUrl} target="_blank" rel="noreferrer" className="block w-full h-40 bg-gray-100 rounded-2xl overflow-hidden border">
+                          <img src={slot.receiptUrl} className="w-full h-full object-contain" />
+                        </a>
+                      </div>
+                    )}
+
                     <div className="bg-gray-50 rounded-2xl p-4 flex items-center justify-between">
                        <div className="flex items-center gap-3">
                           <div className="w-12 h-12 bg-white rounded-xl border flex items-center justify-center overflow-hidden">
@@ -498,10 +529,15 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                     </div>
                     <div className="grid grid-cols-2 gap-3">
                        <Button onClick={() => handleAction(slot, 'reject')} variant="outline" className="py-4 rounded-2xl text-red-500 font-black uppercase text-[10px]">Recusar</Button>
-                       <Button onClick={() => handleAction(slot, 'confirm')} className="py-4 rounded-2xl bg-pitch text-white font-black uppercase text-[10px]">Aceitar Jogo</Button>
+                       <Button onClick={() => handleAction(slot, 'confirm')} className="py-4 rounded-2xl bg-pitch text-white font-black uppercase text-[10px]">
+                         {slot.status === 'pending_verification' ? 'Confirmar PIX' : 'Aceitar Jogo'}
+                       </Button>
                     </div>
                  </div>
               ))}
+              {slots.filter(s => s.status === 'pending_verification' || s.status === 'pending_field_approval').length === 0 && (
+                <div className="text-center py-20 text-gray-400 font-black uppercase text-[10px]">Nenhuma solicitação pendente.</div>
+              )}
            </div>
         )}
 

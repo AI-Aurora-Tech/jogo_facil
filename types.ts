@@ -65,6 +65,8 @@ export interface Field {
   courts: string[];
 }
 
+export type MatchStatus = 'available' | 'pending_home_approval' | 'pending_field_approval' | 'pending_payment' | 'pending_verification' | 'confirmed' | 'rejected';
+
 export interface MatchSlot {
   id: string;
   fieldId: string;
@@ -72,6 +74,7 @@ export interface MatchSlot {
   time: string;
   durationMinutes: number;
   matchType: MatchType;
+  homeTeamType: 'LOCAL' | 'MENSALISTA' | 'OUTSIDE';
   isBooked: boolean;
   hasLocalTeam: boolean;
   localTeamName?: string;
@@ -90,9 +93,10 @@ export interface MatchSlot {
   opponentTeamLogoUrl?: string;
   opponentTeamGender?: Gender;
   allowedOpponentCategories: string[];
-  status: 'available' | 'pending_verification' | 'confirmed';
+  status: MatchStatus;
   price: number;
   receiptUrl?: string;
+  receiptUploadedAt?: string;
   fieldRating?: number;
   courtName?: string;
   sport: string;

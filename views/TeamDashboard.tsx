@@ -1,10 +1,11 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { Search, MapPin, Clock, Swords, Filter, X, Check, MessageCircle, Phone, Navigation, Trophy, ChevronDown, Smartphone, Settings, AlertTriangle, ExternalLink, Activity, History as HistoryIcon, CalendarCheck, CalendarX, Locate, MapPinOff, Calendar, RotateCcw, ArrowUpDown, SlidersHorizontal } from 'lucide-react';
+import { Search, MapPin, Clock, Swords, Filter, X, Check, MessageCircle, Phone, Navigation, Trophy, ChevronDown, Smartphone, Settings, AlertTriangle, ExternalLink, Activity, History as HistoryIcon, CalendarCheck, CalendarX, Locate, MapPinOff, Calendar, RotateCcw, ArrowUpDown, SlidersHorizontal, Camera, Upload } from 'lucide-react';
 import { Button } from '../components/Button';
-import { Field, MatchSlot, User, CATEGORY_ORDER, SPORTS, Gender } from '../types';
+import { Field, MatchSlot, User, CATEGORY_ORDER, SPORTS, Gender, MatchStatus } from '../types';
 import { api } from '../api';
-import { calculateDistance, getCurrentPosition, formatDistance, LatLng, getNeighboringCategories, geocodeAddress } from '../utils';
+import { calculateDistance, getCurrentPosition, formatDistance, LatLng, getNeighboringCategories, geocodeAddress, convertFileToBase64 } from '../utils';
+import { verifyPixReceipt } from '../services/aiService';
 
 interface TeamDashboardProps {
   categories: string[];
@@ -185,11 +186,15 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
   }, [slots, fields, searchQuery, filterSport, filterCategory, filterRange, filterDate, filterMaxDistance, sortBy, viewMode, myGamesSubTab, userAllCategories, currentUser, fieldDistances]);
 
   const getStatusBadge = (slot: MatchSlot) => {
-    if (slot.status === 'confirmed') {
+    const status = slot.status;
+    if (status === 'confirmed') {
        if (slot.opponentTeamName) return { label: 'JOGO CONFIRMADO', color: 'bg-grass-500 text-white', icon: <CalendarCheck className="w-3 h-3"/> };
        return { label: 'AGUARDANDO ADVERSÁRIO', color: 'bg-yellow-100 text-yellow-700 font-bold', icon: <Swords className="w-3 h-3"/> };
     }
-    if (slot.status === 'pending_verification') return { label: 'PENDENTE', color: 'bg-orange-100 text-orange-600', icon: <Clock className="w-3 h-3"/> };
+    if (status === 'pending_verification') return { label: 'AGUARDANDO VALIDAÇÃO', color: 'bg-orange-100 text-orange-600', icon: <Clock className="w-3 h-3"/> };
+    if (status === 'pending_payment') return { label: 'AGUARDANDO SEU PAGAMENTO', color: 'bg-blue-100 text-blue-600', icon: <Clock className="w-3 h-3"/> };
+    if (status === 'pending_home_approval') return { label: 'AGUARDANDO SUA APROVAÇÃO', color: 'bg-orange-100 text-orange-600', icon: <Clock className="w-3 h-3"/> };
+    if (status === 'pending_field_approval') return { label: 'AGUARDANDO ARENA', color: 'bg-gray-100 text-gray-500', icon: <Clock className="w-3 h-3"/> };
     return { label: 'DISPONÍVEL', color: 'bg-gray-100 text-gray-500', icon: <Clock className="w-3 h-3"/> };
   };
 
@@ -204,9 +209,24 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
     
     try {
       const isFirstTeam = !selectedSlot.bookedByTeamName && !selectedSlot.hasLocalTeam;
+      
+      let nextStatus: MatchStatus = 'pending_field_approval';
+      
+      // Se for desafio (já tem um mandante)
+      if (!isFirstTeam) {
+        if (selectedSlot.homeTeamType === 'MENSALISTA') {
+          nextStatus = 'pending_home_approval';
+        } else if (selectedSlot.homeTeamType === 'OUTSIDE') {
+          nextStatus = 'pending_home_approval';
+        } else {
+          // Se for LOCAL, vai direto pro dono do campo
+          nextStatus = 'pending_field_approval';
+        }
+      }
+
       const updateData: any = {
         bookedByUserId: currentUser.id,
-        status: 'pending_verification'
+        status: nextStatus
       };
 
       if (isFirstTeam) {
@@ -215,6 +235,7 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
           updateData.bookedByUserPhone = currentUser.phoneNumber;
           updateData.bookedByTeamLogoUrl = team.logoUrl;
           updateData.allowedOpponentCategories = getNeighboringCategories(selectedCategory);
+          updateData.homeTeamType = 'OUTSIDE';
       } else {
           updateData.opponentTeamName = team.name;
           updateData.opponentTeamCategory = selectedCategory;
@@ -224,19 +245,102 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
       }
 
       await api.updateSlot(selectedSlot.id, updateData);
-      if (field) {
+      
+      // Notificar quem precisa aprovar
+      if (nextStatus === 'pending_field_approval' && field) {
         await api.createNotification({
           userId: field.ownerId,
           title: "Novo Agendamento! ⚽",
           description: `O time ${team.name} quer jogar no dia ${selectedSlot.date.split('-').reverse().join('/')} às ${selectedSlot.time}.`,
           type: 'info'
         });
+      } else if (nextStatus === 'pending_home_approval') {
+        // Notificar o mandante (precisamos do ID do usuário mandante)
+        if (selectedSlot.bookedByUserId) {
+          await api.createNotification({
+            userId: selectedSlot.bookedByUserId,
+            title: "Novo Desafio! ⚔️",
+            description: `O time ${team.name} desafiou seu time para o dia ${selectedSlot.date.split('-').reverse().join('/')}.`,
+            type: 'info'
+          });
+        }
       }
+
       setSelectedSlot(null);
       onRefresh();
       alert("Solicitação enviada!");
     } catch (e) { 
       alert("Erro ao solicitar."); 
+    }
+  };
+
+  const handleHomeApproval = async (slot: MatchSlot, approved: boolean) => {
+    try {
+      if (approved) {
+        await api.updateSlot(slot.id, { status: 'pending_field_approval' });
+        const field = fields.find(f => f.id === slot.fieldId);
+        if (field) {
+          await api.createNotification({
+            userId: field.ownerId,
+            title: "Desafio Aprovado pelo Mandante! ⚽",
+            description: `O mandante aprovou o desafio do time ${slot.opponentTeamName}. Agora você precisa aprovar.`,
+            type: 'info'
+          });
+        }
+        alert("Desafio aprovado! Aguardando aprovação da arena.");
+      } else {
+        await api.updateSlot(slot.id, { status: 'rejected', isBooked: false });
+        if (slot.bookedByUserId) {
+          await api.createNotification({
+            userId: slot.bookedByUserId,
+            title: "Desafio Recusado ❌",
+            description: `O mandante não aceitou seu desafio.`,
+            type: 'warning'
+          });
+        }
+        alert("Desafio recusado.");
+      }
+      onRefresh();
+    } catch (e) {
+      alert("Erro ao processar.");
+    }
+  };
+
+  const handleUploadReceipt = async (slot: MatchSlot, file: File) => {
+    const field = fields.find(f => f.id === slot.fieldId);
+    if (!field) return;
+
+    try {
+      const base64 = await convertFileToBase64(file);
+      
+      // Simulação de upload (em um app real, enviaria para storage)
+      // Aqui vamos apenas salvar a URL base64 ou uma URL fake por enquanto
+      // Mas o fluxo pede verificação por IA
+      
+      const verification = await verifyPixReceipt(file, slot.price, field.pixConfig.name || field.name);
+      
+      if (!verification.isValid) {
+        alert(`Comprovante inválido: ${verification.reason}`);
+        return;
+      }
+
+      await api.updateSlot(slot.id, { 
+        status: 'pending_verification', 
+        receiptUrl: base64,
+        receiptUploadedAt: new Date().toISOString()
+      });
+
+      await api.createNotification({
+        userId: field.ownerId,
+        title: "Novo Comprovante PIX! 💸",
+        description: `O time ${slot.opponentTeamName || slot.bookedByTeamName} enviou o comprovante para o jogo do dia ${slot.date}.`,
+        type: 'success'
+      });
+
+      alert("Comprovante enviado com sucesso! A arena irá validar em breve.");
+      onRefresh();
+    } catch (e) {
+      alert("Erro ao enviar comprovante.");
     }
   };
 
@@ -362,6 +466,77 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
                       {slot.bookedByTeamName || slot.hasLocalTeam ? 'Desafiar' : 'Alugar'}
                    </Button>
                 </div>
+                
+                {viewMode === 'MY_BOOKINGS' && (
+                   <div className="px-6 pb-6 space-y-4">
+                     {slot.status === 'pending_home_approval' && slot.bookedByUserId === currentUser.id && (
+                       <div className="bg-orange-50 p-4 rounded-2xl border border-orange-100">
+                         <p className="text-[10px] font-black text-orange-600 uppercase mb-3">Você foi desafiado! Aprovar partida?</p>
+                         <div className="grid grid-cols-2 gap-2">
+                            <Button onClick={() => handleHomeApproval(slot, false)} variant="outline" className="py-3 rounded-xl text-red-500 text-[9px]">Recusar</Button>
+                            <Button onClick={() => handleHomeApproval(slot, true)} className="py-3 rounded-xl bg-pitch text-white text-[9px]">Aprovar</Button>
+                         </div>
+                       </div>
+                     )}
+
+                     {slot.status === 'pending_payment' && (
+                       <div className="bg-blue-50 p-4 rounded-2xl border border-blue-100 space-y-3">
+                         <div className="flex justify-between items-center">
+                            <p className="text-[10px] font-black text-blue-600 uppercase">Pagamento Pendente</p>
+                            <span className="text-[9px] font-bold text-blue-400 uppercase">PIX</span>
+                         </div>
+                         <div className="bg-white p-3 rounded-xl border border-blue-100">
+                            <p className="text-[8px] font-black text-gray-400 uppercase mb-1">Chave PIX da Arena:</p>
+                            <p className="font-black text-pitch text-xs">{field?.pixConfig.key || 'Não configurada'}</p>
+                            <p className="text-[8px] font-bold text-gray-400 mt-1 uppercase">{field?.pixConfig.name}</p>
+                         </div>
+                         <div className="flex gap-2">
+                            <label className="flex-1">
+                               <div className="w-full py-3 bg-pitch text-white rounded-xl flex items-center justify-center gap-2 cursor-pointer active:scale-95 transition-all">
+                                  <Camera className="w-4 h-4" />
+                                  <span className="text-[9px] font-black uppercase">Anexar Comprovante</span>
+                               </div>
+                               <input 
+                                 type="file" 
+                                 accept="image/*" 
+                                 className="hidden" 
+                                 onChange={(e) => {
+                                   const file = e.target.files?.[0];
+                                   if (file) handleUploadReceipt(slot, file);
+                                 }} 
+                               />
+                            </label>
+                         </div>
+                         <p className="text-[8px] text-blue-400 font-bold uppercase italic">* O comprovante deve ser enviado em até 24h antes do jogo.</p>
+                       </div>
+                     )}
+
+                     <div className="flex gap-2">
+                        <button 
+                          onClick={() => {
+                            const msg = `Olá! Tenho uma dúvida sobre o agendamento do dia ${slot.date} às ${slot.time} na arena ${field?.name}.`;
+                            if (field?.contactPhone) window.open(api.getWhatsAppLink(field.contactPhone, msg), '_blank');
+                          }}
+                          className="flex-1 py-3 bg-gray-50 text-pitch rounded-xl flex items-center justify-center gap-2 border hover:bg-gray-100 transition-all"
+                        >
+                           <MessageCircle className="w-4 h-4 text-grass-600" />
+                           <span className="text-[9px] font-black uppercase">Falar com Arena</span>
+                        </button>
+                        {slot.status === 'confirmed' && (
+                          <button 
+                            onClick={() => {
+                              const msg = `Fala time! Nosso jogo na arena ${field?.name} está confirmado para o dia ${slot.date.split('-').reverse().join('/')} às ${slot.time}. Bora!`;
+                              window.open(api.getWhatsAppLink('', msg), '_blank'); // Abre o WA para escolher contato
+                            }}
+                            className="flex-1 py-3 bg-grass-50 text-grass-600 rounded-xl flex items-center justify-center gap-2 border border-grass-100 hover:bg-grass-100 transition-all"
+                          >
+                             <Smartphone className="w-4 h-4" />
+                             <span className="text-[9px] font-black uppercase">Convidar Time</span>
+                          </button>
+                        )}
+                     </div>
+                   </div>
+                )}
               </div>
             );
           })
