@@ -46,6 +46,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
   const [manualLocalTeamName, setManualLocalTeamName] = useState(field.name || 'Time da Casa');
   const [manualLocalCategory, setManualLocalCategory] = useState(CATEGORY_ORDER[0]);
   const [acceptNeighbors, setAcceptNeighbors] = useState(true);
+  const [selectedRegisteredTeamId, setSelectedRegisteredTeamId] = useState<string>('');
 
   // States Filtros Agenda
   const [filterRange, setFilterRange] = useState<string>('7'); 
@@ -128,6 +129,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
       if (action === 'confirm') {
         // Se for pending_verification, o dono do campo está confirmando o PIX
         // Se for pending_field_approval, o dono do campo está confirmando o jogo (após o mandante aprovar ou se for time local)
+        // Se for pending_home_approval, o dono do campo está forçando a aprovação pelo mandante
         const newStatus = slot.status === 'pending_verification' ? 'confirmed' : 'pending_payment';
         
         await api.updateSlot(slot.id, { status: newStatus });
@@ -147,13 +149,27 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
         }
         alert(newStatus === 'confirmed' ? "Pagamento confirmado!" : "Desafio aceito! Aguardando pagamento.");
       } else {
-        await api.updateSlot(slot.id, { status: 'rejected', isBooked: false });
+        await api.updateSlot(slot.id, { 
+          status: 'available', 
+          bookedByUserId: null, 
+          bookedByTeamName: null, 
+          bookedByTeamCategory: null,
+          opponentTeamName: null,
+          opponentTeamCategory: null,
+          opponentTeamPhone: null,
+          opponentTeamLogoUrl: null,
+          opponentTeamGender: null,
+          receiptUrl: null,
+          receiptUploadedAt: null,
+          isBooked: false
+        });
+        
         if (slot.bookedByUserId) {
           await api.createNotification({
             userId: slot.bookedByUserId,
             title: "Desafio Recusado ❌",
             description: `A arena ${field.name} não pôde aceitar seu desafio para o dia ${slot.date}.`,
-            type: 'warning'
+            type: 'error'
           });
         }
         alert("Solicitação recusada.");
@@ -170,16 +186,39 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
   const handleCreateOrUpdateSlot = async () => {
     setIsLoading(true);
     try {
-      const allowedCats = acceptNeighbors 
-        ? getNeighboringCategories(manualLocalCategory)
-        : [manualLocalCategory];
-      
-      let teamName = isLocalTeamSlot ? (manualLocalTeamName || field.name || 'Time da Casa') : null;
-      
-      // Proteção para não salvar 'Carregando...'
-      if (teamName === 'Carregando...') {
-          teamName = field.name !== 'Carregando...' ? field.name : 'Time da Casa';
+      let teamName = null;
+      let teamCategory = null;
+      let teamPhone = null;
+      let teamGender = null;
+      let teamLogo = null;
+      let homeTeamType = 'LOCAL';
+
+      if (isLocalTeamSlot) {
+        if (selectedRegisteredTeamId) {
+          const regTeam = registeredTeams.find(t => t.id === selectedRegisteredTeamId);
+          if (regTeam) {
+            teamName = regTeam.name;
+            teamCategory = regTeam.categories[0] || manualLocalCategory;
+            teamPhone = regTeam.captainPhone;
+            teamGender = regTeam.gender;
+            teamLogo = regTeam.logoUrl;
+            homeTeamType = 'MENSALISTA';
+          }
+        } else {
+          teamName = manualLocalTeamName || field.name || 'Time da Casa';
+          if (teamName === 'Carregando...') {
+              teamName = field.name !== 'Carregando...' ? field.name : 'Time da Casa';
+          }
+          teamCategory = manualLocalCategory;
+          teamPhone = field.contactPhone;
+          teamGender = 'MASCULINO';
+          homeTeamType = 'LOCAL';
+        }
       }
+
+      const allowedCats = acceptNeighbors && teamCategory
+        ? getNeighboringCategories(teamCategory)
+        : (teamCategory ? [teamCategory] : []);
 
       const slotData = {
         fieldId: field.id,
@@ -190,9 +229,11 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
         isBooked: editingSlotId ? undefined : isLocalTeamSlot,
         hasLocalTeam: isLocalTeamSlot,
         localTeamName: teamName,
-        localTeamCategory: isLocalTeamSlot ? manualLocalCategory : null,
-        localTeamPhone: isLocalTeamSlot ? field.contactPhone : null,
-        localTeamGender: 'MASCULINO',
+        localTeamCategory: teamCategory,
+        localTeamPhone: teamPhone,
+        localTeamGender: teamGender,
+        localTeamLogoUrl: teamLogo,
+        homeTeamType: homeTeamType,
         price: slotPrice,
         status: editingSlotId ? undefined : (isLocalTeamSlot ? 'confirmed' : 'available'),
         courtName: slotCourt,
@@ -494,12 +535,12 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
 
         {activeTab === 'SOLICITACOES' && (
            <div className="space-y-4">
-              {slots.filter(s => s.status === 'pending_verification' || s.status === 'pending_field_approval').map(slot => (
+              {slots.filter(s => s.status === 'pending_verification' || s.status === 'pending_field_approval' || s.status === 'pending_home_approval').map(slot => (
                  <div key={slot.id} className="bg-white rounded-[2.5rem] border-2 border-orange-100 shadow-md p-6 space-y-6">
                     <div className="flex justify-between items-start">
                        <div>
                           <span className="bg-orange-100 text-orange-600 px-3 py-1 rounded-full text-[8px] font-black uppercase">
-                            {slot.status === 'pending_verification' ? 'Comprovante PIX Enviado' : 'Novo Desafio Recebido'}
+                            {slot.status === 'pending_verification' ? 'Comprovante PIX Enviado' : slot.status === 'pending_home_approval' ? 'Aguardando Mandante' : 'Novo Desafio Recebido'}
                           </span>
                           <h4 className="text-lg font-black text-pitch uppercase mt-2">{slot.date.split('-').reverse().join('/')} às {slot.time}</h4>
                        </div>
@@ -617,13 +658,32 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
 
                  {isLocalTeamSlot && (
                     <div className="animate-in fade-in slide-in-from-top-2 space-y-4 bg-gray-50 p-4 rounded-2xl border">
-                        <input className="w-full p-4 bg-white border rounded-xl text-xs font-bold" placeholder="Nome do Mandante" value={manualLocalTeamName} onChange={e => setManualLocalTeamName(e.target.value)} />
                         <div>
-                           <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Categoria Principal</label>
-                           <select className="w-full p-4 bg-white border rounded-xl text-xs font-bold" value={manualLocalCategory} onChange={e => setManualLocalCategory(e.target.value)}>
-                              {CATEGORY_ORDER.map(c => <option key={c} value={c}>{c}</option>)}
+                           <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Selecione o Mandante</label>
+                           <select 
+                             className="w-full p-4 bg-white border rounded-xl text-xs font-bold" 
+                             value={selectedRegisteredTeamId} 
+                             onChange={e => setSelectedRegisteredTeamId(e.target.value)}
+                           >
+                              <option value="">Time da Casa (Avulso)</option>
+                              {registeredTeams.map(t => (
+                                <option key={t.id} value={t.id}>{t.name}</option>
+                              ))}
                            </select>
                         </div>
+                        
+                        {!selectedRegisteredTeamId && (
+                          <>
+                            <input className="w-full p-4 bg-white border rounded-xl text-xs font-bold" placeholder="Nome do Mandante" value={manualLocalTeamName} onChange={e => setManualLocalTeamName(e.target.value)} />
+                            <div>
+                               <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Categoria Principal</label>
+                               <select className="w-full p-4 bg-white border rounded-xl text-xs font-bold" value={manualLocalCategory} onChange={e => setManualLocalCategory(e.target.value)}>
+                                  {CATEGORY_ORDER.map(c => <option key={c} value={c}>{c}</option>)}
+                               </select>
+                            </div>
+                          </>
+                        )}
+                        
                         <div className="flex items-center gap-2 cursor-pointer" onClick={() => setAcceptNeighbors(!acceptNeighbors)}>
                            <div className={`w-5 h-5 rounded border flex items-center justify-center transition-all ${acceptNeighbors ? 'bg-pitch border-pitch text-white' : 'bg-white border-gray-300'}`}>
                               {acceptNeighbors && <Check className="w-3 h-3" />}

@@ -160,7 +160,8 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
         }
       } else {
         const isMyTeamInSlot = (slot.bookedByTeamName && myTeamsNames.includes(slot.bookedByTeamName.toLowerCase())) ||
-                               (slot.opponentTeamName && myTeamsNames.includes(slot.opponentTeamName.toLowerCase()));
+                               (slot.opponentTeamName && myTeamsNames.includes(slot.opponentTeamName.toLowerCase())) ||
+                               (slot.localTeamName && myTeamsNames.includes(slot.localTeamName.toLowerCase()));
         const isMyBooking = slot.bookedByUserId === currentUser.id || isMyTeamInSlot;
         if (!isMyBooking) return false;
         if (myGamesSubTab === 'FUTUROS' && slot.date < todayStr) return false;
@@ -289,13 +290,27 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
         }
         alert("Desafio aprovado! Aguardando aprovação da arena.");
       } else {
-        await api.updateSlot(slot.id, { status: 'rejected', isBooked: false });
+        await api.updateSlot(slot.id, { 
+          status: 'available', 
+          bookedByUserId: null, 
+          bookedByTeamName: null, 
+          bookedByTeamCategory: null,
+          opponentTeamName: null,
+          opponentTeamCategory: null,
+          opponentTeamPhone: null,
+          opponentTeamLogoUrl: null,
+          opponentTeamGender: null,
+          receiptUrl: null,
+          receiptUploadedAt: null,
+          isBooked: false
+        });
+        
         if (slot.bookedByUserId) {
           await api.createNotification({
             userId: slot.bookedByUserId,
             title: "Desafio Recusado ❌",
             description: `O mandante não aceitou seu desafio.`,
-            type: 'warning'
+            type: 'error'
           });
         }
         alert("Desafio recusado.");
@@ -388,7 +403,20 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
                       </select>
                    </div>
                </div>
-               <button onClick={() => { setSearchQuery(''); setFilterMaxDistance(100); setFilterRange('ALL'); }} className="text-[8px] font-black text-red-500 uppercase w-full text-right mt-1">Resetar filtros</button>
+               <div className="bg-white p-3 rounded-xl border flex items-center gap-2">
+                  <Calendar className="w-4 h-4 text-gray-400" />
+                  <input 
+                    type="date" 
+                    value={filterDate} 
+                    onChange={e => {
+                      setFilterDate(e.target.value);
+                      if (e.target.value) setFilterRange('SPECIFIC');
+                      else setFilterRange('ALL');
+                    }} 
+                    className="bg-transparent w-full font-bold text-[10px] uppercase outline-none"
+                  />
+               </div>
+               <button onClick={() => { setSearchQuery(''); setFilterMaxDistance(100); setFilterRange('ALL'); setFilterDate(''); }} className="text-[8px] font-black text-red-500 uppercase w-full text-right mt-1">Resetar filtros</button>
             </div>
           )}
         </div>
@@ -469,7 +497,7 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
                 
                 {viewMode === 'MY_BOOKINGS' && (
                    <div className="px-6 pb-6 space-y-4">
-                     {slot.status === 'pending_home_approval' && slot.bookedByUserId === currentUser.id && (
+                     {slot.status === 'pending_home_approval' && currentUser.teams.some(t => t.name === slot.localTeamName) && (
                        <div className="bg-orange-50 p-4 rounded-2xl border border-orange-100">
                          <p className="text-[10px] font-black text-orange-600 uppercase mb-3">Você foi desafiado! Aprovar partida?</p>
                          <div className="grid grid-cols-2 gap-2">

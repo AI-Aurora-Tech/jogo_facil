@@ -77,9 +77,11 @@ CREATE TABLE match_slot (
   opponent_team_gender TEXT,
   allowed_opponent_categories TEXT[] DEFAULT '{}',
   receipt_url TEXT,
+  receipt_uploaded_at TIMESTAMP WITH TIME ZONE,
   ai_verification_result JSONB,
   sport TEXT DEFAULT 'Futebol',
   court_name TEXT,
+  home_team_type TEXT DEFAULT 'LOCAL',
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
