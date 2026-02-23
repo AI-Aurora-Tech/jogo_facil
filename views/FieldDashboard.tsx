@@ -640,6 +640,8 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
             )}
           </div>
         )}
+
+        {activeTab === 'MENSALISTAS' && (
           <div className="space-y-4">
              {registeredTeams.map(t => (
                <div key={t.id} className="bg-white p-6 rounded-[3rem] border shadow-sm space-y-4">

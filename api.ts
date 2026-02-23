@@ -243,16 +243,14 @@ export const api = {
     };
   },
 
-  getSlotHistory: async (fieldId: string): Promise<MatchSlot[]> => {
+  getSlots: async (): Promise<MatchSlot[]> => {
     const today = new Date().toISOString().split('T')[0];
     const { data, error } = await supabase
       .from('match_slot')
       .select('*')
-      .eq('field_id', fieldId)
-      .lt('date', today)
-      .order('date', { ascending: false })
-      .order('time', { ascending: false })
-      .limit(50);
+      .gte('date', today)
+      .order('date')
+      .order('time');
     if (error) throw error;
     return (data || []).map(s => ({
       id: s.id,
@@ -287,13 +285,17 @@ export const api = {
       sport: s.sport
     })) as unknown as MatchSlot[];
   },
+
+  getSlotHistory: async (fieldId: string): Promise<MatchSlot[]> => {
     const today = new Date().toISOString().split('T')[0];
     const { data, error } = await supabase
       .from('match_slot')
       .select('*')
-      .gte('date', today)
-      .order('date')
-      .order('time');
+      .eq('field_id', fieldId)
+      .lt('date', today)
+      .order('date', { ascending: false })
+      .order('time', { ascending: false })
+      .limit(50);
     if (error) throw error;
     return (data || []).map(s => ({
       id: s.id,
