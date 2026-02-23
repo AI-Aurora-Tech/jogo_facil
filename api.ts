@@ -227,11 +227,73 @@ export const api = {
     }
     const { data, error } = await supabase.from('field').update(payload).eq('id', fieldId).select().single();
     if (error) throw error;
-    return data as any;
+    return {
+        id: data.id,
+        ownerId: data.owner_id,
+        name: data.name,
+        location: data.location,
+        hourlyRate: data.hourly_rate,
+        cancellationFeePercent: data.cancellation_fee_percent,
+        pixConfig: { key: data.pix_key || '', name: data.pix_name || '' },
+        imageUrl: data.image_url,
+        contactPhone: data.contact_phone,
+        latitude: Number(data.latitude) || 0,
+        longitude: Number(data.longitude) || 0,
+        courts: data.courts || ['Principal']
+    };
   },
 
-  getSlots: async (): Promise<MatchSlot[]> => {
-    const { data, error } = await supabase.from('match_slot').select('*').order('date').order('time');
+  getSlotHistory: async (fieldId: string): Promise<MatchSlot[]> => {
+    const today = new Date().toISOString().split('T')[0];
+    const { data, error } = await supabase
+      .from('match_slot')
+      .select('*')
+      .eq('field_id', fieldId)
+      .lt('date', today)
+      .order('date', { ascending: false })
+      .order('time', { ascending: false })
+      .limit(50);
+    if (error) throw error;
+    return (data || []).map(s => ({
+      id: s.id,
+      fieldId: s.field_id,
+      date: s.date,
+      time: s.time,
+      durationMinutes: s.duration_minutes,
+      matchType: s.match_type,
+      isBooked: s.is_booked,
+      hasLocalTeam: s.has_local_team,
+      localTeamName: s.local_team_name,
+      localTeamCategory: s.local_team_category,
+      localTeamPhone: s.local_team_phone,
+      localTeamLogoUrl: s.local_team_logo_url,
+      localTeamGender: s.local_team_gender,
+      bookedByUserId: s.booked_by_user_id,
+      bookedByTeamName: s.booked_by_team_name,
+      bookedByTeamCategory: s.booked_by_category,
+      opponentTeamName: s.opponent_team_name,
+      opponentTeamCategory: s.opponent_team_category,
+      opponentTeamPhone: s.opponent_team_phone,
+      opponentTeamLogoUrl: s.opponent_team_logo_url,
+      opponentTeamGender: s.opponent_team_gender,
+      status: s.status,
+      homeTeamType: s.home_team_type || 'LOCAL',
+      price: s.price,
+      allowedOpponentCategories: s.allowed_opponent_categories || [],
+      receiptUrl: s.receipt_url,
+      receiptUploadedAt: s.receipt_uploaded_at,
+      aiVerificationResult: s.ai_verification_result,
+      courtName: s.court_name,
+      sport: s.sport
+    })) as unknown as MatchSlot[];
+  },
+    const today = new Date().toISOString().split('T')[0];
+    const { data, error } = await supabase
+      .from('match_slot')
+      .select('*')
+      .gte('date', today)
+      .order('date')
+      .order('time');
     if (error) throw error;
     return (data || []).map(s => ({
       id: s.id,

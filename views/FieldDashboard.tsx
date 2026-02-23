@@ -71,9 +71,17 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
 
   const todayStr = new Date().toISOString().split('T')[0];
 
+  const [historicSlots, setHistoricSlots] = useState<MatchSlot[]>([]);
+
   useEffect(() => {
     if (forceTab) setActiveTab(forceTab);
   }, [forceTab]);
+
+  useEffect(() => {
+    if (activeTab === 'HISTORICO' && field.id) {
+      api.getSlotHistory(field.id).then(setHistoricSlots);
+    }
+  }, [activeTab, field.id]);
 
   useEffect(() => {
     loadMensalistas();
@@ -193,6 +201,12 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
   const handleCreateOrUpdateSlot = async () => {
     setIsLoading(true);
     try {
+      if (isLocalTeamSlot && !selectedRegisteredTeamId) {
+        alert("Por favor, selecione um time mandante.");
+        setIsLoading(false);
+        return;
+      }
+
       let teamName = null;
       let teamCategory = null;
       let teamPhone = null;
@@ -207,7 +221,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
              const ownerTeam = currentUser.teams[idx];
              if (ownerTeam) {
                 teamName = ownerTeam.name;
-                teamCategory = ownerTeam.categories[0] || manualLocalCategory;
+                teamCategory = ownerTeam.categories[0];
                 teamPhone = field.contactPhone; // Owner's phone
                 teamGender = ownerTeam.gender;
                 teamLogo = ownerTeam.logoUrl;
@@ -217,23 +231,14 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
              const regTeam = registeredTeams.find(t => t.id === selectedRegisteredTeamId);
              if (regTeam) {
                teamName = regTeam.name;
-               teamCategory = regTeam.categories[0] || manualLocalCategory;
+               teamCategory = regTeam.categories[0];
                teamPhone = regTeam.captainPhone;
                teamGender = regTeam.gender;
                teamLogo = regTeam.logoUrl;
                homeTeamType = 'MENSALISTA';
              }
           }
-        } else {
-          teamName = manualLocalTeamName || field.name || 'Time da Casa';
-          if (teamName === 'Carregando...') {
-              teamName = field.name !== 'Carregando...' ? field.name : 'Time da Casa';
-          }
-          teamCategory = manualLocalCategory;
-          teamPhone = field.contactPhone;
-          teamGender = 'MASCULINO';
-          homeTeamType = 'LOCAL';
-        }
+        } 
       }
 
       const allowedCats = acceptNeighbors && teamCategory
@@ -246,7 +251,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
         time: slotTime,
         durationMinutes: slotDuration,
         matchType: isLocalTeamSlot ? 'AMISTOSO' : slotMatchType,
-        isBooked: editingSlotId ? undefined : isLocalTeamSlot,
+        isBooked: isLocalTeamSlot, 
         hasLocalTeam: isLocalTeamSlot,
         localTeamName: teamName,
         localTeamCategory: teamCategory,
@@ -255,14 +260,19 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
         localTeamLogoUrl: teamLogo,
         homeTeamType: homeTeamType,
         price: slotPrice,
-        status: editingSlotId ? undefined : (isLocalTeamSlot ? 'confirmed' : 'available'),
+        status: isLocalTeamSlot ? 'confirmed' : 'available',
         courtName: slotCourt,
         sport: slotSport,
         allowedOpponentCategories: isLocalTeamSlot ? allowedCats : []
       } as any;
 
       if (editingSlotId) {
-        await api.updateSlot(editingSlotId, slotData);
+        // Ao editar, não queremos mudar o status ou isBooked diretamente aqui
+        // A menos que a lógica de negócio exija.
+        const updateData = { ...slotData };
+        delete updateData.isBooked;
+        delete updateData.status;
+        await api.updateSlot(editingSlotId, updateData);
         alert("Horário atualizado com sucesso!");
       } else {
         await api.createSlots([slotData]);
@@ -607,7 +617,29 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
            </div>
         )}
 
-        {activeTab === 'MENSALISTAS' && (
+        {activeTab === 'HISTORICO' && (
+          <div className="space-y-4">
+            {historicSlots.length === 0 ? (
+              <div className="text-center py-20 text-gray-400 font-black uppercase text-[10px]">Nenhum jogo no histórico.</div>
+            ) : (
+              historicSlots.map(slot => (
+                <div key={slot.id} className="bg-white p-5 rounded-[2.5rem] border shadow-sm">
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <h4 className="font-black text-pitch text-sm uppercase leading-tight">
+                        {slot.time} • {slot.date.split('-').reverse().slice(0,2).join('/')}
+                      </h4>
+                      <p className="text-[9px] font-bold text-gray-400 uppercase mt-1 truncate">
+                        {slot.localTeamName} vs {slot.opponentTeamName || '?'}
+                      </p>
+                    </div>
+                    <Button onClick={onRateTeam} variant="outline" className="text-xs">Avaliar</Button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        )}
           <div className="space-y-4">
              {registeredTeams.map(t => (
                <div key={t.id} className="bg-white p-6 rounded-[3rem] border shadow-sm space-y-4">
@@ -699,7 +731,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                              value={selectedRegisteredTeamId} 
                              onChange={e => setSelectedRegisteredTeamId(e.target.value)}
                            >
-                              <option value="">Time da Casa (Avulso)</option>
+                              <option value="">Selecione um time</option>
                               {currentUser.teams.map((t, i) => (
                                 <option key={`OWNER_TEAM_${i}`} value={`OWNER_TEAM_${i}`}>[MEU TIME] {t.name}</option>
                               ))}
@@ -709,17 +741,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                            </select>
                         </div>
                         
-                        {!selectedRegisteredTeamId && (
-                          <>
-                            <input className="w-full p-4 bg-white border rounded-xl text-xs font-bold" placeholder="Nome do Mandante" value={manualLocalTeamName} onChange={e => setManualLocalTeamName(e.target.value)} />
-                            <div>
-                               <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Categoria Principal</label>
-                               <select className="w-full p-4 bg-white border rounded-xl text-xs font-bold" value={manualLocalCategory} onChange={e => setManualLocalCategory(e.target.value)}>
-                                  {CATEGORY_ORDER.map(c => <option key={c} value={c}>{c}</option>)}
-                               </select>
-                            </div>
-                          </>
-                        )}
+                        
                         
                         <div className="flex items-center gap-2 cursor-pointer" onClick={() => setAcceptNeighbors(!acceptNeighbors)}>
                            <div className={`w-5 h-5 rounded border flex items-center justify-center transition-all ${acceptNeighbors ? 'bg-pitch border-pitch text-white' : 'bg-white border-gray-300'}`}>
