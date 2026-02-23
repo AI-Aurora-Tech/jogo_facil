@@ -127,19 +127,26 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
     setIsLoading(true);
     try {
       if (action === 'confirm') {
-        // Se for pending_verification, o dono do campo está confirmando o PIX
-        // Se for pending_field_approval, o dono do campo está confirmando o jogo (após o mandante aprovar ou se for time local)
-        // Se for pending_home_approval, o dono do campo está forçando a aprovação pelo mandante
-        const newStatus = slot.status === 'pending_verification' ? 'confirmed' : 'pending_payment';
-        
+        let newStatus: MatchStatus = 'pending_payment';
+        let title = "Desafio Aceito! 💸";
+        let desc = `A arena ${field.name} aceitou seu desafio. Realize o pagamento via PIX para confirmar.`;
+
+        if (slot.status === 'pending_verification') {
+           newStatus = 'confirmed';
+           title = "Pagamento Confirmado! ⚽";
+           desc = `Seu pagamento para o jogo na arena ${field.name} foi validado!`;
+        } else if (slot.status === 'pending_field_approval') {
+           // Se não tem time local (é aluguel de horário livre), vai para waiting_opponent
+           if (!slot.hasLocalTeam) {
+              newStatus = 'waiting_opponent';
+              title = "Reserva Aprovada! ⏳";
+              desc = `Sua reserva foi aprovada pela arena. Aguardando um time adversário aceitar o jogo.`;
+           }
+        }
+
         await api.updateSlot(slot.id, { status: newStatus });
         
         if (slot.bookedByUserId) {
-          const title = newStatus === 'confirmed' ? "Pagamento Confirmado! ⚽" : "Desafio Aceito! 💸";
-          const desc = newStatus === 'confirmed' 
-            ? `Seu pagamento para o jogo na arena ${field.name} foi validado!` 
-            : `A arena ${field.name} aceitou seu desafio. Realize o pagamento via PIX para confirmar.`;
-            
           await api.createNotification({
             userId: slot.bookedByUserId,
             title,
@@ -147,7 +154,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
             type: 'success'
           });
         }
-        alert(newStatus === 'confirmed' ? "Pagamento confirmado!" : "Desafio aceito! Aguardando pagamento.");
+        alert(newStatus === 'confirmed' ? "Pagamento confirmado!" : newStatus === 'waiting_opponent' ? "Reserva aprovada! Aguardando adversário." : "Desafio aceito! Aguardando pagamento.");
       } else {
         await api.updateSlot(slot.id, { 
           status: 'available', 
@@ -195,14 +202,27 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
 
       if (isLocalTeamSlot) {
         if (selectedRegisteredTeamId) {
-          const regTeam = registeredTeams.find(t => t.id === selectedRegisteredTeamId);
-          if (regTeam) {
-            teamName = regTeam.name;
-            teamCategory = regTeam.categories[0] || manualLocalCategory;
-            teamPhone = regTeam.captainPhone;
-            teamGender = regTeam.gender;
-            teamLogo = regTeam.logoUrl;
-            homeTeamType = 'MENSALISTA';
+          if (selectedRegisteredTeamId.startsWith('OWNER_TEAM_')) {
+             const idx = parseInt(selectedRegisteredTeamId.split('_')[2]);
+             const ownerTeam = currentUser.teams[idx];
+             if (ownerTeam) {
+                teamName = ownerTeam.name;
+                teamCategory = ownerTeam.categories[0] || manualLocalCategory;
+                teamPhone = field.contactPhone; // Owner's phone
+                teamGender = ownerTeam.gender;
+                teamLogo = ownerTeam.logoUrl;
+                homeTeamType = 'LOCAL';
+             }
+          } else {
+             const regTeam = registeredTeams.find(t => t.id === selectedRegisteredTeamId);
+             if (regTeam) {
+               teamName = regTeam.name;
+               teamCategory = regTeam.categories[0] || manualLocalCategory;
+               teamPhone = regTeam.captainPhone;
+               teamGender = regTeam.gender;
+               teamLogo = regTeam.logoUrl;
+               homeTeamType = 'MENSALISTA';
+             }
           }
         } else {
           teamName = manualLocalTeamName || field.name || 'Time da Casa';
@@ -331,7 +351,9 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
 
   const agendaSlots = slots
     .filter(s => {
-       if (s.date < todayStr) return false;
+       // Show all slots from today onwards, or past slots if they are pending something
+       if (s.date < todayStr && (s.status === 'confirmed' || s.status === 'available')) return false; 
+       
        if (filterRange === 'SPECIFIC') {
           if (filterSpecificDate && s.date !== filterSpecificDate) return false;
        } else if (filterRange !== 'ALL') {
@@ -372,6 +394,8 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
       badges.push({ label: 'AGUARDANDO SUA APROVAÇÃO', color: 'bg-orange-400 text-white', icon: <UserCheck className="w-3 h-3"/> });
     } else if (slot.status === 'pending_home_approval') {
       badges.push({ label: 'AGUARDANDO APROVAÇÃO DO MANDANTE', color: 'bg-yellow-400 text-pitch', icon: <Clock className="w-3 h-3"/> });
+    } else if (slot.status === 'waiting_opponent') {
+      badges.push({ label: 'AGUARDANDO ADVERSÁRIO', color: 'bg-blue-400 text-white', icon: <Swords className="w-3 h-3"/> });
     } else if (hasAtLeastOneTeam) {
       badges.push({ label: 'AGUARDANDO ADVERSÁRIO', color: 'bg-yellow-400 text-pitch font-black', icon: <Swords className="w-3 h-3"/> });
     } else {
@@ -444,6 +468,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                           className="bg-transparent font-bold text-[10px] outline-none w-full uppercase text-gray-600 appearance-none p-1"
                         >
                            <option value="7">Próximos 7 Dias</option>
+                           <option value="15">Próximos 15 Dias</option>
                            <option value="30">Próximos 30 Dias</option>
                            <option value="ALL">Ver Todos</option>
                            <option value="SPECIFIC">Data Específica</option>
@@ -609,7 +634,16 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                   </Button>
                </div>
              ))}
-             <button onClick={() => { setEditingMensalista(null); setMensalistaName(''); setMensalistaPhone(''); setShowAddMensalistaModal(true); }} className="w-full py-5 border-2 border-dashed border-gray-200 rounded-[2rem] text-gray-400 font-black uppercase text-[10px]">Adicionar Novo Mensalista</button>
+             <div className="grid grid-cols-2 gap-4">
+               <button onClick={() => {
+                 const link = `${window.location.origin}/?inviteFieldId=${field.id}`;
+                 navigator.clipboard.writeText(link);
+                 alert("Link de convite copiado! Envie para o capitão do time mensalista.");
+               }} className="w-full py-5 border-2 border-dashed border-pitch text-pitch font-black uppercase text-[10px] rounded-[2rem] flex items-center justify-center gap-2 hover:bg-pitch hover:text-white transition-all">
+                 <Mail className="w-4 h-4" /> Convidar Mensalista (Link)
+               </button>
+               <button onClick={() => { setEditingMensalista(null); setMensalistaName(''); setMensalistaPhone(''); setShowAddMensalistaModal(true); }} className="w-full py-5 border-2 border-dashed border-gray-200 rounded-[2rem] text-gray-400 font-black uppercase text-[10px]">Adicionar Manualmente</button>
+             </div>
           </div>
         )}
       </div>
@@ -666,8 +700,11 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                              onChange={e => setSelectedRegisteredTeamId(e.target.value)}
                            >
                               <option value="">Time da Casa (Avulso)</option>
+                              {currentUser.teams.map((t, i) => (
+                                <option key={`OWNER_TEAM_${i}`} value={`OWNER_TEAM_${i}`}>[MEU TIME] {t.name}</option>
+                              ))}
                               {registeredTeams.map(t => (
-                                <option key={t.id} value={t.id}>{t.name}</option>
+                                <option key={t.id} value={t.id}>[MENSALISTA] {t.name}</option>
                               ))}
                            </select>
                         </div>

@@ -52,6 +52,57 @@ const App: React.FC = () => {
     }
   }, [user, impersonatingUser]);
 
+  // Verifica convite de mensalista
+  useEffect(() => {
+    const checkInvite = async () => {
+       const query = new URLSearchParams(window.location.search);
+       const inviteFieldId = query.get('inviteFieldId');
+       
+       if (inviteFieldId) {
+          if (user) {
+             if (confirm("Você foi convidado para ser mensalista desta arena. Aceitar convite?")) {
+                setIsLoading(true);
+                try {
+                   await api.acceptInvitation(inviteFieldId, user);
+                   alert("Convite aceito com sucesso! Agora você é mensalista.");
+                   window.history.replaceState({}, document.title, window.location.pathname);
+                } catch (e) {
+                   console.error(e);
+                   alert("Erro ao aceitar convite.");
+                } finally {
+                   setIsLoading(false);
+                }
+             }
+          } else {
+             // Se não logado, salva para depois
+             localStorage.setItem('pending_invite_field_id', inviteFieldId);
+             setView('AUTH');
+          }
+       } else if (user) {
+          // Check pending invite from localStorage
+          const pendingInvite = localStorage.getItem('pending_invite_field_id');
+          if (pendingInvite) {
+             if (confirm("Você foi convidado para ser mensalista desta arena. Aceitar convite?")) {
+                setIsLoading(true);
+                try {
+                   await api.acceptInvitation(pendingInvite, user);
+                   alert("Convite aceito com sucesso! Agora você é mensalista.");
+                   localStorage.removeItem('pending_invite_field_id');
+                } catch (e) {
+                   console.error(e);
+                   alert("Erro ao aceitar convite.");
+                } finally {
+                   setIsLoading(false);
+                }
+             } else {
+                localStorage.removeItem('pending_invite_field_id');
+             }
+          }
+       }
+    };
+    checkInvite();
+  }, [user]);
+
   // Verifica retorno do Mercado Pago
   useEffect(() => {
     const checkPaymentReturn = async () => {
@@ -618,6 +669,9 @@ const App: React.FC = () => {
                    refreshData();
                 }}
                 onCancelBooking={handleCancelBooking}
+                onRateTeam={() => {
+                  alert("Funcionalidade de avaliação em breve!");
+                }}
             />
         )}
 

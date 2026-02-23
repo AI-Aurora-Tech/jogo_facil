@@ -16,6 +16,7 @@ interface TeamDashboardProps {
   onCancelBooking: (slotId: string) => void;
   viewMode: 'EXPLORE' | 'MY_BOOKINGS';
   onRefresh: () => void;
+  onRateTeam?: () => void;
 }
 
 type SortOption = 'DISTANCE_ASC' | 'DISTANCE_DESC' | 'PRICE_ASC' | 'PRICE_DESC' | 'NAME_ASC' | 'NAME_DESC';
@@ -136,6 +137,11 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
           limit.setDate(limit.getDate() + 15);
           const limitStr = limit.toISOString().split('T')[0];
           if (slot.date < todayStr || slot.date > limitStr) return false;
+      } else if (filterRange === '30DAYS') {
+          const limit = new Date();
+          limit.setDate(limit.getDate() + 30);
+          const limitStr = limit.toISOString().split('T')[0];
+          if (slot.date < todayStr || slot.date > limitStr) return false;
       }
 
       if (filterMaxDistance !== '') {
@@ -148,6 +154,10 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
         if (field.ownerId === currentUser.id) return false;
         const hasFirstTeam = (slot.bookedByTeamName || slot.hasLocalTeam);
         const hasOpponent = !!slot.opponentTeamName;
+        
+        // Allow waiting_opponent slots
+        if (slot.status === 'waiting_opponent') return true;
+
         if (hasFirstTeam && hasOpponent) return false;
         const isAwaitingAdversary = hasFirstTeam && !hasOpponent;
         const isFullyAvailable = slot.status === 'available' && !hasFirstTeam;
@@ -192,6 +202,7 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
        if (slot.opponentTeamName) return { label: 'JOGO CONFIRMADO', color: 'bg-grass-500 text-white', icon: <CalendarCheck className="w-3 h-3"/> };
        return { label: 'AGUARDANDO ADVERSÁRIO', color: 'bg-yellow-100 text-yellow-700 font-bold', icon: <Swords className="w-3 h-3"/> };
     }
+    if (status === 'waiting_opponent') return { label: 'AGUARDANDO ADVERSÁRIO', color: 'bg-blue-100 text-blue-700 font-bold', icon: <Swords className="w-3 h-3"/> };
     if (status === 'pending_verification') return { label: 'AGUARDANDO VALIDAÇÃO', color: 'bg-orange-100 text-orange-600', icon: <Clock className="w-3 h-3"/> };
     if (status === 'pending_payment') return { label: 'AGUARDANDO SEU PAGAMENTO', color: 'bg-blue-100 text-blue-600', icon: <Clock className="w-3 h-3"/> };
     if (status === 'pending_home_approval') return { label: 'AGUARDANDO SUA APROVAÇÃO', color: 'bg-orange-100 text-orange-600', icon: <Clock className="w-3 h-3"/> };
@@ -403,18 +414,29 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
                       </select>
                    </div>
                </div>
-               <div className="bg-white p-3 rounded-xl border flex items-center gap-2">
-                  <Calendar className="w-4 h-4 text-gray-400" />
-                  <input 
-                    type="date" 
-                    value={filterDate} 
-                    onChange={e => {
-                      setFilterDate(e.target.value);
-                      if (e.target.value) setFilterRange('SPECIFIC');
-                      else setFilterRange('ALL');
-                    }} 
-                    className="bg-transparent w-full font-bold text-[10px] uppercase outline-none"
-                  />
+               <div className="grid grid-cols-2 gap-2">
+                   <div className="bg-white p-3 rounded-xl border flex items-center gap-2">
+                      <Calendar className="w-4 h-4 text-gray-400" />
+                      <select value={filterRange} onChange={e => setFilterRange(e.target.value)} className="bg-transparent w-full font-bold text-[10px] uppercase outline-none">
+                         <option value="ALL">Todos os dias</option>
+                         <option value="TODAY">Hoje</option>
+                         <option value="TOMORROW">Amanhã</option>
+                         <option value="7DAYS">Próximos 7 dias</option>
+                         <option value="15DAYS">Próximos 15 dias</option>
+                         <option value="30DAYS">Próximos 30 dias</option>
+                         <option value="SPECIFIC">Data Específica</option>
+                      </select>
+                   </div>
+                   {filterRange === 'SPECIFIC' && (
+                     <div className="bg-white p-3 rounded-xl border flex items-center gap-2">
+                        <input 
+                          type="date" 
+                          value={filterDate} 
+                          onChange={e => setFilterDate(e.target.value)} 
+                          className="bg-transparent w-full font-bold text-[10px] uppercase outline-none"
+                        />
+                     </div>
+                   )}
                </div>
                <button onClick={() => { setSearchQuery(''); setFilterMaxDistance(100); setFilterRange('ALL'); setFilterDate(''); }} className="text-[8px] font-black text-red-500 uppercase w-full text-right mt-1">Resetar filtros</button>
             </div>
@@ -551,16 +573,27 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
                            <span className="text-[9px] font-black uppercase">Falar com Arena</span>
                         </button>
                         {slot.status === 'confirmed' && (
-                          <button 
-                            onClick={() => {
-                              const msg = `Fala time! Nosso jogo na arena ${field?.name} está confirmado para o dia ${slot.date.split('-').reverse().join('/')} às ${slot.time}. Bora!`;
-                              window.open(api.getWhatsAppLink('', msg), '_blank'); // Abre o WA para escolher contato
-                            }}
-                            className="flex-1 py-3 bg-grass-50 text-grass-600 rounded-xl flex items-center justify-center gap-2 border border-grass-100 hover:bg-grass-100 transition-all"
-                          >
-                             <Smartphone className="w-4 h-4" />
-                             <span className="text-[9px] font-black uppercase">Convidar Time</span>
-                          </button>
+                          <div className="flex gap-2 w-full">
+                             <button 
+                               onClick={() => {
+                                 const msg = `Fala time! Nosso jogo na arena ${field?.name} está confirmado para o dia ${slot.date.split('-').reverse().join('/')} às ${slot.time}. Bora!`;
+                                 window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank');
+                               }}
+                               className="flex-1 py-3 bg-grass-50 text-grass-600 rounded-xl flex items-center justify-center gap-2 border border-grass-100 hover:bg-grass-100 transition-all"
+                             >
+                                <Smartphone className="w-4 h-4" />
+                                <span className="text-[9px] font-black uppercase">Convidar Time</span>
+                             </button>
+                             {onRateTeam && (
+                               <button 
+                                 onClick={onRateTeam}
+                                 className="flex-1 py-3 bg-yellow-50 text-yellow-600 rounded-xl flex items-center justify-center gap-2 border border-yellow-100 hover:bg-yellow-100 transition-all"
+                               >
+                                  <Trophy className="w-4 h-4" />
+                                  <span className="text-[9px] font-black uppercase">Avaliar</span>
+                               </button>
+                             )}
+                          </div>
                         )}
                      </div>
                    </div>

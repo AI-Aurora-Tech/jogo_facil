@@ -65,7 +65,7 @@ export interface Field {
   courts: string[];
 }
 
-export type MatchStatus = 'available' | 'pending_home_approval' | 'pending_field_approval' | 'pending_payment' | 'pending_verification' | 'confirmed' | 'rejected';
+export type MatchStatus = 'available' | 'pending_home_approval' | 'pending_field_approval' | 'pending_payment' | 'pending_verification' | 'confirmed' | 'rejected' | 'waiting_opponent';
 
 export interface MatchSlot {
   id: string;

@@ -382,8 +382,38 @@ export const api = {
     await supabase.from('registered_team').update(payload).eq('id', teamId);
   },
 
-  deleteRegisteredTeam: async (teamId: string): Promise<void> => {
-    await supabase.from('registered_team').delete().eq('id', teamId);
+  deleteRegisteredTeam: async (id: string): Promise<void> => {
+    await supabase.from('registered_team').delete().eq('id', id);
+  },
+
+  acceptInvitation: async (fieldId: string, user: User): Promise<void> => {
+    // Check if already registered
+    const { data: existing } = await supabase
+      .from('registered_team')
+      .select('id')
+      .eq('field_id', fieldId)
+      .eq('email', user.email)
+      .single();
+    
+    if (existing) return;
+
+    const firstTeam = user.teams && user.teams.length > 0 ? user.teams[0] : null;
+    
+    await supabase.from('registered_team').insert([{
+      field_id: fieldId,
+      name: firstTeam?.name || user.name,
+      categories: firstTeam?.categories || [],
+      logo_url: firstTeam?.logoUrl || '',
+      captain_name: user.name,
+      captain_phone: user.phoneNumber,
+      email: user.email,
+      gender: firstTeam?.gender || 'MASCULINO',
+      sport: firstTeam?.sport || 'Society',
+      // Default values for fixed slot (can be edited later by field owner)
+      fixed_day: 1,
+      fixed_time: '19:00',
+      court_name: 'Principal'
+    }]);
   },
 
   adminUpdatePassword: async (userId: string, newPassword: string): Promise<void> => {
