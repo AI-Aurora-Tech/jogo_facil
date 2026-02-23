@@ -58,8 +58,9 @@ const App: React.FC = () => {
       const query = new URLSearchParams(window.location.search);
       // O Mercado Pago retorna 'status' ou 'collection_status'
       const status = query.get('status') || query.get('collection_status');
+      const preapproval_id = query.get('preapproval_id');
       
-      if (status === 'approved' && user) {
+      if ((status === 'approved' || status === 'authorized' || preapproval_id) && user) {
         setIsLoading(true);
         try {
            // Remove parametros da URL para não processar novamente
