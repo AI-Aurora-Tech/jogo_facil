@@ -12,6 +12,7 @@ interface FieldDashboardProps {
   slots: MatchSlot[];
   currentUser: User;
   onAddSlot: (slots: Omit<MatchSlot, 'id'>[]) => Promise<void>;
+  onUpdateSlot: (slotId: string, updates: Partial<MatchSlot>) => Promise<void>;
   onRefreshData: () => void;
   onDeleteSlot: (slotId: string) => void;
   onConfirmBooking: (slotId: string) => void;
@@ -22,7 +23,7 @@ interface FieldDashboardProps {
 }
 
 export const FieldDashboard: React.FC<FieldDashboardProps> = ({ 
-  field, slots, onAddSlot, onRefreshData, onDeleteSlot, onConfirmBooking, onRejectBooking, currentUser, categories, onUpdateField, onRateTeam, forceTab
+  field, slots, onAddSlot, onUpdateSlot, onRefreshData, onDeleteSlot, onConfirmBooking, onRejectBooking, currentUser, categories, onUpdateField, onRateTeam, forceTab
 }) => {
   const [activeTab, setActiveTab] = useState<'AGENDA' | 'SOLICITACOES' | 'MENSALISTAS' | 'HISTORICO'>('AGENDA');
   const [isLoading, setIsLoading] = useState(false);
@@ -301,7 +302,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
         const updateData = { ...slotData };
         delete updateData.isBooked;
         delete updateData.status;
-        await api.updateSlot(editingSlotId, updateData);
+        await onUpdateSlot(editingSlotId, updateData);
         alert("Horário atualizado com sucesso!");
       } else {
         await onAddSlot([slotData]);
@@ -695,15 +696,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                   </Button>
                </div>
              ))}
-             <div className="grid grid-cols-2 gap-4">
-               <button onClick={() => {
-                 const link = `${window.location.origin}/?inviteFieldId=${field.id}`;
-                 const message = `${field.name} te convidou para o clube de mensalistas! Acesse o link para aceitar: ${link}`;
-                 navigator.clipboard.writeText(message);
-                 alert("Mensagem de convite copiada!");
-               }} className="w-full py-5 border-2 border-dashed border-pitch text-pitch font-black uppercase text-[10px] rounded-[2rem] flex items-center justify-center gap-2 hover:bg-pitch hover:text-white transition-all">
-                 <Mail className="w-4 h-4" /> Convidar Mensalista (Link)
-               </button>
+             <div className="grid grid-cols-1 gap-4">
                <button onClick={() => { setEditingMensalista(null); setMensalistaName(''); setMensalistaPhone(''); setShowAddMensalistaModal(true); }} className="w-full py-5 border-2 border-dashed border-gray-200 rounded-[2rem] text-gray-400 font-black uppercase text-[10px]">Adicionar Manualmente</button>
              </div>
           </div>

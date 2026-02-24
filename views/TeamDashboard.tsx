@@ -150,7 +150,6 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
 
       if (viewMode === 'EXPLORE') {
         if (slot.date < todayStr) return false;
-        if (field.ownerId === currentUser.id) return false;
         const hasFirstTeam = (slot.bookedByTeamName || slot.hasLocalTeam);
         const hasOpponent = !!slot.opponentTeamName;
         

@@ -212,20 +212,9 @@ const App: React.FC = () => {
       const fetchedFields = await api.getFields().catch(() => [] as Field[]);
       setFields(fetchedFields);
 
-      let slotsPromise;
-      if (currentUser && currentUser.role === UserRole.FIELD_OWNER) {
-        const field = fetchedFields.find(f => f.ownerId === currentUser.id);
-        if (field) {
-          slotsPromise = api.getSlotsByFieldId(field.id).catch(() => [] as MatchSlot[]);
-        } else {
-          slotsPromise = api.getSlots().catch(() => [] as MatchSlot[]);
-        }
-      } else {
-        slotsPromise = api.getSlots().catch(() => [] as MatchSlot[]);
-      }
-
+      // Always fetch all slots to ensure they are available for the EXPLORE tab
       const [fetchedSlots, fetchedCats] = await Promise.all([
-        slotsPromise,
+        api.getSlots().catch(() => [] as MatchSlot[]),
         api.getCategories().catch(() => ["Livre"] as string[])
       ]);
       
@@ -686,28 +675,40 @@ const App: React.FC = () => {
 
         {activeTab === 'ADMIN' && currentUserContext && (
           currentUserContext.role === UserRole.FIELD_OWNER ? (
-            <FieldDashboard 
-                categories={categories} 
-                field={fields.find(f => f.ownerId === currentUserContext.id) || { id: '', name: 'Carregando...', ownerId: '', location: '', hourlyRate: 0, cancellationFeePercent: 0, pixConfig: { key: '', name: '' }, imageUrl: '', contactPhone: '', latitude: 0, longitude: 0, courts: [] }} 
-                slots={slots.filter(s => s.fieldId === fields.find(f => f.ownerId === currentUserContext.id)?.id)} 
-                currentUser={currentUserContext}
-                onAddSlot={async (newSlots) => { 
-                  const createdSlots = await api.createSlots(newSlots); 
-                  setSlots(prev => [...prev, ...createdSlots]); 
-                }}
-                onRefreshData={refreshData}
-                onDeleteSlot={async id => { await api.deleteSlot(id); refreshData(); }}
-                onConfirmBooking={async id => { 
-                  const slot = slots.find(s => s.id === id);
-                  const newStatus = slot?.status === 'pending_verification' ? 'confirmed' : 'pending_payment';
-                  await api.updateSlot(id, { status: newStatus, isBooked: true }); 
-                  refreshData(); 
-                }}
-                onRejectBooking={async id => { await api.updateSlot(id, { status: 'rejected', isBooked: false, receiptUrl: undefined }); refreshData(); }}
-                onUpdateField={async (id, u) => { await api.updateField(id, u); refreshData(); return true; }}
-                onRateTeam={() => {}}
-                forceTab={fieldDashForceTab}
-            />
+            (() => {
+              const userField = fields.find(f => f.ownerId === currentUserContext.id);
+              return (
+                <FieldDashboard 
+                    categories={categories} 
+                    field={userField || { id: '', name: 'Carregando...', ownerId: '', location: '', hourlyRate: 0, cancellationFeePercent: 0, pixConfig: { key: '', name: '' }, imageUrl: '', contactPhone: '', latitude: 0, longitude: 0, courts: [] }} 
+                    slots={userField ? slots.filter(s => s.fieldId === userField.id) : []} 
+                    currentUser={currentUserContext}
+                    onAddSlot={async (newSlots) => { 
+                      const createdSlots = await api.createSlots(newSlots); 
+                      setSlots(prev => [...prev, ...createdSlots]); 
+                    }}
+                    onUpdateSlot={async (id, updates) => {
+                      await api.updateSlot(id, updates);
+                      setSlots(prev => prev.map(s => s.id === id ? { ...s, ...updates } : s));
+                    }}
+                    onRefreshData={refreshData}
+                    onDeleteSlot={async id => { 
+                      await api.deleteSlot(id); 
+                      setSlots(prev => prev.filter(s => s.id !== id));
+                    }}
+                    onConfirmBooking={async id => { 
+                      const slot = slots.find(s => s.id === id);
+                      const newStatus = slot?.status === 'pending_verification' ? 'confirmed' : 'pending_payment';
+                      await api.updateSlot(id, { status: newStatus, isBooked: true }); 
+                      refreshData(); 
+                    }}
+                    onRejectBooking={async id => { await api.updateSlot(id, { status: 'rejected', isBooked: false, receiptUrl: undefined }); refreshData(); }}
+                    onUpdateField={async (id, u) => { await api.updateField(id, u); refreshData(); return true; }}
+                    onRateTeam={() => {}}
+                    forceTab={fieldDashForceTab}
+                />
+              );
+            })()
           ) : (
             <div className="p-20 text-center flex flex-col items-center">
               <div className="bg-red-50 text-red-500 p-6 rounded-full mb-6"><Shield className="w-12 h-12" /></div>
