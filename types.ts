@@ -110,6 +110,7 @@ export interface RegisteredTeam {
   fieldId: string;
   fixedDay: string;
   fixedTime: string;
+  fixedDurationMinutes?: number;
   categories: string[];
   logoUrl?: string;
   createdAt: string;

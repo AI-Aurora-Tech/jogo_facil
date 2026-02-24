@@ -70,6 +70,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
   const [mensalistaGender, setMensalistaGender] = useState<Gender>('MASCULINO');
   const [mensalistaSport, setMensalistaSport] = useState('Society');
   const [mensalistaCourt, setMensalistaCourt] = useState(field.courts?.[0] || 'Principal');
+  const [mensalistaDuration, setMensalistaDuration] = useState(60);
 
   const todayStr = new Date().toISOString().split('T')[0];
 
@@ -141,7 +142,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
     setEditingSlotId(slot.id);
     setSlotDate(slot.date);
     setSlotTime(slot.time);
-    setSlotDuration(slot.durationMinutes);
+    setSlotDuration(slot.durationMinutes || 60);
     setSlotMatchType(slot.matchType);
     setSlotCourt(slot.courtName || field.courts[0]);
     setSlotPrice(slot.price);
@@ -334,6 +335,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
         email: mensalistaEmail,
         fixedDay: String(mensalistaDay),
         fixedTime: mensalistaTime,
+        fixedDurationMinutes: mensalistaDuration,
         categories: [mensalistaCategory],
         logoUrl: mensalistaLogo,
         gender: mensalistaGender,
@@ -368,11 +370,28 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
       currentDate.setHours(12, 0, 0, 0);
       let count = 0;
       while (count < 10) {
-        if (currentDate.getDay() === targetDay) {
+          if (currentDate.getDay() === targetDay) {
           const dateStr = currentDate.toISOString().split('T')[0];
           if (!slots.some(s => s.date === dateStr && s.time === team.fixedTime && s.courtName === team.courtName)) {
             slotsToCreate.push({
-              fieldId: field.id, date: dateStr, time: team.fixedTime, durationMinutes: 60, matchType: 'FIXO', isBooked: true, hasLocalTeam: true, localTeamName: team.name, localTeamCategory: team.categories[0], localTeamPhone: team.captainPhone, localTeamLogoUrl: team.logoUrl, localTeamGender: team.gender, allowedOpponentCategories: team.categories, status: 'confirmed', price: field.hourlyRate, sport: team.sport, courtName: team.courtName, homeTeamType: 'MENSALISTA'
+              fieldId: field.id, 
+              date: dateStr, 
+              time: team.fixedTime, 
+              durationMinutes: team.fixedDurationMinutes || 60, 
+              matchType: 'FIXO', 
+              isBooked: true, 
+              hasLocalTeam: true, 
+              localTeamName: team.name, 
+              localTeamCategory: team.categories[0], 
+              localTeamPhone: team.captainPhone, 
+              localTeamLogoUrl: team.logoUrl, 
+              localTeamGender: team.gender, 
+              allowedOpponentCategories: team.categories, 
+              status: 'pending_payment', 
+              price: field.hourlyRate, 
+              sport: team.sport, 
+              courtName: team.courtName, 
+              homeTeamType: 'MENSALISTA'
             });
             count++;
           }
@@ -436,9 +455,9 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
     } else if (slot.status === 'pending_home_approval') {
       badges.push({ label: 'AGUARDANDO APROVAÇÃO DO MANDANTE', color: 'bg-yellow-400 text-pitch', icon: <Clock className="w-3 h-3"/> });
     } else if (slot.status === 'waiting_opponent') {
-      badges.push({ label: 'AGUARDANDO ADVERSÁRIO', color: 'bg-blue-400 text-white', icon: <Swords className="w-3 h-3"/> });
-    } else if (hasAtLeastOneTeam) {
-      badges.push({ label: 'AGUARDANDO ADVERSÁRIO', color: 'bg-yellow-400 text-pitch font-black', icon: <Swords className="w-3 h-3"/> });
+      badges.push({ label: 'JOGO EM ABERTO', color: 'bg-blue-400 text-white', icon: <Swords className="w-3 h-3"/> });
+    } else if (hasAtLeastOneTeam && !hasOpponent) {
+      badges.push({ label: 'JOGO EM ABERTO', color: 'bg-yellow-400 text-pitch font-black', icon: <Swords className="w-3 h-3"/> });
     } else {
       badges.push({ label: 'DISPONÍVEL', color: 'bg-gray-100 text-gray-400', icon: <Clock className="w-3 h-3"/> });
     }
@@ -625,12 +644,16 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                     <div className="bg-gray-50 rounded-2xl p-4 flex items-center justify-between">
                        <div className="flex items-center gap-3">
                           <div className="w-12 h-12 bg-white rounded-xl border flex items-center justify-center overflow-hidden">
-                             {slot.opponentTeamLogoUrl ? <img src={slot.opponentTeamLogoUrl} className="w-full h-full object-cover" /> : <div className="font-black">{slot.opponentTeamName?.charAt(0)}</div>}
+                             {(slot.opponentTeamLogoUrl || slot.bookedByTeamLogoUrl) ? (
+                               <img src={slot.opponentTeamLogoUrl || slot.bookedByTeamLogoUrl} className="w-full h-full object-cover" />
+                             ) : (
+                               <div className="font-black">{(slot.opponentTeamName || slot.bookedByTeamName)?.charAt(0)}</div>
+                             )}
                           </div>
                           <div>
-                             <p className="text-[8px] font-black text-gray-400 uppercase">Desafiante</p>
-                             <p className="font-black text-pitch uppercase">{slot.opponentTeamName}</p>
-                             <p className="text-[9px] font-bold text-grass-600 uppercase">{slot.opponentTeamCategory}</p>
+                             <p className="text-[8px] font-black text-gray-400 uppercase">Solicitante</p>
+                             <p className="font-black text-pitch uppercase">{slot.opponentTeamName || slot.bookedByTeamName}</p>
+                             <p className="text-[9px] font-bold text-grass-600 uppercase">{slot.opponentTeamCategory || slot.bookedByTeamCategory}</p>
                           </div>
                        </div>
                     </div>
@@ -723,6 +746,10 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                     <div className="bg-gray-50 p-4 rounded-2xl border">
                        <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Hora Início</label>
                        <input type="time" className="w-full bg-transparent font-black outline-none" value={slotTime} onChange={e => setSlotTime(e.target.value)} />
+                    </div>
+                    <div className="bg-gray-50 p-4 rounded-2xl border">
+                       <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Duração (minutos)</label>
+                       <input type="number" className="w-full bg-transparent font-black outline-none" value={slotDuration} onChange={e => setSlotDuration(Number(e.target.value))} />
                     </div>
                  </div>
                  <div className="grid grid-cols-2 gap-4">
@@ -878,6 +905,10 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                     <div className="bg-gray-50 p-4 rounded-2xl border">
                        <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Horário</label>
                        <input type="time" className="w-full bg-transparent font-black outline-none text-pitch" value={mensalistaTime} onChange={e => setMensalistaTime(e.target.value)} />
+                    </div>
+                    <div className="bg-gray-50 p-4 rounded-2xl border">
+                       <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Duração (minutos)</label>
+                       <input type="number" className="w-full bg-transparent font-black outline-none text-pitch" value={mensalistaDuration} onChange={e => setMensalistaDuration(Number(e.target.value))} />
                     </div>
                  </div>
                  <div className="bg-pitch/5 p-6 rounded-[2.5rem] border border-pitch/10 space-y-4">

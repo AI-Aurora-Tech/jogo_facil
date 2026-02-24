@@ -276,6 +276,8 @@ export const api = {
       bookedByUserId: s.booked_by_user_id,
       bookedByTeamName: s.booked_by_team_name,
       bookedByTeamCategory: s.booked_by_category,
+      bookedByTeamLogoUrl: s.booked_by_team_logo_url,
+      bookedByUserPhone: s.booked_by_user_phone,
       opponentTeamName: s.opponent_team_name,
       opponentTeamCategory: s.opponent_team_category,
       opponentTeamPhone: s.opponent_team_phone,
@@ -291,7 +293,7 @@ export const api = {
       sport: s.sport
     })) as unknown as MatchSlot[];
   },
-
+  
   getSlotsByFieldId: async (fieldId: string): Promise<MatchSlot[]> => {
     const today = new Date().toISOString().split('T')[0];
     const { data, error } = await supabase
@@ -319,6 +321,8 @@ export const api = {
       bookedByUserId: s.booked_by_user_id,
       bookedByTeamName: s.booked_by_team_name,
       bookedByTeamCategory: s.booked_by_category,
+      bookedByTeamLogoUrl: s.booked_by_team_logo_url,
+      bookedByUserPhone: s.booked_by_user_phone,
       opponentTeamName: s.opponent_team_name,
       opponentTeamCategory: s.opponent_team_category,
       opponentTeamPhone: s.opponent_team_phone,
@@ -363,6 +367,8 @@ export const api = {
       bookedByUserId: s.booked_by_user_id,
       bookedByTeamName: s.booked_by_team_name,
       bookedByTeamCategory: s.booked_by_category,
+      bookedByTeamLogoUrl: s.booked_by_team_logo_url,
+      bookedByUserPhone: s.booked_by_user_phone,
       opponentTeamName: s.opponent_team_name,
       opponentTeamCategory: s.opponent_team_category,
       opponentTeamPhone: s.opponent_team_phone,
@@ -396,6 +402,8 @@ export const api = {
       booked_by_user_id: s.bookedByUserId || null,
       booked_by_team_name: s.bookedByTeamName || null,
       booked_by_category: s.bookedByTeamCategory || null,
+      booked_by_team_logo_url: s.bookedByTeamLogoUrl || null,
+      booked_by_user_phone: s.bookedByUserPhone || null,
       opponent_team_name: s.opponentTeamName || null,
       opponent_team_category: s.opponentTeamCategory || null,
       opponent_team_phone: s.opponentTeamPhone || null,
@@ -428,6 +436,8 @@ export const api = {
       bookedByUserId: s.booked_by_user_id,
       bookedByTeamName: s.booked_by_team_name,
       bookedByTeamCategory: s.booked_by_category,
+      bookedByTeamLogoUrl: s.booked_by_team_logo_url,
+      bookedByUserPhone: s.booked_by_user_phone,
       opponentTeamName: s.opponent_team_name,
       opponentTeamCategory: s.opponent_team_category,
       opponentTeamPhone: s.opponent_team_phone,
@@ -458,6 +468,8 @@ export const api = {
     if (data.opponentTeamGender !== undefined) payload.opponent_team_gender = data.opponentTeamGender;
     if (data.bookedByUserId !== undefined) payload.booked_by_user_id = data.bookedByUserId;
     if (data.bookedByTeamCategory !== undefined) payload.booked_by_category = data.bookedByTeamCategory;
+    if (data.bookedByTeamLogoUrl !== undefined) payload.booked_by_team_logo_url = data.bookedByTeamLogoUrl;
+    if (data.bookedByUserPhone !== undefined) payload.booked_by_user_phone = data.bookedByUserPhone;
     
     // Missing fields from previous implementation
     if (data.date !== undefined) payload.date = data.date;
@@ -496,6 +508,7 @@ export const api = {
       fieldId: t.field_id,
       fixedDay: t.fixed_day,
       fixedTime: t.fixed_time,
+      fixedDurationMinutes: t.fixed_duration_minutes,
       categories: t.categories,
       logoUrl: t.logo_url,
       createdAt: t.created_at,
@@ -514,6 +527,7 @@ export const api = {
       name: team.name,
       fixed_day: team.fixedDay,
       fixed_time: team.fixedTime,
+      fixed_duration_minutes: team.fixedDurationMinutes,
       categories: team.categories,
       logo_url: team.logoUrl,
       // Fix: Use camelCase properties on Partial<RegisteredTeam> object
@@ -533,6 +547,7 @@ export const api = {
     if (updates.name !== undefined) payload.name = updates.name;
     if (updates.fixedDay !== undefined) payload.fixed_day = updates.fixedDay;
     if (updates.fixedTime !== undefined) payload.fixed_time = updates.fixedTime;
+    if (updates.fixedDurationMinutes !== undefined) payload.fixed_duration_minutes = updates.fixedDurationMinutes;
     if (updates.categories !== undefined) payload.categories = updates.categories;
     if (updates.logoUrl !== undefined) payload.logo_url = updates.logoUrl;
     if (updates.captainName !== undefined) payload.captain_name = updates.captainName;
