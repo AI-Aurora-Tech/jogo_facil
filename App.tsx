@@ -690,12 +690,22 @@ const App: React.FC = () => {
                     slots={userField ? slots.filter(s => s.fieldId === userField.id) : []} 
                     currentUser={currentUserContext}
                     onAddSlot={async (newSlots) => { 
-                      const createdSlots = await api.createSlots(newSlots); 
-                      setSlots(prev => [...prev, ...createdSlots]); 
+                      try {
+                        const createdSlots = await api.createSlots(newSlots); 
+                        setSlots(prev => [...prev, ...createdSlots]); 
+                      } catch (err: any) {
+                        console.error("Error adding slots:", err);
+                        throw new Error(err.message || "Erro ao salvar no banco de dados");
+                      }
                     }}
                     onUpdateSlot={async (id, updates) => {
-                      await api.updateSlot(id, updates);
-                      setSlots(prev => prev.map(s => s.id === id ? { ...s, ...updates } : s));
+                      try {
+                        await api.updateSlot(id, updates);
+                        setSlots(prev => prev.map(s => s.id === id ? { ...s, ...updates } : s));
+                      } catch (err: any) {
+                        console.error("Error updating slot:", err);
+                        throw new Error(err.message || "Erro ao atualizar no banco de dados");
+                      }
                     }}
                     onRefreshData={refreshData}
                     onDeleteSlot={async id => { 

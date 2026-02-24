@@ -311,9 +311,9 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
 
       setShowAddSlotModal(false);
       setEditingSlotId(null);
-    } catch (e) {
+    } catch (e: any) {
       console.error(e);
-      alert("Erro ao salvar horário.");
+      alert(e.message || "Erro ao salvar horário.");
     } finally {
       setIsLoading(false);
     }
@@ -383,7 +383,10 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
         await onAddSlot(slotsToCreate);
         alert("Agenda gerada com sucesso!");
       }
-    } catch (e) { alert("Erro ao gerar."); }
+    } catch (e: any) { 
+      console.error(e);
+      alert(e.message || "Erro ao gerar."); 
+    }
     finally { setIsLoading(false); }
   };
 

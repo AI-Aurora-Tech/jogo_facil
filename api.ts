@@ -396,14 +396,24 @@ export const api = {
       local_team_category: s.localTeamCategory || null,
       local_team_phone: s.localTeamPhone || null,
       local_team_gender: s.localTeamGender || null,
+      local_team_logo_url: s.localTeamLogoUrl || null,
       booked_by_user_id: s.bookedByUserId || null,
       booked_by_team_name: s.bookedByTeamName || null,
       booked_by_category: s.bookedByTeamCategory || null,
-      price: s.price,
+      booked_by_team_logo_url: s.bookedByTeamLogoUrl || null,
+      booked_by_user_phone: s.bookedByUserPhone || null,
+      opponent_team_name: s.opponentTeamName || null,
+      opponent_team_category: s.opponentTeamCategory || null,
+      opponent_team_phone: s.opponentTeamPhone || null,
+      opponent_team_logo_url: s.opponentTeamLogoUrl || null,
+      opponent_team_gender: s.opponentTeamGender || null,
+      price: s.price || 0,
       status: s.status || 'available',
       allowed_opponent_categories: s.allowedOpponentCategories || [],
       court_name: s.courtName,
-      sport: s.sport
+      sport: s.sport,
+      receipt_url: s.receiptUrl || null,
+      receipt_uploaded_at: s.receiptUploadedAt || null
     }));
     const { data, error } = await supabase.from('match_slot').insert(payload).select();
     if (error) throw error;
@@ -424,6 +434,8 @@ export const api = {
       bookedByUserId: s.booked_by_user_id,
       bookedByTeamName: s.booked_by_team_name,
       bookedByTeamCategory: s.booked_by_category,
+      bookedByTeamLogoUrl: s.booked_by_team_logo_url,
+      bookedByUserPhone: s.booked_by_user_phone,
       opponentTeamName: s.opponent_team_name,
       opponentTeamCategory: s.opponent_team_category,
       opponentTeamPhone: s.opponent_team_phone,
