@@ -282,7 +282,6 @@ export const api = {
       opponentTeamLogoUrl: s.opponent_team_logo_url,
       opponentTeamGender: s.opponent_team_gender,
       status: s.status,
-      homeTeamType: s.home_team_type || 'LOCAL',
       price: s.price,
       allowedOpponentCategories: s.allowed_opponent_categories || [],
       receiptUrl: s.receipt_url,
@@ -326,7 +325,6 @@ export const api = {
       opponentTeamLogoUrl: s.opponent_team_logo_url,
       opponentTeamGender: s.opponent_team_gender,
       status: s.status,
-      homeTeamType: s.home_team_type || 'LOCAL',
       price: s.price,
       allowedOpponentCategories: s.allowed_opponent_categories || [],
       receiptUrl: s.receipt_url,
@@ -371,7 +369,6 @@ export const api = {
       opponentTeamLogoUrl: s.opponent_team_logo_url,
       opponentTeamGender: s.opponent_team_gender,
       status: s.status,
-      homeTeamType: s.home_team_type || 'LOCAL',
       price: s.price,
       allowedOpponentCategories: s.allowed_opponent_categories || [],
       receiptUrl: s.receipt_url,
@@ -389,7 +386,6 @@ export const api = {
       time: s.time,
       duration_minutes: s.durationMinutes,
       match_type: s.matchType || 'ALUGUEL',
-      home_team_type: s.homeTeamType || 'LOCAL',
       is_booked: s.isBooked || false,
       has_local_team: s.hasLocalTeam || false,
       local_team_name: s.localTeamName || null,
@@ -438,7 +434,6 @@ export const api = {
       opponentTeamLogoUrl: s.opponent_team_logo_url,
       opponentTeamGender: s.opponent_team_gender,
       status: s.status,
-      homeTeamType: s.home_team_type || 'LOCAL',
       price: s.price,
       allowedOpponentCategories: s.allowed_opponent_categories || [],
       receiptUrl: s.receipt_url,
@@ -463,7 +458,6 @@ export const api = {
     if (data.opponentTeamGender !== undefined) payload.opponent_team_gender = data.opponentTeamGender;
     if (data.bookedByUserId !== undefined) payload.booked_by_user_id = data.bookedByUserId;
     if (data.bookedByTeamCategory !== undefined) payload.booked_by_category = data.bookedByTeamCategory;
-    if (data.homeTeamType !== undefined) payload.home_team_type = data.homeTeamType;
     
     // Missing fields from previous implementation
     if (data.date !== undefined) payload.date = data.date;
