@@ -209,9 +209,12 @@ const App: React.FC = () => {
       const saved = localStorage.getItem('jf_session_user');
       const currentUser = impersonatingUser || (saved ? JSON.parse(saved) : null);
 
+      const fetchedFields = await api.getFields().catch(() => [] as Field[]);
+      setFields(fetchedFields);
+
       let slotsPromise;
       if (currentUser && currentUser.role === UserRole.FIELD_OWNER) {
-        const field = fields.find(f => f.ownerId === currentUser.id);
+        const field = fetchedFields.find(f => f.ownerId === currentUser.id);
         if (field) {
           slotsPromise = api.getSlotsByFieldId(field.id).catch(() => [] as MatchSlot[]);
         } else {
@@ -221,15 +224,13 @@ const App: React.FC = () => {
         slotsPromise = api.getSlots().catch(() => [] as MatchSlot[]);
       }
 
-      const [f, s, cats] = await Promise.all([
-        api.getFields().catch(() => [] as Field[]),
+      const [fetchedSlots, fetchedCats] = await Promise.all([
         slotsPromise,
         api.getCategories().catch(() => ["Livre"] as string[])
       ]);
       
-      setFields(f);
-      setSlots(s);
-      setCategories(cats);
+      setSlots(fetchedSlots);
+      setCategories(fetchedCats);
       
       if (currentUser) {
           const notifs = await api.getNotifications(currentUser.id).catch(() => []);
@@ -249,7 +250,7 @@ const App: React.FC = () => {
       if (!isAutoRefresh) setIsLoading(false);
       setIsInitialLoading(false);
     }
-  }, [impersonatingUser, fields]);
+  }, [impersonatingUser]);
 
   useEffect(() => {
     const currentUser = impersonatingUser || user;
@@ -314,14 +315,14 @@ const App: React.FC = () => {
         await api.updateSlot(slotId, { 
           status: 'available', 
           isBooked: false, 
-          bookedByTeamName: null as any, 
-          bookedByUserId: null as any, 
-          opponentTeamName: null as any, 
-          opponentTeamCategory: null as any,
-          opponentTeamPhone: null as any,
-          opponentTeamLogoUrl: null as any,
-          opponentTeamGender: null as any,
-          receiptUrl: null as any 
+          bookedByTeamName: undefined, 
+          bookedByUserId: undefined, 
+          opponentTeamName: undefined, 
+          opponentTeamCategory: undefined,
+          opponentTeamPhone: undefined,
+          opponentTeamLogoUrl: undefined,
+          opponentTeamGender: undefined,
+          receiptUrl: undefined 
         });
 
         if (field) {
@@ -699,7 +700,7 @@ const App: React.FC = () => {
                   await api.updateSlot(id, { status: newStatus, isBooked: true }); 
                   refreshData(); 
                 }}
-                onRejectBooking={async id => { await api.updateSlot(id, { status: 'rejected', isBooked: false, receiptUrl: null as any }); refreshData(); }}
+                onRejectBooking={async id => { await api.updateSlot(id, { status: 'rejected', isBooked: false, receiptUrl: undefined }); refreshData(); }}
                 onUpdateField={async (id, u) => { await api.updateField(id, u); refreshData(); return true; }}
                 onRateTeam={() => {}}
                 forceTab={fieldDashForceTab}
