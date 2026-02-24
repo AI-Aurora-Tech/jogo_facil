@@ -304,13 +304,12 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
         await api.updateSlot(editingSlotId, updateData);
         alert("Horário atualizado com sucesso!");
       } else {
-        await api.createSlots([slotData]);
+        await onAddSlot([slotData]);
         alert("Horário criado com sucesso!");
       }
 
       setShowAddSlotModal(false);
       setEditingSlotId(null);
-      onRefreshData();
     } catch (e) {
       console.error(e);
       alert("Erro ao salvar horário.");
@@ -380,8 +379,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
         currentDate.setDate(currentDate.getDate() + 1);
       }
       if (slotsToCreate.length > 0) {
-        await api.createSlots(slotsToCreate);
-        onRefreshData();
+        await onAddSlot(slotsToCreate);
         alert("Agenda gerada com sucesso!");
       }
     } catch (e) { alert("Erro ao gerar."); }

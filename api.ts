@@ -381,7 +381,7 @@ export const api = {
     })) as unknown as MatchSlot[];
   },
 
-  createSlots: async (slots: Partial<MatchSlot>[]): Promise<void> => {
+  createSlots: async (slots: Partial<MatchSlot>[]): Promise<MatchSlot[]> => {
     const payload = slots.map(s => ({
       field_id: s.fieldId,
       date: s.date,
@@ -404,7 +404,40 @@ export const api = {
       court_name: s.courtName,
       sport: s.sport
     }));
-    await supabase.from('match_slot').insert(payload);
+    const { data, error } = await supabase.from('match_slot').insert(payload).select();
+    if (error) throw error;
+    return data.map(s => ({
+      id: s.id,
+      fieldId: s.field_id,
+      date: s.date,
+      time: s.time,
+      durationMinutes: s.duration_minutes,
+      matchType: s.match_type,
+      isBooked: s.is_booked,
+      hasLocalTeam: s.has_local_team,
+      localTeamName: s.local_team_name,
+      localTeamCategory: s.local_team_category,
+      localTeamPhone: s.local_team_phone,
+      localTeamLogoUrl: s.local_team_logo_url,
+      localTeamGender: s.local_team_gender,
+      bookedByUserId: s.booked_by_user_id,
+      bookedByTeamName: s.booked_by_team_name,
+      bookedByTeamCategory: s.booked_by_category,
+      opponentTeamName: s.opponent_team_name,
+      opponentTeamCategory: s.opponent_team_category,
+      opponentTeamPhone: s.opponent_team_phone,
+      opponentTeamLogoUrl: s.opponent_team_logo_url,
+      opponentTeamGender: s.opponent_team_gender,
+      status: s.status,
+      homeTeamType: s.home_team_type || 'LOCAL',
+      price: s.price,
+      allowedOpponentCategories: s.allowed_opponent_categories || [],
+      receiptUrl: s.receipt_url,
+      receiptUploadedAt: s.receipt_uploaded_at,
+      aiVerificationResult: s.ai_verification_result,
+      courtName: s.court_name,
+      sport: s.sport
+    })) as unknown as MatchSlot[];
   },
 
   updateSlot: async (slotId: string, data: Partial<MatchSlot>): Promise<void> => {

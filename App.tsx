@@ -691,7 +691,10 @@ const App: React.FC = () => {
                 field={fields.find(f => f.ownerId === currentUserContext.id) || { id: '', name: 'Carregando...', ownerId: '', location: '', hourlyRate: 0, cancellationFeePercent: 0, pixConfig: { key: '', name: '' }, imageUrl: '', contactPhone: '', latitude: 0, longitude: 0, courts: [] }} 
                 slots={slots.filter(s => s.fieldId === fields.find(f => f.ownerId === currentUserContext.id)?.id)} 
                 currentUser={currentUserContext}
-                onAddSlot={async s => { await api.createSlots(s); refreshData(); }}
+                onAddSlot={async (newSlots) => { 
+                  const createdSlots = await api.createSlots(newSlots); 
+                  setSlots(prev => [...prev, ...createdSlots]); 
+                }}
                 onRefreshData={refreshData}
                 onDeleteSlot={async id => { await api.deleteSlot(id); refreshData(); }}
                 onConfirmBooking={async id => { 
