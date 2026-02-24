@@ -71,7 +71,7 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({ categories, 
 
   const handleAddTeam = () => {
     if (teams.length >= 2) return;
-    setTeams([...teams, { name: 'Novo Time', categories: [], gender: 'MASCULINO' }]);
+    setTeams([...teams, { name: 'Novo Time', categories: [], gender: 'MASCULINO', sport: 'Futebol' }]);
   };
 
   const handleRemoveTeam = (index: number) => {
@@ -403,7 +403,7 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({ categories, 
             </div>
           </section>
 
-          <Button type="submit" isLoading={isLoading} className="w-full py-5 rounded-[2rem] font-black uppercase text-xs shadow-xl active:scale-95">Salvar Todas as Configurações</Button>
+          <Button type="submit" isLoading={isLoading} className="w-full py-5 rounded-[2rem] font-black uppercase text-xs shadow-xl active:scale-95">{isLoading ? 'Salvando...' : 'Salvar Todas as Configurações'}</Button>
         </form>
       </div>
     </div>

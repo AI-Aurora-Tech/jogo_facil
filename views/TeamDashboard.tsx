@@ -12,7 +12,6 @@ interface TeamDashboardProps {
   currentUser: User;
   fields: Field[];
   slots: MatchSlot[];
-  onBookSlot: (slotId: string, bookingData: { teamName: string, category: string }) => void;
   onCancelBooking: (slotId: string) => void;
   viewMode: 'EXPLORE' | 'MY_BOOKINGS';
   onRefresh: () => void;
@@ -21,7 +20,7 @@ interface TeamDashboardProps {
 
 type SortOption = 'DISTANCE_ASC' | 'DISTANCE_DESC' | 'PRICE_ASC' | 'PRICE_DESC' | 'NAME_ASC' | 'NAME_DESC';
 
-export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, fields, slots, viewMode, onRefresh, onCancelBooking }) => {
+export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, fields, slots, viewMode, onRefresh, onCancelBooking, onRateTeam }) => {
   const [selectedSlot, setSelectedSlot] = useState<MatchSlot | null>(null);
   const [selectedTeamIdx, setSelectedTeamIdx] = useState(0);
   const [selectedCategory, setSelectedCategory] = useState('');
@@ -303,16 +302,16 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
       } else {
         await api.updateSlot(slot.id, { 
           status: 'available', 
-          bookedByUserId: null, 
-          bookedByTeamName: null, 
-          bookedByTeamCategory: null,
-          opponentTeamName: null,
-          opponentTeamCategory: null,
-          opponentTeamPhone: null,
-          opponentTeamLogoUrl: null,
-          opponentTeamGender: null,
-          receiptUrl: null,
-          receiptUploadedAt: null,
+          bookedByUserId: undefined, 
+          bookedByTeamName: undefined, 
+          bookedByTeamCategory: undefined,
+          opponentTeamName: undefined,
+          opponentTeamCategory: undefined,
+          opponentTeamPhone: undefined,
+          opponentTeamLogoUrl: undefined,
+          opponentTeamGender: undefined,
+          receiptUrl: undefined,
+          receiptUploadedAt: undefined,
           isBooked: false
         });
         
@@ -321,7 +320,7 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
             userId: slot.bookedByUserId,
             title: "Desafio Recusado ❌",
             description: `O mandante não aceitou seu desafio.`,
-            type: 'error'
+            type: 'warning'
           });
         }
         alert("Desafio recusado.");
@@ -539,6 +538,12 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
                             <p className="text-[8px] font-black text-gray-400 uppercase mb-1">Chave PIX da Arena:</p>
                             <p className="font-black text-pitch text-xs">{field?.pixConfig.key || 'Não configurada'}</p>
                             <p className="text-[8px] font-bold text-gray-400 mt-1 uppercase">{field?.pixConfig.name}</p>
+                             <div className="mt-2 pt-2 border-t border-dashed">
+                                <p className="text-[10px] font-black text-pitch uppercase">
+                                   Valor a Pagar: <span className="text-grass-600">R$ {slot.homeTeamType === 'OUTSIDE' ? (slot.price / 2).toFixed(2) : slot.price.toFixed(2)}</span>
+                                </p>
+                                {slot.homeTeamType === 'OUTSIDE' && <p className="text-[7px] font-bold text-gray-400 uppercase italic">* Valor dividido entre os dois times (50% cada)</p>}
+                             </div>
                          </div>
                          <div className="flex gap-2">
                             <label className="flex-1">

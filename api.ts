@@ -66,7 +66,10 @@ export const api = {
         location: fieldData.location,
         hourly_rate: fieldData.hourlyRate || 0,
         contact_phone: fieldData.contactPhone,
-        image_url: fieldData.imageUrl || 'https://images.unsplash.com/photo-1529900748604-07564a03e7a6?auto=format&fit=crop&q=80&w=1000'
+        image_url: fieldData.imageUrl || 'https://images.unsplash.com/photo-1529900748604-07564a03e7a6?auto=format&fit=crop&q=80&w=1000',
+        complement: fieldData.complement || null,
+        pix_key: fieldData.pixKey || null,
+        pix_name: fieldData.pixName || null
       }]);
     }
     return mapUserFromDb(newUser);
@@ -173,9 +176,9 @@ export const api = {
     return data.map(d => ({
       id: d.id,
       requesterId: d.requester_id,
-      target_id: d.target_id,
-      entity_type: d.entity_type,
-      json_data: d.json_data,
+      targetId: d.target_id,
+      entityType: d.entity_type,
+      jsonData: d.json_data,
       status: d.status,
       createdAt: d.created_at
     }));
@@ -206,7 +209,8 @@ export const api = {
         contactPhone: f.contact_phone,
         latitude: Number(f.latitude) || 0,
         longitude: Number(f.longitude) || 0,
-        courts: f.courts || ['Principal']
+        courts: f.courts || ['Principal'],
+        complement: f.complement
     }));
   },
 
@@ -220,6 +224,7 @@ export const api = {
     if (updates.courts !== undefined) payload.courts = updates.courts;
     if (updates.latitude !== undefined) payload.latitude = updates.latitude;
     if (updates.longitude !== undefined) payload.longitude = updates.longitude;
+    if (updates.complement !== undefined) payload.complement = updates.complement;
 
     if (updates.pixConfig) {
       payload.pix_key = updates.pixConfig.key;
@@ -239,7 +244,8 @@ export const api = {
         contactPhone: data.contact_phone,
         latitude: Number(data.latitude) || 0,
         longitude: Number(data.longitude) || 0,
-        courts: data.courts || ['Principal']
+        courts: data.courts || ['Principal'],
+        complement: data.complement
     };
   },
 
@@ -248,6 +254,50 @@ export const api = {
     const { data, error } = await supabase
       .from('match_slot')
       .select('*')
+      .gte('date', today)
+      .order('date')
+      .order('time');
+    if (error) throw error;
+    return (data || []).map(s => ({
+      id: s.id,
+      fieldId: s.field_id,
+      date: s.date,
+      time: s.time,
+      durationMinutes: s.duration_minutes,
+      matchType: s.match_type,
+      isBooked: s.is_booked,
+      hasLocalTeam: s.has_local_team,
+      localTeamName: s.local_team_name,
+      localTeamCategory: s.local_team_category,
+      localTeamPhone: s.local_team_phone,
+      localTeamLogoUrl: s.local_team_logo_url,
+      localTeamGender: s.local_team_gender,
+      bookedByUserId: s.booked_by_user_id,
+      bookedByTeamName: s.booked_by_team_name,
+      bookedByTeamCategory: s.booked_by_category,
+      opponentTeamName: s.opponent_team_name,
+      opponentTeamCategory: s.opponent_team_category,
+      opponentTeamPhone: s.opponent_team_phone,
+      opponentTeamLogoUrl: s.opponent_team_logo_url,
+      opponentTeamGender: s.opponent_team_gender,
+      status: s.status,
+      homeTeamType: s.home_team_type || 'LOCAL',
+      price: s.price,
+      allowedOpponentCategories: s.allowed_opponent_categories || [],
+      receiptUrl: s.receipt_url,
+      receiptUploadedAt: s.receipt_uploaded_at,
+      aiVerificationResult: s.ai_verification_result,
+      courtName: s.court_name,
+      sport: s.sport
+    })) as unknown as MatchSlot[];
+  },
+
+  getSlotsByFieldId: async (fieldId: string): Promise<MatchSlot[]> => {
+    const today = new Date().toISOString().split('T')[0];
+    const { data, error } = await supabase
+      .from('match_slot')
+      .select('*')
+      .eq('field_id', fieldId)
       .gte('date', today)
       .order('date')
       .order('time');

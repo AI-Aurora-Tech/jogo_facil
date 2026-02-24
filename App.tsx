@@ -7,7 +7,7 @@ import { TeamDashboard } from './views/TeamDashboard';
 import { Subscription } from './views/Subscription';
 import { EditProfileModal } from './components/EditProfileModal';
 import { api } from './api';
-import { RefreshCw, Settings, Building2, Shield, Search, Loader2, Bell, X, Info, History, KeyRound, Eye, LogOut, Smartphone, Download, Share, Trophy, Crown, Users } from 'lucide-react';
+import { RefreshCw, Settings, Building2, Shield, Search, Loader2, Bell, X, Info, History, KeyRound, Eye, LogOut, Smartphone, Download, Share, Trophy, Crown, Users, UserPlus } from 'lucide-react';
 import { supabase } from './supabaseClient';
 
 const App: React.FC = () => {
@@ -206,18 +206,30 @@ const App: React.FC = () => {
   const refreshData = useCallback(async (isAutoRefresh = false) => {
     if (!isAutoRefresh) setIsLoading(true);
     try {
+      const saved = localStorage.getItem('jf_session_user');
+      const currentUser = impersonatingUser || (saved ? JSON.parse(saved) : null);
+
+      let slotsPromise;
+      if (currentUser && currentUser.role === UserRole.FIELD_OWNER) {
+        const field = fields.find(f => f.ownerId === currentUser.id);
+        if (field) {
+          slotsPromise = api.getSlotsByFieldId(field.id).catch(() => [] as MatchSlot[]);
+        } else {
+          slotsPromise = api.getSlots().catch(() => [] as MatchSlot[]);
+        }
+      } else {
+        slotsPromise = api.getSlots().catch(() => [] as MatchSlot[]);
+      }
+
       const [f, s, cats] = await Promise.all([
         api.getFields().catch(() => [] as Field[]),
-        api.getSlots().catch(() => [] as MatchSlot[]),
+        slotsPromise,
         api.getCategories().catch(() => ["Livre"] as string[])
       ]);
       
       setFields(f);
       setSlots(s);
       setCategories(cats);
-      
-      const saved = localStorage.getItem('jf_session_user');
-      const currentUser = impersonatingUser || (saved ? JSON.parse(saved) : null);
       
       if (currentUser) {
           const notifs = await api.getNotifications(currentUser.id).catch(() => []);
@@ -237,7 +249,7 @@ const App: React.FC = () => {
       if (!isAutoRefresh) setIsLoading(false);
       setIsInitialLoading(false);
     }
-  }, [impersonatingUser]);
+  }, [impersonatingUser, fields]);
 
   useEffect(() => {
     const currentUser = impersonatingUser || user;
@@ -664,10 +676,6 @@ const App: React.FC = () => {
                 currentUser={currentUserContext} 
                 fields={fields} 
                 slots={slots}
-                onBookSlot={async (id, data) => {
-                   await api.updateSlot(id, { bookedByUserId: currentUserContext.id, bookedByTeamName: data.teamName, status: 'pending_verification' });
-                   refreshData();
-                }}
                 onCancelBooking={handleCancelBooking}
                 onRateTeam={() => {
                   alert("Funcionalidade de avaliação em breve!");
@@ -732,6 +740,14 @@ const App: React.FC = () => {
                   
                   {/* Botão de assinatura removido pois agora é obrigatória a partir da criação */}
 
+                  <button onClick={() => {
+                    const link = window.location.origin;
+                    const message = `Venha jogar no Jogo Fácil! Cadastre seu time ou sua arena: ${link}`;
+                    navigator.clipboard.writeText(message);
+                    alert("Link de convite copiado!");
+                  }} className="w-full py-5 bg-indigo-500 text-white rounded-3xl font-black flex items-center justify-center gap-3 uppercase text-xs shadow-xl active:scale-95 transition-transform">
+                      <UserPlus className="w-5 h-5" /> Convidar Amigos
+                  </button>
                   <button onClick={() => setShowProfileModal(true)} className="w-full py-5 bg-[#022c22] text-white rounded-3xl font-black flex items-center justify-center gap-3 uppercase text-xs shadow-xl active:scale-95 transition-transform">
                       <Settings className="w-5 h-5 text-[#10b981]" /> Configurações
                   </button>

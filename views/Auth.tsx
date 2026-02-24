@@ -32,6 +32,12 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, onCancel }) => {
   const [arenaName, setArenaName] = useState('');
   const [arenaPrice, setArenaPrice] = useState('');
   const [arenaPhoto, setArenaPhoto] = useState('');
+  const [pixKey, setPixKey] = useState('');
+  const [pixName, setPixName] = useState('');
+  const [complement, setComplement] = useState('');
+  const [courts, setCourts] = useState<string[]>(['Principal']);
+  const [newCourt, setNewCourt] = useState('');
+
   // Address / CEP
   const [cep, setCep] = useState('');
   const [street, setStreet] = useState('');
@@ -45,7 +51,9 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, onCancel }) => {
   const [teamName, setTeamName] = useState('');
   const [teamCategories, setTeamCategories] = useState<string[]>([]);
   const [teamGender, setTeamGender] = useState<Gender>('MASCULINO');
+  const [teamSport, setTeamSport] = useState('Society');
   const [teamLogo, setTeamLogo] = useState('');
+  const [showPaymentLink, setShowPaymentLink] = useState(false);
 
   const toggleCategory = (cat: string) => {
     if (teamCategories.includes(cat)) {
@@ -135,12 +143,13 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, onCancel }) => {
           name,
           phoneNumber: phone,
           // CHANGE: Define subscription as NONE initially to force payment flow
-          subscription: SubscriptionPlan.NONE,
+          subscription: role === UserRole.FIELD_OWNER ? SubscriptionPlan.PRO_FIELD : SubscriptionPlan.NONE,
           teams: role === UserRole.TEAM_CAPTAIN ? [{ 
               name: teamName, 
               categories: teamCategories, 
               logoUrl: teamLogo, 
-              gender: teamGender 
+              gender: teamGender,
+              sport: teamSport
           }] : [],
           teamLogoUrl: role === UserRole.TEAM_CAPTAIN ? teamLogo : undefined,
           fieldData: role === UserRole.FIELD_OWNER ? {
@@ -148,11 +157,19 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, onCancel }) => {
             location: fullAddress,
             contactPhone: phone,
             imageUrl: arenaPhoto,
-            hourlyRate: Number(arenaPrice) || 0
+            hourlyRate: Number(arenaPrice) || 0,
+            pixKey,
+            pixName,
+            complement,
+            courts
           } : undefined
         };
         const newUser = await api.register(payload);
-        onLogin(newUser);
+        if (role === UserRole.TEAM_CAPTAIN) {
+          setShowPaymentLink(true);
+        } else {
+          onLogin(newUser);
+        }
       } else if (mode === 'LOGIN') {
         const user = await api.login(email, password);
         onLogin(user);
@@ -167,6 +184,38 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, onCancel }) => {
       setIsLoading(false);
     }
   };
+
+  if (showPaymentLink) {
+    return (
+      <div className="min-h-screen bg-pitch flex items-center justify-center p-6 font-sans">
+        <div className="bg-white rounded-[3.5rem] w-full max-w-lg overflow-hidden shadow-2xl p-10 text-center space-y-6">
+          <div className="bg-grass-100 w-20 h-20 rounded-full flex items-center justify-center mx-auto">
+            <Shield className="w-10 h-10 text-grass-600" />
+          </div>
+          <h2 className="text-3xl font-black italic uppercase tracking-tighter leading-none text-pitch">
+            Quase lá, Capitão!
+          </h2>
+          <p className="text-sm font-bold text-gray-500">
+            Para ativar sua conta e aproveitar os 60 dias grátis, realize o pagamento da mensalidade de R$ 19,90.
+          </p>
+          <div className="bg-gray-50 p-6 rounded-3xl border-2 border-dashed border-gray-200">
+             <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-4">Link de Pagamento Seguro</p>
+             <a 
+               href="https://link.mercadopago.com.br/jogofacil" 
+               target="_blank" 
+               rel="noopener noreferrer"
+               className="block w-full py-4 bg-[#009EE3] text-white rounded-2xl font-black uppercase text-xs shadow-lg hover:scale-105 transition-transform"
+             >
+               Pagar com Mercado Pago
+             </a>
+          </div>
+          <Button onClick={() => window.location.reload()} className="w-full py-4 rounded-2xl font-black uppercase text-xs">
+            Já realizei o pagamento
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-pitch flex items-center justify-center p-6 font-sans">
@@ -233,6 +282,19 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, onCancel }) => {
                     <input className="w-full bg-transparent border-b-2 border-gray-100 p-2 font-black text-lg outline-none focus:border-pitch transition-colors mb-4" placeholder="Nome do Time" value={teamName} onChange={e => setTeamName(e.target.value)} required />
                     
                     <div className="mb-4">
+                        <p className="text-[9px] font-bold text-gray-400 uppercase mb-2">Esporte Praticado</p>
+                        <select 
+                          className="w-full p-3 bg-white rounded-xl border font-bold text-xs outline-none"
+                          value={teamSport}
+                          onChange={e => setTeamSport(e.target.value)}
+                        >
+                          {["Futebol", "Society", "Futsal", "Vôlei", "Handball", "Basquete", "Tênis", "Beach Tennis"].map(s => (
+                            <option key={s} value={s}>{s}</option>
+                          ))}
+                        </select>
+                    </div>
+
+                    <div className="mb-4">
                         <p className="text-[9px] font-bold text-gray-400 uppercase mb-2">Gênero do Time</p>
                         <div className="flex gap-1 p-1 bg-white rounded-xl border">
                             {['MASCULINO', 'FEMININO', 'MISTO'].map((g: any) => (
@@ -283,6 +345,17 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, onCancel }) => {
                         </div>
                     </div>
 
+                    <div className="grid grid-cols-2 gap-3">
+                        <div className="bg-white p-3 rounded-xl border">
+                           <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Chave PIX</label>
+                           <input className="w-full bg-transparent font-bold text-pitch outline-none" placeholder="CPF, E-mail ou Celular" value={pixKey} onChange={e => setPixKey(e.target.value)} required />
+                        </div>
+                        <div className="bg-white p-3 rounded-xl border">
+                           <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Nome do Titular PIX</label>
+                           <input className="w-full bg-transparent font-bold text-pitch outline-none" placeholder="Nome Completo" value={pixName} onChange={e => setPixName(e.target.value)} required />
+                        </div>
+                    </div>
+
                     {/* SEÇÃO DE ENDEREÇO COM CEP */}
                     <div className="bg-white p-4 rounded-xl border space-y-3">
                          <div className="grid grid-cols-3 gap-2">
@@ -309,15 +382,47 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, onCancel }) => {
                             <input className="w-full bg-gray-50 p-2 rounded-lg font-bold text-xs outline-none" value={street} onChange={e => setStreet(e.target.value)} placeholder="Endereço" required />
                          </div>
 
-                         <div className="grid grid-cols-3 gap-2">
+                         <div className="grid grid-cols-2 gap-2">
                              <div>
                                <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Número</label>
                                <input className="w-full bg-gray-50 p-2 rounded-lg font-bold text-xs outline-none" value={number} onChange={e => setNumber(e.target.value)} placeholder="123" required />
                              </div>
-                             <div className="col-span-2">
-                               <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Bairro</label>
-                               <input className="w-full bg-gray-50 p-2 rounded-lg font-bold text-xs outline-none" value={neighborhood} onChange={e => setNeighborhood(e.target.value)} placeholder="Bairro" required />
+                             <div>
+                               <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Complemento (Opcional)</label>
+                               <input className="w-full bg-gray-50 p-2 rounded-lg font-bold text-xs outline-none" value={complement} onChange={e => setComplement(e.target.value)} placeholder="Apto, Bloco..." />
                              </div>
+                         </div>
+
+                         <div className="bg-white p-3 rounded-xl border">
+                            <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Bairro</label>
+                            <input className="w-full bg-transparent font-bold text-pitch outline-none" value={neighborhood} onChange={e => setNeighborhood(e.target.value)} placeholder="Bairro" required />
+                         </div>
+
+                         {/* GESTÃO DE QUADRAS */}
+                         <div className="bg-white p-4 rounded-xl border space-y-3">
+                            <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Campos / Quadras</label>
+                            <div className="flex gap-2">
+                               <input 
+                                 className="flex-1 bg-gray-50 p-2 rounded-lg font-bold text-xs outline-none" 
+                                 placeholder="Ex: Quadra Society A"
+                                 value={newCourt}
+                                 onChange={e => setNewCourt(e.target.value)}
+                               />
+                               <button type="button" onClick={() => {
+                                 if (newCourt.trim()) {
+                                   setCourts([...courts, newCourt.trim()]);
+                                   setNewCourt('');
+                                 }
+                               }} className="bg-pitch text-white px-3 rounded-lg"><LayoutGrid className="w-4 h-4"/></button>
+                            </div>
+                            <div className="flex flex-wrap gap-1">
+                               {courts.map(c => (
+                                 <div key={c} className="bg-gray-100 px-2 py-1 rounded-md flex items-center gap-1">
+                                   <span className="text-[8px] font-bold uppercase">{c}</span>
+                                   <button type="button" onClick={() => setCourts(courts.filter(x => x !== c))} className="text-red-500">×</button>
+                                 </div>
+                               ))}
+                            </div>
                          </div>
                     </div>
                   </div>

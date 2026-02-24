@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Trash2, Calendar, Clock, RefreshCcw, X, Swords, Edit3, MessageCircle, UserCheck, Phone, Edit, Building2, MapPin, LayoutGrid, Flag, Trophy, CheckCircle, XCircle, AlertCircle, CalendarPlus, Mail, Camera, UserPlus, Smartphone, CalendarDays, History as HistoryIcon, BadgeCheck, Ban, Lock, Search, Filter, Sparkles, ChevronDown, CalendarRange, Check } from 'lucide-react';
 import { Button } from '../components/Button';
-import { Field, MatchSlot, MatchType, User, CATEGORY_ORDER, RegisteredTeam, SPORTS, Gender } from '../types';
+import { Field, MatchSlot, MatchType, User, CATEGORY_ORDER, RegisteredTeam, SPORTS, Gender, MatchStatus } from '../types';
 import { api } from '../api';
 import { convertFileToBase64, getNeighboringCategories } from '../utils';
 
@@ -37,7 +37,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
   const [slotDate, setSlotDate] = useState(new Date().toISOString().split('T')[0]);
   const [slotTime, setSlotTime] = useState('19:00');
   const [slotDuration, setSlotDuration] = useState(60);
-  const [slotMatchType, setSlotMatchType] = useState<MatchType>('ALUGUEL');
+  const [slotMatchType, setSlotMatchType] = useState<MatchType>('AMISTOSO');
   const [slotCourt, setSlotCourt] = useState(field.courts?.[0] || 'Principal');
   const [slotPrice, setSlotPrice] = useState(field.hourlyRate);
   const [slotSport, setSlotSport] = useState('Society');
@@ -47,6 +47,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
   const [manualLocalCategory, setManualLocalCategory] = useState(CATEGORY_ORDER[0]);
   const [acceptNeighbors, setAcceptNeighbors] = useState(true);
   const [selectedRegisteredTeamId, setSelectedRegisteredTeamId] = useState<string>('');
+  const [localTeamCategory, setLocalTeamCategory] = useState<string>('');
 
   // States Filtros Agenda
   const [filterRange, setFilterRange] = useState<string>('7'); 
@@ -105,6 +106,29 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
     }
   }, [field.courts]);
 
+  useEffect(() => {
+    if (!selectedRegisteredTeamId) {
+      setLocalTeamCategory('');
+      return;
+    }
+
+    let team;
+    if (selectedRegisteredTeamId.startsWith('OWNER_TEAM_')) {
+      const idx = parseInt(selectedRegisteredTeamId.split('_')[2]);
+      team = currentUser.teams[idx];
+    } else {
+      team = registeredTeams.find(t => t.id === selectedRegisteredTeamId);
+    }
+
+    if (team && team.categories) {
+      if (team.categories.length === 1) {
+        setLocalTeamCategory(team.categories[0]);
+      } else {
+        setLocalTeamCategory('');
+      }
+    }
+  }, [selectedRegisteredTeamId, currentUser.teams, registeredTeams]);
+
   const loadMensalistas = async () => {
     try {
       const teams = await api.getRegisteredTeams(field.id);
@@ -145,10 +169,15 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
            desc = `Seu pagamento para o jogo na arena ${field.name} foi validado!`;
         } else if (slot.status === 'pending_field_approval') {
            // Se não tem time local (é aluguel de horário livre), vai para waiting_opponent
-           if (!slot.hasLocalTeam) {
+           if (!slot.hasLocalTeam && !slot.opponentTeamName) {
               newStatus = 'waiting_opponent';
               title = "Reserva Aprovada! ⏳";
               desc = `Sua reserva foi aprovada pela arena. Aguardando um time adversário aceitar o jogo.`;
+           } else if (slot.opponentTeamName) {
+              // Contexto 3: Aprovação final do confronto
+              newStatus = 'pending_payment';
+              title = "Confronto Aprovado! 💸";
+              desc = `A arena ${field.name} aprovou o confronto. Realizem o pagamento (50% cada) para confirmar.`;
            }
         }
 
@@ -166,16 +195,16 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
       } else {
         await api.updateSlot(slot.id, { 
           status: 'available', 
-          bookedByUserId: null, 
-          bookedByTeamName: null, 
-          bookedByTeamCategory: null,
-          opponentTeamName: null,
-          opponentTeamCategory: null,
-          opponentTeamPhone: null,
-          opponentTeamLogoUrl: null,
-          opponentTeamGender: null,
-          receiptUrl: null,
-          receiptUploadedAt: null,
+          bookedByUserId: undefined, 
+          bookedByTeamName: undefined, 
+          bookedByTeamCategory: undefined,
+          opponentTeamName: undefined,
+          opponentTeamCategory: undefined,
+          opponentTeamPhone: undefined,
+          opponentTeamLogoUrl: undefined,
+          opponentTeamGender: undefined,
+          receiptUrl: undefined,
+          receiptUploadedAt: undefined,
           isBooked: false
         });
         
@@ -184,7 +213,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
             userId: slot.bookedByUserId,
             title: "Desafio Recusado ❌",
             description: `A arena ${field.name} não pôde aceitar seu desafio para o dia ${slot.date}.`,
-            type: 'error'
+            type: 'warning'
           });
         }
         alert("Solicitação recusada.");
@@ -221,7 +250,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
              const ownerTeam = currentUser.teams[idx];
              if (ownerTeam) {
                 teamName = ownerTeam.name;
-                teamCategory = ownerTeam.categories[0];
+                teamCategory = localTeamCategory;
                 teamPhone = field.contactPhone; // Owner's phone
                 teamGender = ownerTeam.gender;
                 teamLogo = ownerTeam.logoUrl;
@@ -231,7 +260,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
              const regTeam = registeredTeams.find(t => t.id === selectedRegisteredTeamId);
              if (regTeam) {
                teamName = regTeam.name;
-               teamCategory = regTeam.categories[0];
+               teamCategory = localTeamCategory;
                teamPhone = regTeam.captainPhone;
                teamGender = regTeam.gender;
                teamLogo = regTeam.logoUrl;
@@ -343,7 +372,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
           const dateStr = currentDate.toISOString().split('T')[0];
           if (!slots.some(s => s.date === dateStr && s.time === team.fixedTime && s.courtName === team.courtName)) {
             slotsToCreate.push({
-              fieldId: field.id, date: dateStr, time: team.fixedTime, durationMinutes: 60, matchType: 'FIXO', isBooked: true, hasLocalTeam: true, localTeamName: team.name, localTeamCategory: team.categories[0], localTeamPhone: team.captainPhone, localTeamLogoUrl: team.logoUrl, localTeamGender: team.gender, allowedOpponentCategories: team.categories, status: 'confirmed', price: field.hourlyRate, sport: team.sport, courtName: team.courtName
+              fieldId: field.id, date: dateStr, time: team.fixedTime, durationMinutes: 60, matchType: 'FIXO', isBooked: true, hasLocalTeam: true, localTeamName: team.name, localTeamCategory: team.categories[0], localTeamPhone: team.captainPhone, localTeamLogoUrl: team.logoUrl, localTeamGender: team.gender, allowedOpponentCategories: team.categories, status: 'confirmed', price: field.hourlyRate, sport: team.sport, courtName: team.courtName, homeTeamType: 'MENSALISTA'
             });
             count++;
           }
@@ -671,8 +700,9 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
              <div className="grid grid-cols-2 gap-4">
                <button onClick={() => {
                  const link = `${window.location.origin}/?inviteFieldId=${field.id}`;
-                 navigator.clipboard.writeText(link);
-                 alert("Link de convite copiado! Envie para o capitão do time mensalista.");
+                 const message = `${field.name} te convidou para o clube de mensalistas! Acesse o link para aceitar: ${link}`;
+                 navigator.clipboard.writeText(message);
+                 alert("Mensagem de convite copiada!");
                }} className="w-full py-5 border-2 border-dashed border-pitch text-pitch font-black uppercase text-[10px] rounded-[2rem] flex items-center justify-center gap-2 hover:bg-pitch hover:text-white transition-all">
                  <Mail className="w-4 h-4" /> Convidar Mensalista (Link)
                </button>
@@ -699,6 +729,21 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                     <div className="bg-gray-50 p-4 rounded-2xl border">
                        <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Hora Início</label>
                        <input type="time" className="w-full bg-transparent font-black outline-none" value={slotTime} onChange={e => setSlotTime(e.target.value)} />
+                    </div>
+                 </div>
+                 <div className="grid grid-cols-2 gap-4">
+                    <div className="bg-gray-50 p-4 rounded-2xl border">
+                       <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Tipo de Jogo</label>
+                       <select className="w-full bg-transparent font-black outline-none text-xs" value={slotMatchType} onChange={e => setSlotMatchType(e.target.value as MatchType)}>
+                          <option value="AMISTOSO">Amistoso</option>
+                          <option value="FESTIVAL">Festival</option>
+                       </select>
+                    </div>
+                    <div className="bg-gray-50 p-4 rounded-2xl border">
+                       <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Esporte</label>
+                       <select className="w-full bg-transparent font-black outline-none text-xs" value={slotSport} onChange={e => setSlotSport(e.target.value)}>
+                          {SPORTS.map(s => <option key={s} value={s}>{s}</option>)}
+                       </select>
                     </div>
                  </div>
                  <div className="grid grid-cols-2 gap-4">
@@ -743,7 +788,36 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                            </select>
                         </div>
                         
-                        
+                        {(selectedRegisteredTeamId && (
+                          (() => {
+                            let team;
+                            if (selectedRegisteredTeamId.startsWith('OWNER_TEAM_')) {
+                              const idx = parseInt(selectedRegisteredTeamId.split('_')[2]);
+                              team = currentUser.teams[idx];
+                            } else {
+                              team = registeredTeams.find(t => t.id === selectedRegisteredTeamId);
+                            }
+
+                            if (team && team.categories && team.categories.length > 1) {
+                              return (
+                                <div>
+                                  <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Selecione a Categoria</label>
+                                  <select 
+                                    className="w-full p-4 bg-white border rounded-xl text-xs font-bold" 
+                                    value={localTeamCategory} 
+                                    onChange={e => setLocalTeamCategory(e.target.value)}
+                                  >
+                                    <option value="">Selecione a categoria</option>
+                                    {team.categories.map(cat => (
+                                      <option key={cat} value={cat}>{cat}</option>
+                                    ))}
+                                  </select>
+                                </div>
+                              );
+                            }
+                            return null;
+                          })()
+                        ))}
                         
                         <div className="flex items-center gap-2 cursor-pointer" onClick={() => setAcceptNeighbors(!acceptNeighbors)}>
                            <div className={`w-5 h-5 rounded border flex items-center justify-center transition-all ${acceptNeighbors ? 'bg-pitch border-pitch text-white' : 'bg-white border-gray-300'}`}>

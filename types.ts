@@ -22,6 +22,7 @@ export interface TeamConfig {
   categories: string[];
   logoUrl?: string;
   gender: Gender;
+  sport: string;
 }
 
 export interface User {
@@ -63,6 +64,7 @@ export interface Field {
   latitude: number;
   longitude: number;
   courts: string[];
+  complement?: string;
 }
 
 export type MatchStatus = 'available' | 'pending_home_approval' | 'pending_field_approval' | 'pending_payment' | 'pending_verification' | 'confirmed' | 'rejected' | 'waiting_opponent';
