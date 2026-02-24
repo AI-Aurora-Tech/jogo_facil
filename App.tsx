@@ -372,15 +372,21 @@ const App: React.FC = () => {
       }
       
       if (updatedField && target.role === UserRole.FIELD_OWNER) {
+        // Tenta encontrar a arena pelo ownerId ou usa a arena atual se já estivermos no contexto dela
         const arena = fields.find(f => f.ownerId === target.id);
-        if (arena) await api.updateField(arena.id, updatedField);
+        if (arena) {
+          await api.updateField(arena.id, updatedField);
+        } else {
+          console.warn("Arena não encontrada para o usuário:", target.id);
+        }
       }
       
       alert("Perfil atualizado!");
       await refreshData();
       setShowProfileModal(false);
     } catch (err: any) { 
-      alert(`Erro: ${err.message}`); 
+      console.error("Erro ao atualizar perfil:", err);
+      alert(`Erro: ${err.message || "Erro desconhecido ao salvar"}`); 
     } finally { 
       setIsLoading(false); 
     }

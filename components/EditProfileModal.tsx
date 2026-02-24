@@ -43,10 +43,28 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({ categories, 
   // Inicializa campos de endereço se já existir localização salva
   useEffect(() => {
     if (field?.location) {
-      // Tenta parsing simples, mas o usuário provavelmente vai usar o CEP para corrigir
-      const parts = field.location.split(',');
-      if (parts.length > 0 && !street) {
-        // Se já tem endereço salvo, mostramos no campo "Rua" como fallback
+      // Tenta parsing do formato: "Rua, Numero - Bairro - Cidade - UF, CEP"
+      const parts = field.location.split(' - ');
+      if (parts.length >= 3) {
+        const streetPart = parts[0].split(',');
+        setStreet(streetPart[0].trim());
+        setNumber(streetPart[1]?.trim() || '');
+        setNeighborhood(parts[1]?.trim() || '');
+        
+        const cityStateCep = parts[2].split(' - '); // Caso tenha mais hífens
+        const lastPart = parts[parts.length - 1]; // Geralmente "Cidade - UF, CEP" ou "UF, CEP"
+        
+        // Parsing mais robusto para o final
+        const cityMatch = field.location.match(/ - ([^-]+) - ([A-Z]{2}),? (\d{5}-?\d{3})?$/);
+        if (cityMatch) {
+          setNeighborhood(parts[1]?.trim() || '');
+          setCity(cityMatch[1].trim());
+          setState(cityMatch[2].trim());
+          setCep(cityMatch[3]?.trim() || '');
+        } else {
+          setStreet(field.location);
+        }
+      } else {
         setStreet(field.location); 
       }
     }

@@ -225,6 +225,7 @@ export const api = {
     if (updates.latitude !== undefined) payload.latitude = updates.latitude;
     if (updates.longitude !== undefined) payload.longitude = updates.longitude;
     if (updates.complement !== undefined) payload.complement = updates.complement;
+    if (updates.cancellationFeePercent !== undefined) payload.cancellation_fee_percent = updates.cancellationFeePercent;
 
     if (updates.pixConfig) {
       payload.pix_key = updates.pixConfig.key;
@@ -456,11 +457,26 @@ export const api = {
     if (data.bookedByTeamCategory !== undefined) payload.booked_by_category = data.bookedByTeamCategory;
     if (data.homeTeamType !== undefined) payload.home_team_type = data.homeTeamType;
     
-    if (data.bookedByTeamCategory && !payload.local_team_category) {
-        payload.local_team_category = data.bookedByTeamCategory;
-    }
+    // Missing fields from previous implementation
+    if (data.date !== undefined) payload.date = data.date;
+    if (data.time !== undefined) payload.time = data.time;
+    if (data.durationMinutes !== undefined) payload.duration_minutes = data.durationMinutes;
+    if (data.matchType !== undefined) payload.match_type = data.matchType;
+    if (data.hasLocalTeam !== undefined) payload.has_local_team = data.hasLocalTeam;
+    if (data.localTeamName !== undefined) payload.local_team_name = data.localTeamName;
+    if (data.localTeamCategory !== undefined) payload.local_team_category = data.localTeamCategory;
+    if (data.localTeamPhone !== undefined) payload.local_team_phone = data.localTeamPhone;
+    if (data.localTeamGender !== undefined) payload.local_team_gender = data.localTeamGender;
+    if (data.localTeamLogoUrl !== undefined) payload.local_team_logo_url = data.localTeamLogoUrl;
+    if (data.price !== undefined) payload.price = data.price;
+    if (data.courtName !== undefined) payload.court_name = data.courtName;
+    if (data.sport !== undefined) payload.sport = data.sport;
+    if (data.allowedOpponentCategories !== undefined) payload.allowed_opponent_categories = data.allowedOpponentCategories;
+    if (data.bookedByTeamLogoUrl !== undefined) payload.booked_by_team_logo_url = data.bookedByTeamLogoUrl;
+    if (data.bookedByUserPhone !== undefined) payload.booked_by_user_phone = data.bookedByUserPhone;
 
-    await supabase.from('match_slot').update(payload).eq('id', slotId);
+    const { error } = await supabase.from('match_slot').update(payload).eq('id', slotId);
+    if (error) throw error;
   },
 
   getWhatsAppLink: (phone: string, message: string) => {
