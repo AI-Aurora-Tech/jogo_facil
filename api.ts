@@ -400,8 +400,6 @@ export const api = {
       booked_by_user_id: s.bookedByUserId || null,
       booked_by_team_name: s.bookedByTeamName || null,
       booked_by_category: s.bookedByTeamCategory || null,
-      booked_by_team_logo_url: s.bookedByTeamLogoUrl || null,
-      booked_by_user_phone: s.bookedByUserPhone || null,
       opponent_team_name: s.opponentTeamName || null,
       opponent_team_category: s.opponentTeamCategory || null,
       opponent_team_phone: s.opponentTeamPhone || null,
@@ -434,8 +432,6 @@ export const api = {
       bookedByUserId: s.booked_by_user_id,
       bookedByTeamName: s.booked_by_team_name,
       bookedByTeamCategory: s.booked_by_category,
-      bookedByTeamLogoUrl: s.booked_by_team_logo_url,
-      bookedByUserPhone: s.booked_by_user_phone,
       opponentTeamName: s.opponent_team_name,
       opponentTeamCategory: s.opponent_team_category,
       opponentTeamPhone: s.opponent_team_phone,
@@ -484,8 +480,6 @@ export const api = {
     if (data.courtName !== undefined) payload.court_name = data.courtName;
     if (data.sport !== undefined) payload.sport = data.sport;
     if (data.allowedOpponentCategories !== undefined) payload.allowed_opponent_categories = data.allowedOpponentCategories;
-    if (data.bookedByTeamLogoUrl !== undefined) payload.booked_by_team_logo_url = data.bookedByTeamLogoUrl;
-    if (data.bookedByUserPhone !== undefined) payload.booked_by_user_phone = data.bookedByUserPhone;
 
     const { error } = await supabase.from('match_slot').update(payload).eq('id', slotId);
     if (error) throw error;
