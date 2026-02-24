@@ -209,15 +209,14 @@ const App: React.FC = () => {
       const saved = localStorage.getItem('jf_session_user');
       const currentUser = impersonatingUser || (saved ? JSON.parse(saved) : null);
 
-      const fetchedFields = await api.getFields().catch(() => [] as Field[]);
-      setFields(fetchedFields);
-
-      // Always fetch all slots to ensure they are available for the EXPLORE tab
-      const [fetchedSlots, fetchedCats] = await Promise.all([
+      // Fetch everything in parallel for maximum speed
+      const [fetchedFields, fetchedSlots, fetchedCats] = await Promise.all([
+        api.getFields().catch(() => [] as Field[]),
         api.getSlots().catch(() => [] as MatchSlot[]),
         api.getCategories().catch(() => ["Livre"] as string[])
       ]);
       
+      setFields(fetchedFields);
       setSlots(fetchedSlots);
       setCategories(fetchedCats);
       
@@ -366,7 +365,9 @@ const App: React.FC = () => {
       if (!target) return;
 
       const resUser = await api.updateUser(updatedUser);
-      if (!impersonatingUser) {
+      if (impersonatingUser) {
+        setImpersonatingUser(resUser);
+      } else {
         setUser(resUser);
         localStorage.setItem('jf_session_user', JSON.stringify(resUser));
       }
