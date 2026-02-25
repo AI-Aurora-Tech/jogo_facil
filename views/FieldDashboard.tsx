@@ -1093,7 +1093,17 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                       <div>
                         <p className="text-[8px] font-black text-gray-400 uppercase">Capitão</p>
                         <p className="font-black text-pitch uppercase">{team.captainName}</p>
-                        <p className="text-[9px] font-bold text-grass-600 uppercase">{team.categories.join(', ')}</p>
+                        <div className="flex flex-wrap gap-2 mt-2">
+                          <span className="text-[9px] font-bold text-grass-600 uppercase bg-grass-50 px-2 py-1 rounded-md">
+                            {team.categories.join(', ')}
+                          </span>
+                          <span className="text-[9px] font-bold text-indigo-600 uppercase bg-indigo-50 px-2 py-1 rounded-md">
+                            {['Domingo','Segunda','Terça','Quarta','Quinta','Sexta','Sábado'][Number(team.fixedDay)]} às {team.fixedTime}
+                          </span>
+                          <span className="text-[9px] font-bold text-pitch uppercase bg-gray-100 px-2 py-1 rounded-md">
+                            {team.sport} • {team.courtName}
+                          </span>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -1212,7 +1222,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
 
         {activeTab === 'MENSALISTAS' && (
           <div className="space-y-4">
-             {registeredTeams.map(t => (
+             {registeredTeams.filter(t => t.status === 'approved').map(t => (
                <div key={t.id} className="bg-white p-6 rounded-[3rem] border shadow-sm space-y-4">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-4">

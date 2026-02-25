@@ -679,7 +679,7 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
                             <p className="text-[8px] font-bold text-gray-400 mt-1 uppercase">{field?.pixConfig.name}</p>
                              <div className="mt-2 pt-2 border-t border-dashed">
                                 <p className="text-[10px] font-black text-pitch uppercase">
-                                   Valor a Pagar: <span className="text-grass-600">R$ {slot.homeTeamType === 'OUTSIDE' ? (slot.price / 2).toFixed(2) : slot.price.toFixed(2)}</span>
+                                   Valor a Pagar: <span className="text-grass-600">R$ {(slot.homeTeamType === 'OUTSIDE' || slot.homeTeamType === 'MENSALISTA') ? (slot.price / 2).toFixed(2) : slot.price.toFixed(2)}</span>
                                 </p>
                                 {slot.homeTeamType === 'OUTSIDE' && <p className="text-[7px] font-bold text-gray-400 uppercase italic">* Valor dividido entre os dois times (50% cada)</p>}
                              </div>
