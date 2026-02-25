@@ -136,7 +136,14 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
           
           return myTeamIsPlaying;
         });
-        setAwayGames(awaySlots);
+
+        // Also include games where the current user's team is playing away
+        const awayTeamSlots = await api.getSlotsForTeam(currentUser.id);
+        const trulyAwayGames = awayTeamSlots.filter(s => s.fieldId !== field.id);
+        const allAwayGames = [...awaySlots, ...trulyAwayGames];
+        const uniqueAwayGames = Array.from(new Set(allAwayGames.map(s => s.id))).map(id => allAwayGames.find(s => s.id === id));
+
+        setAwayGames(uniqueAwayGames);
       } catch (error) {
         console.error("Could not fetch away games. Assumed api.getAllSlots() does not exist or failed.", error);
         setAwayGames([]);
@@ -878,6 +885,41 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
               {slots.filter(s => s.status === 'pending_verification' || s.status === 'pending_field_approval' || s.status === 'pending_home_approval').length === 0 && registeredTeams.filter(t => t.status === 'pending').length === 0 && (
                 <div className="text-center py-20 text-gray-400 font-black uppercase text-[10px]">Nenhuma solicitação pendente.</div>
               )}
+
+              {/* Solicitações de Mensalista */}
+              {registeredTeams.filter(t => t.status === 'pending').map(team => (
+                <div key={team.id} className="bg-white rounded-[2.5rem] border-2 border-indigo-100 shadow-md p-6 space-y-6">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <span className="bg-indigo-100 text-indigo-600 px-3 py-1 rounded-full text-[8px] font-black uppercase">
+                        Solicitação de Mensalista
+                      </span>
+                      <h4 className="text-lg font-black text-pitch uppercase mt-2">{team.name}</h4>
+                    </div>
+                    <div className="p-3 bg-gray-50 rounded-xl text-pitch"><CalendarPlus className="w-5 h-5" /></div>
+                  </div>
+                  <div className="bg-gray-50 rounded-2xl p-4 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="w-12 h-12 bg-white rounded-xl border flex items-center justify-center overflow-hidden">
+                        {team.logoUrl ? (
+                          <img src={team.logoUrl} className="w-full h-full object-cover" />
+                        ) : (
+                          <div className="font-black">{team.name?.charAt(0)}</div>
+                        )}
+                      </div>
+                      <div>
+                        <p className="text-[8px] font-black text-gray-400 uppercase">Capitão</p>
+                        <p className="font-black text-pitch uppercase">{team.captainName}</p>
+                        <p className="text-[9px] font-bold text-grass-600 uppercase">{team.categories.join(', ')}</p>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <Button onClick={() => handleRejectMensalista(team.id)} variant="outline" className="py-4 rounded-2xl text-red-500 font-black uppercase text-[10px]">Recusar</Button>
+                    <Button onClick={() => handleApproveMensalista(team.id)} className="py-4 rounded-2xl bg-pitch text-white font-black uppercase text-[10px]">Aprovar</Button>
+                  </div>
+                </div>
+              ))}
 
               {/* Solicitações de Mensalista */}
               {registeredTeams.filter(t => t.status === 'pending').map(team => (
