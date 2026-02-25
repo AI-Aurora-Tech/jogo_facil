@@ -96,6 +96,7 @@ export interface MatchSlot {
   opponentTeamLogoUrl?: string;
   opponentTeamGender?: Gender;
   allowedOpponentCategories: string[];
+  allowedOpponentGenders: Gender[];
   status: MatchStatus;
   price: number;
   receiptUrl?: string;
@@ -129,7 +130,7 @@ export const CATEGORY_ORDER = [
   "Sport", "35+", "40+", "45+", "50+", "60+", "70+"
 ];
 
-export const SPORTS = ["Futebol", "Society", "Futsal", "Vôlei", "Handball", "Basquete", "Tênis", "Beach Tennis"];
+export const SPORTS = ["Futebol", "Futsal", "Vôlei", "Handball", "Basquete", "Tênis", "Beach Tennis"];
 
 /**
  * Interface representing the result of a PIX receipt verification processed by AI.

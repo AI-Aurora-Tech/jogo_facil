@@ -47,6 +47,8 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
   const [isLocalTeamSlot, setIsLocalTeamSlot] = useState(false);
   const [manualLocalTeamName, setManualLocalTeamName] = useState(field.name || 'Time da Casa');
   const [manualLocalCategory, setManualLocalCategory] = useState(CATEGORY_ORDER[0]);
+  const [localTeamGender, setLocalTeamGender] = useState<Gender>('MASCULINO');
+  const [acceptsMixed, setAcceptsMixed] = useState(false);
   const [acceptNeighbors, setAcceptNeighbors] = useState(true);
   const [selectedRegisteredTeamId, setSelectedRegisteredTeamId] = useState<string>('');
   const [localTeamCategory, setLocalTeamCategory] = useState<string>('');
@@ -57,6 +59,12 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
   const [filterTerm, setFilterTerm] = useState('');
   const [filterTag, setFilterTag] = useState('TODOS');
   const [showFilters, setShowFilters] = useState(false);
+  const [agendaView, setAgendaView] = useState<'LIST' | 'CALENDAR'>('LIST');
+  const [showAutoGenerateModal, setShowAutoGenerateModal] = useState(false);
+  const [autoGenDate, setAutoGenDate] = useState(new Date().toISOString().split('T')[0]);
+  const [autoGenStartTime, setAutoGenStartTime] = useState('08:00');
+  const [autoGenEndTime, setAutoGenEndTime] = useState('22:00');
+  const [autoGenDuration, setAutoGenDuration] = useState(60);
 
   // States Mensalista
   const [editingMensalista, setEditingMensalista] = useState<RegisteredTeam | null>(null);
@@ -76,6 +84,18 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
   const todayStr = new Date().toISOString().split('T')[0];
 
   const [historicSlots, setHistoricSlots] = useState<MatchSlot[]>([]);
+
+  const handleApproveMensalista = async (teamId: string) => {
+    try {
+      await api.updateRegisteredTeam(teamId, { status: 'approved' });
+      alert('Mensalista aprovado com sucesso!');
+      loadMensalistas();
+    } catch (error) {
+      alert('Erro ao aprovar mensalista.');
+    }
+  };
+
+
 
   useEffect(() => {
     if (forceTab) setActiveTab(forceTab);
@@ -174,15 +194,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
     } catch (e) { console.error(e); }
   };
 
-  const handleApproveMensalista = async (teamId: string) => {
-    try {
-      await api.updateRegisteredTeam(teamId, { status: 'approved' });
-      alert("Solicitação de mensalista aprovada!");
-      loadMensalistas();
-    } catch (e) {
-      alert("Erro ao aprovar.");
-    }
-  };
+
 
   const handleRejectMensalista = async (teamId: string) => {
     if (!confirm("Deseja realmente recusar esta solicitação?")) return;
@@ -295,6 +307,26 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
         return;
       }
 
+      // Check for overlapping slots
+      const newSlotStart = new Date(`${slotDate}T${slotTime}`);
+      const newSlotEnd = new Date(newSlotStart.getTime() + slotDuration * 60000);
+
+      const overlappingSlot = slots.find(slot => {
+        if (slot.id === editingSlotId) return false; // Don't compare with itself when editing
+        if (slot.date !== slotDate || slot.courtName !== slotCourt) return false;
+
+        const existingSlotStart = new Date(`${slot.date}T${slot.time}`);
+        const existingSlotEnd = new Date(existingSlotStart.getTime() + slot.durationMinutes * 60000);
+
+        return newSlotStart < existingSlotEnd && newSlotEnd > existingSlotStart;
+      });
+
+      if (overlappingSlot) {
+        alert(`Este horário conflita com um horário existente (${overlappingSlot.time}) na mesma quadra.`);
+        setIsLoading(false);
+        return;
+      }
+
       let teamName = null;
       let teamCategory = null;
       let teamPhone = null;
@@ -327,6 +359,13 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
              }
           }
         } 
+      } else {
+        teamGender = localTeamGender;
+      }
+
+      const allowedGenders: Gender[] = [teamGender!];
+      if (acceptsMixed) {
+        allowedGenders.push('MISTO');
       }
 
       const allowedCats = acceptNeighbors && teamCategory
@@ -351,7 +390,8 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
         status: isLocalTeamSlot ? 'confirmed' : 'available',
         courtName: slotCourt,
         sport: slotSport,
-        allowedOpponentCategories: isLocalTeamSlot ? allowedCats : []
+        allowedOpponentCategories: isLocalTeamSlot ? allowedCats : [],
+        allowedOpponentGenders: allowedGenders
       } as any;
 
       if (editingSlotId) {
@@ -362,6 +402,16 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
         delete updateData.status;
         await onUpdateSlot(editingSlotId, updateData);
         alert("Horário atualizado com sucesso!");
+
+        const originalSlot = slots.find(s => s.id === editingSlotId);
+        if (originalSlot && originalSlot.bookedByUserId) {
+          await api.createNotification({
+            userId: originalSlot.bookedByUserId,
+            title: "Jogo Remarcado!  rescheduled️",
+            description: `O jogo na arena ${field.name} foi remarcado para ${slotDate.split('-').reverse().join('/')} às ${slotTime}.`,
+            type: 'info'
+          });
+        }
       } else {
         await onAddSlot([slotData]);
         alert("Horário criado com sucesso!");
@@ -414,6 +464,69 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
       alert("Erro ao salvar mensalista.");
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleGenerateAgenda = async () => {
+    setIsLoading(true);
+    try {
+      const slotsToCreate: Omit<MatchSlot, 'id'>[] = [];
+      const startDate = new Date(`${autoGenDate}T${autoGenStartTime}`);
+      const endDate = new Date(`${autoGenDate}T${autoGenEndTime}`);
+      let currentTime = startDate;
+
+      while (currentTime < endDate) {
+        const timeStr = currentTime.toTimeString().slice(0, 5);
+        if (!slots.some(s => s.date === autoGenDate && s.time === timeStr && s.courtName === slotCourt)) {
+          slotsToCreate.push({
+            fieldId: field.id,
+            date: autoGenDate,
+            time: timeStr,
+            durationMinutes: autoGenDuration,
+            matchType: 'AMISTOSO',
+            isBooked: false,
+            hasLocalTeam: false,
+            price: field.hourlyRate,
+            status: 'available',
+            courtName: slotCourt,
+            sport: slotSport,
+            allowedOpponentCategories: [],
+            allowedOpponentGenders: [],
+          });
+        }
+        currentTime.setMinutes(currentTime.getMinutes() + autoGenDuration);
+      }
+
+      if (slotsToCreate.length > 0) {
+        await onAddSlot(slotsToCreate);
+        alert(`${slotsToCreate.length} horários criados com sucesso!`);
+        setShowAutoGenerateModal(false);
+      } else {
+        alert("Nenhum horário novo a ser criado. Verifique os conflitos de horário.");
+      }
+    } catch (e: any) {
+      console.error(e);
+      alert(e.message || "Erro ao gerar agenda.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleDeleteSlot = async (slot: MatchSlot) => {
+    if (!confirm("Remover este horário?")) return;
+    try {
+      await onDeleteSlot(slot.id);
+      alert("Horário removido com sucesso!");
+      if (slot.bookedByUserId) {
+        await api.createNotification({
+          userId: slot.bookedByUserId,
+          title: "Jogo Cancelado ❌",
+          description: `O jogo na arena ${field.name} no dia ${slot.date.split('-').reverse().join('/')} foi cancelado.`,
+          type: 'warning'
+        });
+      }
+    } catch (e) {
+      alert("Erro ao remover horário.");
     }
   };
 
@@ -563,8 +676,18 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
         </div>
       </div>
 
-      <div className="p-6">
         {activeTab === 'AGENDA' && (
+          <div className="p-6">
+            <div className="flex items-center justify-between mb-4">
+              <button onClick={() => setShowAutoGenerateModal(true)} className="bg-pitch text-white text-xs font-black uppercase px-4 py-2 rounded-full flex items-center gap-2">
+                <Sparkles className="w-4 h-4" />
+                Gerar Agenda
+              </button>
+              <div className="flex items-center justify-center bg-gray-100 p-1 rounded-full w-fit">
+              <button onClick={() => setAgendaView('LIST')} className={`px-4 py-2 text-xs font-black uppercase rounded-full ${agendaView === 'LIST' ? 'bg-white text-pitch shadow-sm' : 'text-gray-400'}`}>Lista</button>
+              <button onClick={() => setAgendaView('CALENDAR')} className={`px-4 py-2 text-xs font-black uppercase rounded-full ${agendaView === 'CALENDAR' ? 'bg-white text-pitch shadow-sm' : 'text-gray-400'}`}>Calendário</button>
+            </div>
+            </div>
           <div className="space-y-6">
             <div className="bg-white p-4 rounded-[2rem] border shadow-sm space-y-3">
               <div className="flex items-center justify-between cursor-pointer" onClick={() => setShowFilters(!showFilters)}>
@@ -605,7 +728,8 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
               )}
             </div>
 
-            <div className="grid gap-4">
+            {agendaView === 'LIST' && (
+              <div className="grid gap-4">
               {combinedSlots.length === 0 ? (
                 <div className="text-center py-20 text-gray-400 font-black uppercase text-[10px]">Nenhum horário disponível.</div>
               ) : (
@@ -651,7 +775,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                       <div className="flex gap-2 pt-2 border-t mt-1 justify-between items-center">
                         <div className="flex gap-2">
                            <button onClick={() => handleEditSlot(slot)} className="p-3 bg-gray-50 text-pitch rounded-xl hover:bg-pitch hover:text-white transition-all"><Edit className="w-4 h-4"/></button>
-                           <button onClick={() => { if(confirm("Remover este horário?")) onDeleteSlot(slot.id); }} className="p-3 text-red-500 hover:bg-red-50 rounded-xl bg-gray-50"><Trash2 className="w-4 h-4"/></button>
+                           <button onClick={() => handleDeleteSlot(slot)} className="p-3 text-red-500 hover:bg-red-50 rounded-xl bg-gray-50"><Trash2 className="w-4 h-4"/></button>
                         </div>
                         {slot.status === 'confirmed' && (
                            <button 
@@ -664,6 +788,19 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                            >
                              <MessageCircle className="w-4 h-4"/>
                              <span className="text-[8px] font-black uppercase">Notificar WhatsApp</span>
+                           </button>
+                        )}
+                        {slot.status === 'pending_payment' && (
+                           <button 
+                             onClick={() => {
+                               const msg = `Olá! O jogo na arena ${field.name} dia ${slot.date.split('-').reverse().join('/')} às ${slot.time} está aguardando pagamento.`;
+                               const phone = slot.opponentTeamPhone || slot.bookedByUserPhone || slot.localTeamPhone;
+                               if (phone) window.open(api.getWhatsAppLink(phone, msg), '_blank');
+                             }} 
+                             className="p-3 bg-blue-50 text-blue-600 rounded-xl hover:bg-blue-500 hover:text-white transition-all flex items-center gap-2"
+                           >
+                             <MessageCircle className="w-4 h-4"/>
+                             <span className="text-[8px] font-black uppercase">Notificar Pagamento</span>
                            </button>
                         )}
                         {slot.status === 'pending_payment' && isAwayGame && (
@@ -681,7 +818,14 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                 })
               )}
             </div>
+            )}
+            {agendaView === 'CALENDAR' && (
+              <div className="bg-white p-4 rounded-3xl border shadow-sm">
+                <p className="text-center text-gray-400 py-20">Visualização de calendário em desenvolvimento.</p>
+              </div>
+            )}
           </div>
+        </div>
         )}
 
         {activeTab === 'SOLICITACOES' && (
@@ -828,7 +972,6 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
              </div>
           </div>
         )}
-      </div>
 
       {/* Modal Add/Edit Slot */}
       {showAddSlotModal && (
@@ -950,6 +1093,23 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                         {acceptNeighbors && (
                            <p className="text-[8px] text-gray-400 font-bold uppercase italic">* Permitirá desafios de uma categoria acima e uma abaixo.</p>
                         )}
+
+                        <div className="grid grid-cols-2 gap-3 pt-3 border-t mt-3">
+                          <div className="bg-white p-3 rounded-xl border">
+                            <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Gênero do Time</label>
+                            <select value={localTeamGender} onChange={e => setLocalTeamGender(e.target.value as Gender)} className="w-full bg-transparent font-black outline-none text-xs uppercase">
+                              <option value="MASCULINO">Masculino</option>
+                              <option value="FEMININO">Feminino</option>
+                              <option value="MISTO">Misto</option>
+                            </select>
+                          </div>
+                          <div className="bg-white p-3 rounded-xl border flex items-center justify-center">
+                            <label className="flex items-center gap-2 text-xs font-black uppercase text-gray-600">
+                              <input type="checkbox" checked={acceptsMixed} onChange={e => setAcceptsMixed(e.target.checked)} className="w-4 h-4 rounded text-pitch focus:ring-pitch" />
+                              Aceita times mistos?
+                            </label>
+                          </div>
+                        </div>
                     </div>
                  )}
 
@@ -962,6 +1122,38 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
       )}
 
       {/* Modal Add Mensalista */}
+      {showAutoGenerateModal && (
+        <div className="fixed inset-0 bg-pitch/95 backdrop-blur-md z-[500] flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-md rounded-3xl p-8 animate-in slide-in-from-bottom duration-500 shadow-2xl">
+            <h2 className="text-xl font-black italic uppercase text-pitch mb-6">Gerar Agenda Automática</h2>
+            <div className="space-y-4">
+              <div>
+                <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Data</label>
+                <input type="date" value={autoGenDate} onChange={e => setAutoGenDate(e.target.value)} className="w-full bg-gray-50 p-3 rounded-xl border font-bold text-sm uppercase" />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Hora de Início</label>
+                  <input type="time" value={autoGenStartTime} onChange={e => setAutoGenStartTime(e.target.value)} className="w-full bg-gray-50 p-3 rounded-xl border font-bold text-sm uppercase" />
+                </div>
+                <div>
+                  <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Hora de Fim</label>
+                  <input type="time" value={autoGenEndTime} onChange={e => setAutoGenEndTime(e.target.value)} className="w-full bg-gray-50 p-3 rounded-xl border font-bold text-sm uppercase" />
+                </div>
+              </div>
+              <div>
+                <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Duração (minutos)</label>
+                <input type="number" step="15" value={autoGenDuration} onChange={e => setAutoGenDuration(parseInt(e.target.value))} className="w-full bg-gray-50 p-3 rounded-xl border font-bold text-sm uppercase" />
+              </div>
+            </div>
+            <div className="flex gap-2 mt-6">
+              <Button onClick={() => setShowAutoGenerateModal(false)} variant="outline" className="w-full">Cancelar</Button>
+              <Button onClick={handleGenerateAgenda} className="w-full">Gerar</Button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {showAddMensalistaModal && (
         <div className="fixed inset-0 bg-pitch/95 backdrop-blur-md z-[100] flex items-end">
            <div className="bg-white w-full rounded-t-[3rem] p-10 animate-in slide-in-from-bottom duration-500 max-h-[90vh] overflow-y-auto pb-safe">
@@ -1021,5 +1213,5 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
         </div>
       )}
     </div>
-  );
+  )
 };

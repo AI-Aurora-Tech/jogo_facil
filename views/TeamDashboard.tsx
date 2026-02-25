@@ -505,7 +505,23 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
                      </div>
                    )}
                </div>
-               <button onClick={() => { setSearchQuery(''); setFilterMaxDistance(100); setFilterRange('ALL'); setFilterDate(''); }} className="text-[8px] font-black text-red-500 uppercase w-full text-right mt-1">Resetar filtros</button>
+               <div className="grid grid-cols-2 gap-2">
+                   <div className="bg-white p-3 rounded-xl border flex items-center gap-2">
+                      <Activity className="w-4 h-4 text-gray-400" />
+                      <select value={filterSport} onChange={e => setFilterSport(e.target.value)} className="bg-transparent w-full font-bold text-[10px] uppercase outline-none">
+                         <option value="">Todos Esportes</option>
+                         {SPORTS.map(s => <option key={s} value={s}>{s}</option>)}
+                      </select>
+                   </div>
+                   <div className="bg-white p-3 rounded-xl border flex items-center gap-2">
+                      <SlidersHorizontal className="w-4 h-4 text-gray-400" />
+                      <select value={filterCategory} onChange={e => setFilterCategory(e.target.value)} className="bg-transparent w-full font-bold text-[10px] uppercase outline-none">
+                         <option value="">Todas Categorias</option>
+                         {CATEGORY_ORDER.map(c => <option key={c} value={c}>{c}</option>)}
+                      </select>
+                   </div>
+               </div>
+               <button onClick={() => { setSearchQuery(''); setFilterMaxDistance(100); setFilterRange('ALL'); setFilterDate(''); setFilterSport(''); setFilterCategory(''); }} className="text-[8px] font-black text-red-500 uppercase w-full text-right mt-1">Resetar filtros</button>
             </div>
           )}
         </div>
@@ -574,12 +590,23 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
                 <div className="px-6 pb-2">
                   <div className={`rounded-2xl p-4 flex items-center justify-between ${slot.bookedByTeamName ? 'bg-indigo-50' : 'bg-gray-50'}`}>
                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 bg-white rounded-xl border flex items-center justify-center font-black text-pitch text-xs">
-                           {slot.bookedByTeamName?.charAt(0) || slot.localTeamName?.charAt(0) || '?'}
+                        <div className="w-10 h-10 bg-white rounded-xl border flex items-center justify-center font-black text-pitch text-xs overflow-hidden">
+                           {slot.bookedByTeamLogoUrl ? (
+                             <img src={slot.bookedByTeamLogoUrl} className="w-full h-full object-cover" />
+                           ) : (
+                             slot.bookedByTeamName?.charAt(0) || slot.localTeamName?.charAt(0) || '?'
+                           )}
                         </div>
                         <div className="flex-1">
                            <p className="text-[8px] font-black text-gray-400 uppercase">Mandante</p>
-                           <p className="text-sm font-black text-pitch uppercase truncate">{slot.bookedByTeamName || slot.localTeamName || 'Livre'}</p>
+                           <div className="flex items-center gap-2">
+                              <p className="text-sm font-black text-pitch uppercase truncate">{slot.bookedByTeamName || slot.localTeamName || 'Livre'}</p>
+                              {(slot.bookedByTeamCategory || slot.localTeamCategory) && (
+                                <span className="text-[9px] font-bold text-grass-600 uppercase bg-grass-100 px-2 py-1 rounded-md">
+                                  {slot.bookedByTeamCategory || slot.localTeamCategory}
+                                </span>
+                              )}
+                           </div>
                         </div>
                      </div>
                      <Swords className="w-5 h-5 text-gray-300" />
@@ -593,7 +620,7 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
                       </span>
                       <span className="text-xs font-black text-pitch">R$ {slot.price}</span>
                    </div>
-                   {viewMode === 'EXPLORE' && slot.status !== 'confirmed' && slot.status !== 'pending_payment' && slot.status !== 'pending_home_approval' && slot.status !== 'pending_field_approval' && slot.status !== 'pending_verification' &&
+                   {viewMode === 'EXPLORE' && (slot.status === 'available' || slot.status === 'waiting_opponent') &&
                      <Button onClick={() => setSelectedSlot(slot)} className="rounded-2xl px-8 py-4 font-black uppercase text-[10px] bg-pitch shadow-lg">
                         {slot.bookedByTeamName || slot.hasLocalTeam ? 'Desafiar' : 'Alugar'}
                      </Button>
