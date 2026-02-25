@@ -339,6 +339,51 @@ export const api = {
     })) as unknown as MatchSlot[];
   },
 
+  getSlotsForTeam: async (userId: string): Promise<MatchSlot[]> => {
+    const today = new Date().toISOString().split('T')[0];
+    const { data, error } = await supabase
+      .from('match_slot')
+      .select('*')
+      .eq('booked_by_user_id', userId)
+      .gte('date', today)
+      .order('date')
+      .order('time');
+    if (error) throw error;
+    return (data || []).map(s => ({
+      id: s.id,
+      fieldId: s.field_id,
+      date: s.date,
+      time: s.time,
+      durationMinutes: s.duration_minutes,
+      matchType: s.match_type,
+      isBooked: s.is_booked,
+      hasLocalTeam: s.has_local_team,
+      localTeamName: s.local_team_name,
+      localTeamCategory: s.local_team_category,
+      localTeamPhone: s.local_team_phone,
+      localTeamLogoUrl: s.local_team_logo_url,
+      localTeamGender: s.local_team_gender,
+      bookedByUserId: s.booked_by_user_id,
+      bookedByTeamName: s.booked_by_team_name,
+      bookedByTeamCategory: s.booked_by_category,
+      bookedByTeamLogoUrl: s.booked_by_team_logo_url,
+      bookedByUserPhone: s.booked_by_user_phone,
+      opponentTeamName: s.opponent_team_name,
+      opponentTeamCategory: s.opponent_team_category,
+      opponentTeamPhone: s.opponent_team_phone,
+      opponentTeamLogoUrl: s.opponent_team_logo_url,
+      opponentTeamGender: s.opponent_team_gender,
+      status: s.status,
+      price: s.price,
+      allowedOpponentCategories: s.allowed_opponent_categories || [],
+      receiptUrl: s.receipt_url,
+      receiptUploadedAt: s.receipt_uploaded_at,
+      aiVerificationResult: s.ai_verification_result,
+      courtName: s.court_name,
+      sport: s.sport
+    })) as unknown as MatchSlot[];
+  },
+
   getSlotHistory: async (fieldId: string): Promise<MatchSlot[]> => {
     const today = new Date().toISOString().split('T')[0];
     const { data, error } = await supabase

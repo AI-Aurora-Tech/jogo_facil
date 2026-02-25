@@ -105,6 +105,9 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
     if (activeTab === 'HISTORICO' && field.id) {
       api.getSlotHistory(field.id).then(setHistoricSlots);
     }
+    if (activeTab === 'SOLICITACOES' && field.id) {
+      loadMensalistas();
+    }
   }, [activeTab, field.id]);
 
   useEffect(() => {
@@ -120,8 +123,21 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
       try {
         // Robust way to get away games
         const teamSlots = await api.getSlotsForTeam(currentUser.id);
+        
+        // Filter out games that are on the current field
         const awaySlots = teamSlots.filter(slot => slot.fieldId !== field.id);
-        setAwayGames(awaySlots);
+        
+        // Ensure we only show games where the user's team is actually playing
+        const teamNames = currentUser.teams.map(t => t.name.toLowerCase());
+        const trulyAwayGames = awaySlots.filter(slot => {
+          const myTeamIsPlaying = 
+            (slot.localTeamName && teamNames.includes(slot.localTeamName.toLowerCase())) ||
+            (slot.opponentTeamName && teamNames.includes(slot.opponentTeamName.toLowerCase())) ||
+            (slot.bookedByTeamName && teamNames.includes(slot.bookedByTeamName.toLowerCase()));
+          return myTeamIsPlaying;
+        });
+
+        setAwayGames(trulyAwayGames);
       } catch (error) {
         console.error("Could not fetch away games for team.", error);
         setAwayGames([]);
@@ -475,8 +491,9 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
             status: 'available',
             courtName: slotCourt,
             sport: slotSport,
+            homeTeamType: 'OUTSIDE',
             allowedOpponentCategories: [],
-            allowedOpponentGenders: [],
+            allowedOpponentGenders: ['MASCULINO', 'FEMININO', 'MISTO'],
           });
         }
         currentTime.setMinutes(currentTime.getMinutes() + autoGenDuration);
@@ -542,6 +559,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
               localTeamLogoUrl: team.logoUrl, 
               localTeamGender: team.gender, 
               allowedOpponentCategories: team.categories, 
+              allowedOpponentGenders: [team.gender],
               status: 'pending_payment', 
               price: field.hourlyRate, 
               sport: team.sport, 

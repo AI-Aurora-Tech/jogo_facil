@@ -620,7 +620,7 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
                       </span>
                       <span className="text-xs font-black text-pitch">R$ {slot.price}</span>
                    </div>
-                   {viewMode === 'EXPLORE' && (slot.status === 'available' || slot.status === 'waiting_opponent') &&
+                   {viewMode === 'EXPLORE' && (slot.status === 'available' || slot.status === 'waiting_opponent') && field?.ownerId !== currentUser.id &&
                      <Button onClick={() => setSelectedSlot(slot)} className="rounded-2xl px-8 py-4 font-black uppercase text-[10px] bg-pitch shadow-lg">
                         {slot.bookedByTeamName || slot.hasLocalTeam ? 'Desafiar' : 'Alugar'}
                      </Button>
