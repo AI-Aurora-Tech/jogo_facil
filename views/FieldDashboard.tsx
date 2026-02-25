@@ -28,6 +28,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
   const [activeTab, setActiveTab] = useState<'AGENDA' | 'SOLICITACOES' | 'MENSALISTAS' | 'HISTORICO'>('AGENDA');
   const [isLoading, setIsLoading] = useState(false);
   const [registeredTeams, setRegisteredTeams] = useState<RegisteredTeam[]>([]);
+  const [awayGames, setAwayGames] = useState<MatchSlot[]>([]);
   
   // States Modais
   const [showAddSlotModal, setShowAddSlotModal] = useState(false);
@@ -89,6 +90,38 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
   useEffect(() => {
     loadMensalistas();
   }, [field.id]);
+
+  useEffect(() => {
+    const fetchAwayGames = async () => {
+      if (!currentUser.teams || currentUser.teams.length === 0) {
+        setAwayGames([]);
+        return;
+      }
+      try {
+        // This is a speculative API call. If it fails, the feature won't work
+        // but the app won't crash.
+        const allSlots = await api.getAllSlots(); 
+        const teamNames = currentUser.teams.map(t => t.name.toLowerCase());
+        
+        const awaySlots = allSlots.filter(slot => {
+          const isAwayGame = slot.fieldId !== field.id;
+          if (!isAwayGame) return false;
+
+          const myTeamIsPlaying = 
+            (slot.localTeamName && teamNames.includes(slot.localTeamName.toLowerCase())) ||
+            (slot.opponentTeamName && teamNames.includes(slot.opponentTeamName.toLowerCase()));
+          
+          return myTeamIsPlaying;
+        });
+        setAwayGames(awaySlots);
+      } catch (error) {
+        console.error("Could not fetch away games. Assumed api.getAllSlots() does not exist or failed.", error);
+        setAwayGames([]);
+      }
+    };
+
+    fetchAwayGames();
+  }, [currentUser.teams, field.id, slots]);
 
   useEffect(() => {
     // Atualiza nome padrão se o nome da arena carregar depois
@@ -430,7 +463,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
     finally { setIsLoading(false); }
   };
 
-  const agendaSlots = slots
+  const combinedSlots = [...slots, ...awayGames]
     .filter(s => {
        // Show all slots from today onwards, or past slots if they are pending something
        if (s.date < todayStr && (s.status === 'confirmed' || s.status === 'available')) return false; 
@@ -570,18 +603,20 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
             </div>
 
             <div className="grid gap-4">
-              {agendaSlots.length === 0 ? (
+              {combinedSlots.length === 0 ? (
                 <div className="text-center py-20 text-gray-400 font-black uppercase text-[10px]">Nenhum horário disponível.</div>
               ) : (
-                agendaSlots.map(slot => {
+                combinedSlots.map(slot => {
                   const badges = getSlotBadges(slot);
                   
                   // Lógica visual para corrigir nome "CARREGANDO..."
                   const displayLocalName = (slot.localTeamName === 'Carregando...' ? field.name : slot.localTeamName) || slot.bookedByTeamName || 'Horário Livre';
                   const displayLocalNameSafe = displayLocalName === 'Carregando...' ? 'Time da Casa' : displayLocalName;
 
+                  const isAwayGame = slot.fieldId !== field.id;
+
                   return (
-                    <div key={slot.id} className="bg-white p-5 rounded-[2.5rem] border flex flex-col gap-4 shadow-sm relative group overflow-hidden">
+                    <div key={slot.id} className={`bg-white p-5 rounded-[2.5rem] border flex flex-col gap-4 shadow-sm relative group overflow-hidden ${isAwayGame ? 'border-blue-200' : ''}`}>
                       <div className="flex justify-between items-start">
                          <div className="flex items-center gap-4">
                             <div className={`p-4 rounded-2xl ${slot.isBooked ? 'bg-pitch text-white' : 'bg-gray-100 text-gray-400'}`}>
@@ -603,6 +638,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                          </div>
                       </div>
                       <div className="flex flex-wrap gap-2">
+                        {isAwayGame && <span className='px-2 py-1 rounded-lg text-[8px] font-black uppercase flex items-center gap-1 bg-blue-100 text-blue-700'><MapPin className="w-3 h-3"/> JOGO FORA</span>}
                          {badges.map((badge, i) => (
                            <span key={i} className={`px-2 py-1 rounded-lg text-[8px] font-black uppercase flex items-center gap-1 ${badge.color}`}>
                              {badge.icon} {badge.label}
@@ -626,6 +662,12 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                              <MessageCircle className="w-4 h-4"/>
                              <span className="text-[8px] font-black uppercase">Notificar WhatsApp</span>
                            </button>
+                        )}
+                        {slot.status === 'pending_payment' && isAwayGame && (
+                          <a href={`/team?tab=MY_GAMES`} className="p-3 bg-grass-50 text-grass-600 rounded-xl hover:bg-grass-500 hover:text-white transition-all flex items-center gap-2">
+                            <Check className="w-4 h-4"/>
+                            <span className="text-[8px] font-black uppercase">PAGAR</span>
+                          </a>
                         )}
                         {(slot.status === 'pending_verification' || slot.status === 'pending_field_approval') && (
                            <button onClick={() => setActiveTab('SOLICITACOES')} className="bg-orange-500 text-white text-[8px] font-black uppercase px-3 py-2 rounded-lg animate-pulse">Ver Solicitação</button>
