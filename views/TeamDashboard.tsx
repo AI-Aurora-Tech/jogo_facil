@@ -1,8 +1,14 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { Search, MapPin, Clock, Swords, Filter, X, Check, MessageCircle, Phone, Navigation, Trophy, ChevronDown, Smartphone, Settings, AlertTriangle, ExternalLink, Activity, History as HistoryIcon, CalendarCheck, CalendarX, Locate, MapPinOff, Calendar, RotateCcw, ArrowUpDown, SlidersHorizontal, Camera, Upload } from 'lucide-react';
+import { Search, MapPin, Clock, Swords, Filter, X, Check, MessageCircle, Phone, Navigation, Trophy, ChevronDown, Smartphone, Settings, AlertTriangle, ExternalLink, Activity, History as HistoryIcon, CalendarCheck, CalendarX, Locate, MapPinOff, Calendar, RotateCcw, ArrowUpDown, SlidersHorizontal, Camera, Upload, Clipboard } from 'lucide-react';
 import { Button } from '../components/Button';
 import { Field, MatchSlot, User, CATEGORY_ORDER, SPORTS, Gender, MatchStatus } from '../types';
+
+
+const handleCopy = (text: string) => {
+  navigator.clipboard.writeText(text);
+  alert('Chave PIX copiada!');
+};
 import { api } from '../api';
 import { calculateDistance, getCurrentPosition, formatDistance, LatLng, getNeighboringCategories, geocodeAddress, convertFileToBase64 } from '../utils';
 import { verifyPixReceipt } from '../services/aiService';
@@ -26,6 +32,7 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
   const [mensalistaRequestField, setMensalistaRequestField] = useState<Field | null>(null);
   const [mensalistaDay, setMensalistaDay] = useState(1);
   const [mensalistaTime, setMensalistaTime] = useState('19:00');
+  const [isLoading, setIsLoading] = useState(false);
   const [mensalistaCourt, setMensalistaCourt] = useState('');
   const [mensalistaSport, setMensalistaSport] = useState('Society');
   const [selectedTeamIdx, setSelectedTeamIdx] = useState(0);
@@ -176,7 +183,10 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
         const isMyTeamInSlot = (slot.bookedByTeamName && myTeamsNames.includes(slot.bookedByTeamName.toLowerCase())) ||
                                (slot.opponentTeamName && myTeamsNames.includes(slot.opponentTeamName.toLowerCase())) ||
                                (slot.localTeamName && myTeamsNames.includes(slot.localTeamName.toLowerCase()));
-        const isMyBooking = slot.bookedByUserId === currentUser.id || isMyTeamInSlot;
+        const isMyBooking = slot.bookedByUserId === currentUser.id || 
+                              isMyTeamInSlot || 
+                              (currentUser.teams.some(t => t.name.toLowerCase() === slot.localTeamName?.toLowerCase()) && slot.fieldId !== currentUser.fieldId) ||
+                              (currentUser.teams.some(t => t.name.toLowerCase() === slot.opponentTeamName?.toLowerCase()) && slot.fieldId !== currentUser.fieldId);
         if (!isMyBooking) return false;
         if (myGamesSubTab === 'FUTUROS' && slot.date < todayStr) return false;
         if (myGamesSubTab === 'HISTORICO' && slot.date >= todayStr) return false;
@@ -382,7 +392,11 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
 
   const handleRequestMensalista = async () => {
     if (!mensalistaRequestField) return;
-    const team = currentUser.teams[selectedTeamIdx];
+    const team = currentUser.teams?.[selectedTeamIdx];
+    if (!team) {
+      alert("Erro: Time não encontrado. Por favor, selecione um time.");
+      return;
+    }
     if (!selectedCategory) {
       alert("Selecione uma categoria para o seu time mensalista.");
       return;
@@ -526,16 +540,18 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
                      <div className="flex justify-between items-start">
                         <h3 className="font-black text-pitch text-lg leading-none uppercase truncate mr-2">{field?.name}</h3>
                         <div className="flex items-center gap-2">
-                           <button 
-                             onClick={(e) => {
-                               e.stopPropagation();
-                               setMensalistaRequestField(field || null);
-                               setShowMensalistaModal(true);
-                             }}
-                             className="text-[8px] font-black text-indigo-600 uppercase bg-indigo-50 px-2 py-1 rounded-lg hover:bg-indigo-100 transition-colors"
-                           >
-                             Seja Mensalista
-                           </button>
+                           {currentUser.role === 'TEAM_CAPTAIN' &&
+                             <button 
+                               onClick={(e) => {
+                                 e.stopPropagation();
+                                 setMensalistaRequestField(field || null);
+                                 setShowMensalistaModal(true);
+                               }}
+                               className="text-[8px] font-black text-indigo-600 uppercase bg-indigo-50 px-2 py-1 rounded-lg hover:bg-indigo-100 transition-colors"
+                             >
+                               Seja Mensalista
+                             </button>
+                           }
                            {distMeters >= 0 && (
                               <div className="flex items-center gap-1 bg-grass-50 text-grass-700 px-2 py-1 rounded-lg border border-grass-100">
                                 <MapPin className="w-3 h-3" />
@@ -577,9 +593,11 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
                       </span>
                       <span className="text-xs font-black text-pitch">R$ {slot.price}</span>
                    </div>
-                   <Button onClick={() => setSelectedSlot(slot)} className="rounded-2xl px-8 py-4 font-black uppercase text-[10px] bg-pitch shadow-lg">
-                      {slot.bookedByTeamName || slot.hasLocalTeam ? 'Desafiar' : 'Alugar'}
-                   </Button>
+                   {slot.status !== 'confirmed' &&
+                     <Button onClick={() => setSelectedSlot(slot)} className="rounded-2xl px-8 py-4 font-black uppercase text-[10px] bg-pitch shadow-lg">
+                        {slot.bookedByTeamName || slot.hasLocalTeam ? 'Desafiar' : 'Alugar'}
+                     </Button>
+                   }
                 </div>
                 
                 {viewMode === 'MY_BOOKINGS' && (
@@ -602,7 +620,12 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
                          </div>
                          <div className="bg-white p-3 rounded-xl border border-blue-100">
                             <p className="text-[8px] font-black text-gray-400 uppercase mb-1">Chave PIX da Arena:</p>
-                            <p className="font-black text-pitch text-xs">{field?.pixConfig.key || 'Não configurada'}</p>
+                            <div className="flex items-center gap-2">
+                               <p className="font-black text-pitch text-xs truncate">{field?.pixConfig.key || 'Não configurada'}</p>
+                               <button onClick={() => handleCopy(field?.pixConfig.key || '')} className="p-2 bg-gray-100 rounded-lg active:scale-90 transition-transform">
+                                  <Clipboard className="w-3 h-3 text-gray-400" />
+                               </button>
+                            </div>
                             <p className="text-[8px] font-bold text-gray-400 mt-1 uppercase">{field?.pixConfig.name}</p>
                              <div className="mt-2 pt-2 border-t border-dashed">
                                 <p className="text-[10px] font-black text-pitch uppercase">

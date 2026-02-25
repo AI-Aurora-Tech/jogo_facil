@@ -39,6 +39,7 @@ export interface User {
   longitude?: number;
   teamRating?: number;
   teamRatingCount?: number;
+  fieldId?: string;
 }
 
 export interface Notification {

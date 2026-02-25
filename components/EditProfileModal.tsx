@@ -171,7 +171,7 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({ categories, 
           let finalLng = field.longitude;
 
           // Se o endereço mudou ou se não tem coordenadas, busca agora
-          if (fullAddress !== field.location || (finalLat === 0 && finalLng === 0)) {
+          if (fullAddress !== field.location || !finalLat || !finalLng) {
               const coords = await geocodeAddress(fullAddress);
               if (coords) {
                   finalLat = coords.lat;
