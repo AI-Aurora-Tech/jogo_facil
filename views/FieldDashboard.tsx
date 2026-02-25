@@ -102,13 +102,13 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
   }, [forceTab]);
 
   useEffect(() => {
-    if (activeTab === 'HISTORICO' && field.id) {
-      api.getSlotHistory(field.id).then(setHistoricSlots);
-    }
-    if (activeTab === 'SOLICITACOES' && field.id) {
+    if (activeTab === 'SOLICITACOES' && field?.id) {
       loadMensalistas();
     }
-  }, [activeTab, field.id]);
+    if (activeTab === 'HISTORICO' && field?.id) {
+      api.getSlotHistory(field.id).then(setHistoricSlots);
+    }
+  }, [activeTab, field?.id]);
 
   useEffect(() => {
     loadMensalistas();
@@ -793,7 +793,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                              <span className="text-[8px] font-black uppercase">Notificar WhatsApp</span>
                            </button>
                         )}
-                        {slot.status === 'pending_payment' && (
+                        {slot.status === 'pending_payment' && !isAwayGame && (
                            <button 
                              onClick={() => {
                                const msg = `Olá! O jogo na arena ${field.name} dia ${slot.date.split('-').reverse().join('/')} às ${slot.time} está aguardando pagamento.`;
@@ -807,10 +807,17 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                            </button>
                         )}
                         {slot.status === 'pending_payment' && isAwayGame && (
-                          <a href={`/team?tab=MY_GAMES`} className="p-3 bg-grass-50 text-grass-600 rounded-xl hover:bg-grass-500 hover:text-white transition-all flex items-center gap-2">
-                            <Check className="w-4 h-4"/>
-                            <span className="text-[8px] font-black uppercase">PAGAR</span>
-                          </a>
+                           <button 
+                             onClick={() => {
+                               window.location.href = `/?tab=MY_GAMES`;
+                             }} 
+                             className="flex-1 py-3 bg-grass-500 text-white rounded-xl hover:bg-grass-600 transition-all flex items-center justify-center gap-2 shadow-md"
+                           >
+                             <Check className="w-4 h-4"/>
+                             <span className="text-[10px] font-black uppercase">
+                               PAGAR R$ {slot.homeTeamType === 'OUTSIDE' ? (slot.price / 2).toFixed(2) : slot.price.toFixed(2)}
+                             </span>
+                           </button>
                         )}
                         {(slot.status === 'pending_verification' || slot.status === 'pending_field_approval') && (
                            <button onClick={() => setActiveTab('SOLICITACOES')} className="bg-orange-500 text-white text-[8px] font-black uppercase px-3 py-2 rounded-lg animate-pulse">Ver Solicitação</button>
@@ -916,76 +923,6 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
               {slots.filter(s => s.status === 'pending_verification' || s.status === 'pending_field_approval' || s.status === 'pending_home_approval').length === 0 && registeredTeams.filter(t => t.status === 'pending').length === 0 && (
                 <div className="text-center py-20 text-gray-400 font-black uppercase text-[10px]">Nenhuma solicitação pendente.</div>
               )}
-
-              {/* Solicitações de Mensalista */}
-              {registeredTeams.filter(t => t.status === 'pending').map(team => (
-                <div key={team.id} className="bg-white rounded-[2.5rem] border-2 border-indigo-100 shadow-md p-6 space-y-6">
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <span className="bg-indigo-100 text-indigo-600 px-3 py-1 rounded-full text-[8px] font-black uppercase">
-                        Solicitação de Mensalista
-                      </span>
-                      <h4 className="text-lg font-black text-pitch uppercase mt-2">{team.name}</h4>
-                    </div>
-                    <div className="p-3 bg-gray-50 rounded-xl text-pitch"><CalendarPlus className="w-5 h-5" /></div>
-                  </div>
-                  <div className="bg-gray-50 rounded-2xl p-4 flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="w-12 h-12 bg-white rounded-xl border flex items-center justify-center overflow-hidden">
-                        {team.logoUrl ? (
-                          <img src={team.logoUrl} className="w-full h-full object-cover" />
-                        ) : (
-                          <div className="font-black">{team.name?.charAt(0)}</div>
-                        )}
-                      </div>
-                      <div>
-                        <p className="text-[8px] font-black text-gray-400 uppercase">Capitão</p>
-                        <p className="font-black text-pitch uppercase">{team.captainName}</p>
-                        <p className="text-[9px] font-bold text-grass-600 uppercase">{team.categories.join(', ')}</p>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <Button onClick={() => handleRejectMensalista(team.id)} variant="outline" className="py-4 rounded-2xl text-red-500 font-black uppercase text-[10px]">Recusar</Button>
-                    <Button onClick={() => handleApproveMensalista(team.id)} className="py-4 rounded-2xl bg-pitch text-white font-black uppercase text-[10px]">Aprovar</Button>
-                  </div>
-                </div>
-              ))}
-
-              {/* Solicitações de Mensalista */}
-              {registeredTeams.filter(t => t.status === 'pending').map(team => (
-                <div key={team.id} className="bg-white rounded-[2.5rem] border-2 border-indigo-100 shadow-md p-6 space-y-6">
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <span className="bg-indigo-100 text-indigo-600 px-3 py-1 rounded-full text-[8px] font-black uppercase">
-                        Solicitação de Mensalista
-                      </span>
-                      <h4 className="text-lg font-black text-pitch uppercase mt-2">{team.name}</h4>
-                    </div>
-                    <div className="p-3 bg-gray-50 rounded-xl text-pitch"><CalendarPlus className="w-5 h-5" /></div>
-                  </div>
-                  <div className="bg-gray-50 rounded-2xl p-4 flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="w-12 h-12 bg-white rounded-xl border flex items-center justify-center overflow-hidden">
-                        {team.logoUrl ? (
-                          <img src={team.logoUrl} className="w-full h-full object-cover" />
-                        ) : (
-                          <div className="font-black">{team.name?.charAt(0)}</div>
-                        )}
-                      </div>
-                      <div>
-                        <p className="text-[8px] font-black text-gray-400 uppercase">Capitão</p>
-                        <p className="font-black text-pitch uppercase">{team.captainName}</p>
-                        <p className="text-[9px] font-bold text-grass-600 uppercase">{team.categories.join(', ')}</p>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <Button onClick={() => handleRejectMensalista(team.id)} variant="outline" className="py-4 rounded-2xl text-red-500 font-black uppercase text-[10px]">Recusar</Button>
-                    <Button onClick={() => handleApproveMensalista(team.id)} className="py-4 rounded-2xl bg-pitch text-white font-black uppercase text-[10px]">Aprovar</Button>
-                  </div>
-                </div>
-              ))}
             </div>
         )}
 
