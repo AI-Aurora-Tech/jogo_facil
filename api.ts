@@ -335,7 +335,8 @@ export const api = {
       receiptUploadedAt: s.receipt_uploaded_at,
       aiVerificationResult: s.ai_verification_result,
       courtName: s.court_name,
-      sport: s.sport
+      sport: s.sport,
+      homeTeamType: s.home_team_type || 'OUTSIDE'
     })) as unknown as MatchSlot[];
   },
 
@@ -380,7 +381,8 @@ export const api = {
       receiptUploadedAt: s.receipt_uploaded_at,
       aiVerificationResult: s.ai_verification_result,
       courtName: s.court_name,
-      sport: s.sport
+      sport: s.sport,
+      homeTeamType: s.home_team_type || 'OUTSIDE'
     })) as unknown as MatchSlot[];
   },
 
@@ -541,6 +543,35 @@ export const api = {
     return `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`;
   },
 
+  uploadFile: async (bucket: string, path: string, base64Data: string): Promise<string> => {
+    // Remove prefix if present (e.g., "data:image/png;base64,")
+    const base64 = base64Data.includes(',') ? base64Data.split(',')[1] : base64Data;
+    
+    // Convert base64 to Blob
+    const byteCharacters = atob(base64);
+    const byteNumbers = new Array(byteCharacters.length);
+    for (let i = 0; i < byteCharacters.length; i++) {
+      byteNumbers[i] = byteCharacters.charCodeAt(i);
+    }
+    const byteArray = new Uint8Array(byteNumbers);
+    const blob = new Blob([byteArray], { type: 'image/png' });
+
+    const { data, error } = await supabase.storage
+      .from(bucket)
+      .upload(path, blob, {
+        cacheControl: '3600',
+        upsert: true
+      });
+
+    if (error) throw error;
+
+    const { data: { publicUrl } } = supabase.storage
+      .from(bucket)
+      .getPublicUrl(path);
+
+    return publicUrl;
+  },
+
   deleteSlot: async (slotId: string): Promise<void> => {
     await supabase.from('match_slot').delete().eq('id', slotId);
   },
@@ -563,7 +594,7 @@ export const api = {
       gender: t.gender,
       sport: t.sport,
       courtName: t.court_name,
-      status: t.status || 'approved'
+      status: t.status || 'pending'
     }));
   },
 

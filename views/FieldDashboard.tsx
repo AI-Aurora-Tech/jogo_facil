@@ -85,6 +85,57 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
 
   const [historicSlots, setHistoricSlots] = useState<MatchSlot[]>([]);
 
+  // States Pagamento Jogo Fora
+  const [selectedPaymentSlot, setSelectedPaymentSlot] = useState<MatchSlot | null>(null);
+  const [paymentField, setPaymentField] = useState<Field | null>(null);
+  const [isUploadingReceipt, setIsUploadingReceipt] = useState(false);
+
+  const handleOpenPayment = async (slot: MatchSlot) => {
+    setIsLoading(true);
+    try {
+      const allFields = await api.getFields();
+      const targetField = allFields.find(f => f.id === slot.fieldId);
+      if (targetField) {
+        setPaymentField(targetField);
+        setSelectedPaymentSlot(slot);
+      } else {
+        alert("Arena não encontrada.");
+      }
+    } catch (e) {
+      console.error(e);
+      alert("Erro ao carregar dados da arena.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleUploadReceipt = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !selectedPaymentSlot) return;
+
+    setIsUploadingReceipt(true);
+    try {
+      const base64 = await convertFileToBase64(file);
+      const fileName = `receipts/${selectedPaymentSlot.id}_${Date.now()}.png`;
+      const publicUrl = await api.uploadFile('receipts', fileName, base64);
+
+      await onUpdateSlot(selectedPaymentSlot.id, {
+        status: 'pending_verification',
+        receiptUrl: publicUrl,
+        receiptUploadedAt: new Date().toISOString()
+      });
+
+      alert("Comprovante enviado com sucesso! Aguarde a validação.");
+      setSelectedPaymentSlot(null);
+      onRefreshData();
+    } catch (error) {
+      console.error(error);
+      alert("Erro ao enviar comprovante.");
+    } finally {
+      setIsUploadingReceipt(false);
+    }
+  };
+
   const handleApproveMensalista = async (teamId: string) => {
     try {
       await api.updateRegisteredTeam(teamId, { status: 'approved' });
@@ -808,9 +859,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                         )}
                         {slot.status === 'pending_payment' && isAwayGame && (
                            <button 
-                             onClick={() => {
-                               window.location.href = `/?tab=MY_GAMES`;
-                             }} 
+                             onClick={() => handleOpenPayment(slot)} 
                              className="flex-1 py-3 bg-grass-500 text-white rounded-xl hover:bg-grass-600 transition-all flex items-center justify-center gap-2 shadow-md"
                            >
                              <Check className="w-4 h-4"/>
@@ -947,6 +996,82 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                 </div>
               ))
             )}
+          </div>
+        )}
+
+        {/* Modal Pagamento Jogo Fora */}
+        {selectedPaymentSlot && paymentField && (
+          <div className="fixed inset-0 z-[500] flex items-center justify-center p-4 bg-pitch/60 backdrop-blur-sm animate-in fade-in duration-300">
+            <div className="bg-white w-full max-w-lg rounded-[3rem] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300">
+              <div className="p-8 space-y-8">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <span className="bg-blue-100 text-blue-600 px-3 py-1 rounded-full text-[8px] font-black uppercase">Pagamento Pendente</span>
+                    <h3 className="text-2xl font-black text-pitch uppercase mt-2 italic tracking-tighter">Realizar Pagamento</h3>
+                  </div>
+                  <button onClick={() => setSelectedPaymentSlot(null)} className="p-2 hover:bg-gray-100 rounded-full transition-colors">
+                    <X className="w-6 h-6 text-gray-400" />
+                  </button>
+                </div>
+
+                <div className="bg-gray-50 rounded-[2rem] p-6 space-y-4 border">
+                  <div className="flex justify-between items-center pb-4 border-b border-dashed">
+                    <span className="text-[10px] font-black text-gray-400 uppercase">Arena Destino</span>
+                    <span className="font-black text-pitch uppercase">{paymentField.name}</span>
+                  </div>
+                  <div className="flex justify-between items-center pb-4 border-b border-dashed">
+                    <span className="text-[10px] font-black text-gray-400 uppercase">Chave PIX</span>
+                    <div className="flex items-center gap-2">
+                      <span className="font-black text-pitch text-xs">{paymentField.pixConfig?.key}</span>
+                      <button 
+                        onClick={() => {
+                          navigator.clipboard.writeText(paymentField.pixConfig?.key || '');
+                          alert("Chave PIX copiada!");
+                        }}
+                        className="p-1.5 bg-white border rounded-lg hover:bg-gray-100"
+                      >
+                        <LayoutGrid className="w-3 h-3 text-gray-400" />
+                      </button>
+                    </div>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-[10px] font-black text-gray-400 uppercase">Valor a Pagar</span>
+                    <span className="text-xl font-black text-grass-600 italic">
+                      R$ {selectedPaymentSlot.homeTeamType === 'OUTSIDE' ? (selectedPaymentSlot.price / 2).toFixed(2) : selectedPaymentSlot.price.toFixed(2)}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <p className="text-[10px] font-black text-gray-400 uppercase text-center italic">
+                    * O comprovante deve ser enviado em até 24h antes do jogo.
+                  </p>
+                  
+                  <div className="relative">
+                    <input
+                      type="file"
+                      id="receipt-upload"
+                      className="hidden"
+                      accept="image/*"
+                      onChange={handleUploadReceipt}
+                      disabled={isUploadingReceipt}
+                    />
+                    <label
+                      htmlFor="receipt-upload"
+                      className={`w-full py-5 rounded-2xl flex items-center justify-center gap-3 font-black uppercase text-xs transition-all cursor-pointer shadow-lg
+                        ${isUploadingReceipt ? 'bg-gray-100 text-gray-400' : 'bg-pitch text-white hover:bg-pitch/90 active:scale-95'}`}
+                    >
+                      {isUploadingReceipt ? (
+                        <RefreshCcw className="w-5 h-5 animate-spin" />
+                      ) : (
+                        <Camera className="w-5 h-5" />
+                      )}
+                      {isUploadingReceipt ? 'Enviando...' : 'Anexar Comprovante'}
+                    </label>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         )}
 
