@@ -138,6 +138,27 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
     } catch (e) { console.error(e); }
   };
 
+  const handleApproveMensalista = async (teamId: string) => {
+    try {
+      await api.updateRegisteredTeam(teamId, { status: 'approved' });
+      alert("Solicitação de mensalista aprovada!");
+      loadMensalistas();
+    } catch (e) {
+      alert("Erro ao aprovar.");
+    }
+  };
+
+  const handleRejectMensalista = async (teamId: string) => {
+    if (!confirm("Deseja realmente recusar esta solicitação?")) return;
+    try {
+      await api.updateRegisteredTeam(teamId, { status: 'rejected' });
+      alert("Solicitação recusada.");
+      loadMensalistas();
+    } catch (e) {
+      alert("Erro ao recusar.");
+    }
+  };
+
   const handleEditSlot = (slot: MatchSlot) => {
     setEditingSlotId(slot.id);
     setSlotDate(slot.date);

@@ -517,7 +517,8 @@ export const api = {
       email: t.email,
       gender: t.gender,
       sport: t.sport,
-      courtName: t.court_name
+      courtName: t.court_name,
+      status: t.status || 'approved'
     }));
   },
 
@@ -538,7 +539,8 @@ export const api = {
       gender: team.gender,
       sport: team.sport,
       // Fix: Use camelCase properties on Partial<RegisteredTeam> object
-      court_name: team.courtName
+      court_name: team.courtName,
+      status: team.status || 'approved'
     }]);
   },
 
@@ -556,6 +558,7 @@ export const api = {
     if (updates.gender !== undefined) payload.gender = updates.gender;
     if (updates.sport !== undefined) payload.sport = updates.sport;
     if (updates.courtName !== undefined) payload.court_name = updates.courtName;
+    if (updates.status !== undefined) payload.status = updates.status;
     
     await supabase.from('registered_team').update(payload).eq('id', teamId);
   },

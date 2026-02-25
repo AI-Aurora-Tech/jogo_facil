@@ -24,6 +24,8 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({ categories, 
   const [arenaName, setArenaName] = useState(field?.name || '');
   const [arenaPrice, setArenaPrice] = useState(field?.hourlyRate || 0);
   const [arenaPhoto, setArenaPhoto] = useState(field?.imageUrl || '');
+  const [pixKey, setPixKey] = useState(field?.pixConfig?.key || '');
+  const [pixName, setPixName] = useState(field?.pixConfig?.name || '');
   const [courts, setCourts] = useState<string[]>(field?.courts || ['Principal']);
   const [newCourtName, setNewCourtName] = useState('');
   
@@ -184,7 +186,8 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({ categories, 
             courts, 
             imageUrl: arenaPhoto,
             latitude: finalLat,
-            longitude: finalLng
+            longitude: finalLng,
+            pixConfig: { key: pixKey, name: pixName }
           };
         }
         
@@ -261,6 +264,22 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({ categories, 
                    <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Preço Base (R$)</label>
                    <input className="w-full bg-transparent font-bold text-pitch outline-none" type="number" value={arenaPrice} onChange={e => setArenaPrice(Number(e.target.value))} />
                 </div>
+              </div>
+
+              <div className="bg-pitch/5 p-6 rounded-[2rem] border border-pitch/10 space-y-4">
+                 <h5 className="text-[10px] font-black text-pitch uppercase tracking-widest flex items-center gap-2">
+                   <Check className="w-3 h-3 text-grass-500" /> Configuração PIX
+                 </h5>
+                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="bg-white p-4 rounded-2xl border">
+                       <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Chave PIX</label>
+                       <input className="w-full bg-transparent font-bold text-pitch outline-none" value={pixKey} onChange={e => setPixKey(e.target.value)} />
+                    </div>
+                    <div className="bg-white p-4 rounded-2xl border">
+                       <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Nome do Titular</label>
+                       <input className="w-full bg-transparent font-bold text-pitch outline-none" value={pixName} onChange={e => setPixName(e.target.value)} />
+                    </div>
+                 </div>
               </div>
               
               {/* ADDRESS SECTION WITH CEP */}

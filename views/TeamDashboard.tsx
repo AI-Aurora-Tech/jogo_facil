@@ -22,6 +22,12 @@ type SortOption = 'DISTANCE_ASC' | 'DISTANCE_DESC' | 'PRICE_ASC' | 'PRICE_DESC' 
 
 export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, fields, slots, viewMode, onRefresh, onCancelBooking, onRateTeam }) => {
   const [selectedSlot, setSelectedSlot] = useState<MatchSlot | null>(null);
+  const [showMensalistaModal, setShowMensalistaModal] = useState(false);
+  const [mensalistaRequestField, setMensalistaRequestField] = useState<Field | null>(null);
+  const [mensalistaDay, setMensalistaDay] = useState(1);
+  const [mensalistaTime, setMensalistaTime] = useState('19:00');
+  const [mensalistaCourt, setMensalistaCourt] = useState('');
+  const [mensalistaSport, setMensalistaSport] = useState('Society');
   const [selectedTeamIdx, setSelectedTeamIdx] = useState(0);
   const [selectedCategory, setSelectedCategory] = useState('');
   const [showFilters, setShowFilters] = useState(false);
@@ -244,9 +250,15 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
           updateData.bookedByTeamCategory = selectedCategory;
           updateData.bookedByUserPhone = currentUser.phoneNumber;
           updateData.bookedByTeamLogoUrl = team.logoUrl;
-          updateData.allowedOpponentCategories = getNeighboringCategories(selectedCategory);
+          updateData.allowedOpponentCategories = [selectedCategory]; // Strict matching
           updateData.homeTeamType = 'OUTSIDE';
       } else {
+          // Check if category matches
+          const baseCat = selectedSlot.localTeamCategory || selectedSlot.bookedByTeamCategory;
+          if (baseCat && selectedCategory !== baseCat) {
+            alert(`Este jogo é exclusivo para a categoria ${baseCat}.`);
+            return;
+          }
           updateData.opponentTeamName = team.name;
           updateData.opponentTeamCategory = selectedCategory;
           updateData.opponentTeamPhone = currentUser.phoneNumber;
@@ -368,6 +380,49 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
     }
   };
 
+  const handleRequestMensalista = async () => {
+    if (!mensalistaRequestField) return;
+    const team = currentUser.teams[selectedTeamIdx];
+    if (!selectedCategory) {
+      alert("Selecione uma categoria para o seu time mensalista.");
+      return;
+    }
+    
+    setIsLoading(true);
+    try {
+      await api.addRegisteredTeam({
+        fieldId: mensalistaRequestField.id,
+        name: team.name,
+        fixedDay: String(mensalistaDay),
+        fixedTime: mensalistaTime,
+        fixedDurationMinutes: 60,
+        categories: [selectedCategory],
+        logoUrl: team.logoUrl,
+        captainName: currentUser.name,
+        captainPhone: currentUser.phoneNumber,
+        email: currentUser.email,
+        gender: team.gender,
+        sport: mensalistaSport,
+        courtName: mensalistaCourt || mensalistaRequestField.courts[0],
+        status: 'pending'
+      });
+
+      await api.createNotification({
+        userId: mensalistaRequestField.ownerId,
+        title: "Nova Solicitação de Mensalista! 📅",
+        description: `O time ${team.name} quer ser mensalista às ${mensalistaTime} nas ${['Domingo','Segunda','Terça','Quarta','Quinta','Sexta','Sábado'][mensalistaDay]}s.`,
+        type: 'info'
+      });
+
+      alert("Solicitação enviada! O dono da arena irá analisar seu pedido.");
+      setShowMensalistaModal(false);
+    } catch (e) {
+      alert("Erro ao enviar solicitação.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   return (
     <div className="flex flex-col h-full bg-gray-50 pb-20">
       {viewMode === 'EXPLORE' ? (
@@ -470,12 +525,24 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
                   <div className="flex-1 min-w-0">
                      <div className="flex justify-between items-start">
                         <h3 className="font-black text-pitch text-lg leading-none uppercase truncate mr-2">{field?.name}</h3>
-                        {distMeters >= 0 && (
-                           <div className="flex items-center gap-1 bg-grass-50 text-grass-700 px-2 py-1 rounded-lg border border-grass-100">
-                             <MapPin className="w-3 h-3" />
-                             <span className="text-[9px] font-black uppercase">{formatDistance(distMeters)}</span>
-                           </div>
-                        )}
+                        <div className="flex items-center gap-2">
+                           <button 
+                             onClick={(e) => {
+                               e.stopPropagation();
+                               setMensalistaRequestField(field || null);
+                               setShowMensalistaModal(true);
+                             }}
+                             className="text-[8px] font-black text-indigo-600 uppercase bg-indigo-50 px-2 py-1 rounded-lg hover:bg-indigo-100 transition-colors"
+                           >
+                             Seja Mensalista
+                           </button>
+                           {distMeters >= 0 && (
+                              <div className="flex items-center gap-1 bg-grass-50 text-grass-700 px-2 py-1 rounded-lg border border-grass-100">
+                                <MapPin className="w-3 h-3" />
+                                <span className="text-[9px] font-black uppercase">{formatDistance(distMeters)}</span>
+                              </div>
+                           )}
+                        </div>
                      </div>
                      <div className="flex flex-wrap gap-2 mt-2">
                         <span className="text-[9px] font-black bg-gray-100 px-2 py-1 rounded-xl flex items-center gap-1 uppercase">
@@ -644,6 +711,86 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
                )}
 
                <Button onClick={handleBookingConfirm} disabled={!selectedCategory} className="w-full py-6 rounded-[2.5rem] font-black uppercase shadow-xl active:scale-95">Solicitar Agora</Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showMensalistaModal && mensalistaRequestField && (
+        <div className="fixed inset-0 bg-pitch/95 backdrop-blur-xl z-[400] flex items-end">
+          <div className="bg-white w-full rounded-t-[4rem] p-12 animate-in slide-in-from-bottom duration-500 max-h-[90vh] overflow-y-auto pb-safe">
+            <div className="flex justify-between items-center mb-8">
+               <h2 className="text-2xl font-black text-pitch uppercase italic">Solicitar Mensalista</h2>
+               <button onClick={() => setShowMensalistaModal(false)} className="p-3 bg-gray-100 rounded-full"><X className="w-6 h-6"/></button>
+            </div>
+            
+            <div className="space-y-8">
+               <div className="bg-gray-50 p-6 rounded-[2rem] border border-gray-100 flex items-center gap-4">
+                  <div className="w-16 h-16 bg-pitch rounded-2xl overflow-hidden shadow-sm">
+                     <img src={mensalistaRequestField.imageUrl} className="w-full h-full object-cover" />
+                  </div>
+                  <div>
+                     <h3 className="font-black text-pitch uppercase italic">{mensalistaRequestField.name}</h3>
+                     <p className="text-[10px] font-bold text-gray-400 uppercase">{mensalistaRequestField.location}</p>
+                  </div>
+               </div>
+
+               <div className="grid grid-cols-2 gap-4">
+                  <div className="bg-gray-50 p-4 rounded-2xl border">
+                     <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Dia da Semana</label>
+                     <select className="w-full bg-transparent font-black outline-none text-xs uppercase" value={mensalistaDay} onChange={e => setMensalistaDay(Number(e.target.value))}>
+                        {['Dom','Seg','Ter','Qua','Qui','Sex','Sab'].map((d, i) => <option key={i} value={i}>{d}</option>)}
+                     </select>
+                  </div>
+                  <div className="bg-gray-50 p-4 rounded-2xl border">
+                     <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Horário</label>
+                     <input type="time" className="w-full bg-transparent font-black outline-none text-pitch" value={mensalistaTime} onChange={e => setMensalistaTime(e.target.value)} />
+                  </div>
+               </div>
+
+               <div className="grid grid-cols-2 gap-4">
+                  <div className="bg-gray-50 p-4 rounded-2xl border">
+                     <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Esporte</label>
+                     <select className="w-full bg-transparent font-black outline-none text-xs" value={mensalistaSport} onChange={e => setMensalistaSport(e.target.value)}>
+                        {SPORTS.map(s => <option key={s} value={s}>{s}</option>)}
+                     </select>
+                  </div>
+                  <div className="bg-gray-50 p-4 rounded-2xl border">
+                     <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Quadra</label>
+                     <select className="w-full bg-transparent font-black outline-none text-xs" value={mensalistaCourt} onChange={e => setMensalistaCourt(e.target.value)}>
+                        {mensalistaRequestField.courts.map(c => <option key={c} value={c}>{c}</option>)}
+                     </select>
+                  </div>
+               </div>
+
+               <div>
+                  <label className="text-[10px] font-black text-gray-400 uppercase mb-3 block tracking-widest">Selecione seu Time</label>
+                  <div className="flex gap-4 overflow-x-auto pb-4 scrollbar-hide">
+                     {currentUser.teams.map((t, i) => (
+                        <button key={i} onClick={() => setSelectedTeamIdx(i)} className={`flex-shrink-0 w-32 py-6 rounded-[2rem] font-black uppercase text-[10px] flex flex-col items-center gap-3 border-2 transition-all ${selectedTeamIdx === i ? 'bg-pitch text-white border-pitch shadow-lg scale-105' : 'bg-gray-50 border-gray-100 text-gray-300'}`}>
+                           <div className="w-12 h-12 bg-white rounded-xl flex items-center justify-center font-black text-pitch overflow-hidden">
+                              {t.logoUrl ? <img src={t.logoUrl} className="w-full h-full object-cover" /> : t.name.charAt(0)}
+                           </div>
+                           <span className="truncate w-full px-2 text-center">{t.name}</span>
+                        </button>
+                     ))}
+                  </div>
+               </div>
+
+               {currentUser.teams[selectedTeamIdx] && (
+                  <div>
+                     <label className="text-[10px] font-black text-gray-400 uppercase mb-3 block tracking-widest">Categoria do Time</label>
+                     <div className="flex flex-wrap gap-2">
+                        {currentUser.teams[selectedTeamIdx].categories.map(cat => (
+                          <button key={cat} onClick={() => setSelectedCategory(cat)} className={`px-6 py-3 rounded-full font-black uppercase text-[10px] border-2 transition-all ${selectedCategory === cat ? 'bg-grass-500 text-pitch border-grass-500' : 'bg-gray-50 text-gray-400'}`}>
+                             {cat}
+                          </button>
+                        ))}
+                     </div>
+                  </div>
+               )}
+
+               <Button onClick={handleRequestMensalista} isLoading={isLoading} disabled={!selectedCategory} className="w-full py-6 rounded-[2.5rem] font-black uppercase shadow-xl active:scale-95">Enviar Solicitação</Button>
             </div>
           </div>
         </div>
