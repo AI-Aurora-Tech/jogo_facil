@@ -89,6 +89,7 @@ export interface MatchSlot {
   bookedByTeamName?: string;
   bookedByTeamCategory?: string;
   bookedByTeamLogoUrl?: string;
+  bookedByTeamGender?: Gender;
   bookedByUserPhone?: string;
   opponentTeamName?: string;
   opponentTeamCategory?: string;

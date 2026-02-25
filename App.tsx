@@ -351,7 +351,7 @@ const App: React.FC = () => {
     setShowNotifications(false);
     await refreshData();
     
-    if (user?.role === UserRole.FIELD_OWNER && n.title.toLowerCase().includes('desafio')) {
+    if (user?.role === UserRole.FIELD_OWNER && (n.title.toLowerCase().includes('desafio') || n.title.toLowerCase().includes('mensalista'))) {
       setActiveTab('ADMIN');
       setFieldDashForceTab('SOLICITACOES');
       setTimeout(() => setFieldDashForceTab(undefined), 100);

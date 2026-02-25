@@ -1,6 +1,6 @@
 
-import React, { useState, useEffect } from 'react';
-import { Plus, Trash2, Calendar, Clock, RefreshCcw, X, Swords, Edit3, MessageCircle, UserCheck, Phone, Edit, Building2, MapPin, LayoutGrid, Flag, Trophy, CheckCircle, XCircle, AlertCircle, CalendarPlus, Mail, Camera, UserPlus, Smartphone, CalendarDays, History as HistoryIcon, BadgeCheck, Ban, Lock, Search, Filter, Sparkles, ChevronDown, CalendarRange, Check } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { Plus, Trash2, Calendar, Clock, RefreshCcw, X, Swords, Edit3, MessageCircle, UserCheck, Phone, Edit, Building2, MapPin, LayoutGrid, Flag, Trophy, CheckCircle, XCircle, AlertCircle, CalendarPlus, Mail, Camera, UserPlus, Smartphone, CalendarDays, History as HistoryIcon, BadgeCheck, Ban, Lock, Search, Filter, Sparkles, ChevronDown, CalendarRange, Check, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Button } from '../components/Button';
 import { Field, MatchSlot, MatchType, User, CATEGORY_ORDER, RegisteredTeam, SPORTS, Gender, MatchStatus } from '../types';
 import { api } from '../api';
@@ -60,6 +60,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
   const [filterTag, setFilterTag] = useState('TODOS');
   const [showFilters, setShowFilters] = useState(false);
   const [agendaView, setAgendaView] = useState<'LIST' | 'CALENDAR'>('LIST');
+  const [calendarBaseDate, setCalendarBaseDate] = useState(new Date());
   const [showAutoGenerateModal, setShowAutoGenerateModal] = useState(false);
   const [autoGenDate, setAutoGenDate] = useState(new Date().toISOString().split('T')[0]);
   const [autoGenStartTime, setAutoGenStartTime] = useState('08:00');
@@ -633,6 +634,33 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
     finally { setIsLoading(false); }
   };
 
+  const getWeekDays = (baseDate: Date) => {
+    const days = [];
+    const start = new Date(baseDate);
+    // Find the previous Monday
+    const day = start.getDay();
+    const diff = start.getDate() - day + (day === 0 ? -6 : 1);
+    const monday = new Date(start.setDate(diff));
+    
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(monday);
+      d.setDate(monday.getDate() + i);
+      days.push(d);
+    }
+    return days;
+  };
+
+  const weekDays = useMemo(() => getWeekDays(calendarBaseDate), [calendarBaseDate]);
+  const calendarHours = Array.from({ length: 17 }, (_, i) => i + 7); // 07:00 to 23:00
+
+  const getSlotColor = (slot: MatchSlot) => {
+    if (slot.fieldId !== field.id) return 'bg-blue-500 text-white'; // Jogo Fora
+    if (slot.status === 'confirmed') return 'bg-grass-500 text-white'; // Jogo Confirmado
+    if (slot.status === 'waiting_opponent' || (slot.bookedByTeamName && !slot.opponentTeamName)) return 'bg-yellow-400 text-pitch'; // Jogo em Aberto
+    if (slot.status === 'available') return 'bg-gray-100 text-gray-400';
+    return 'bg-gray-200 text-gray-500';
+  };
+
   const combinedSlots = [...slots, ...awayGames]
     .filter(s => {
        // Show all slots from today onwards, or past slots if they are pending something
@@ -879,8 +907,115 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
             </div>
             )}
             {agendaView === 'CALENDAR' && (
-              <div className="bg-white p-4 rounded-3xl border shadow-sm">
-                <p className="text-center text-gray-400 py-20">Visualização de calendário em desenvolvimento.</p>
+              <div className="bg-white rounded-[2.5rem] border shadow-sm overflow-hidden">
+                <div className="p-4 border-b flex items-center justify-between bg-gray-50">
+                  <button 
+                    onClick={() => {
+                      const d = new Date(calendarBaseDate);
+                      d.setDate(d.getDate() - 7);
+                      setCalendarBaseDate(d);
+                    }}
+                    className="p-2 hover:bg-white rounded-full transition-all"
+                  >
+                    <ChevronLeft className="w-5 h-5 text-pitch" />
+                  </button>
+                  <h3 className="font-black text-pitch uppercase italic text-sm">
+                    {weekDays[0].toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}
+                  </h3>
+                  <button 
+                    onClick={() => {
+                      const d = new Date(calendarBaseDate);
+                      d.setDate(d.getDate() + 7);
+                      setCalendarBaseDate(d);
+                    }}
+                    className="p-2 hover:bg-white rounded-full transition-all"
+                  >
+                    <ChevronRight className="w-5 h-5 text-pitch" />
+                  </button>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <div className="min-w-[800px]">
+                    {/* Header */}
+                    <div className="grid grid-cols-[80px_repeat(7,1fr)] border-b">
+                      <div className="p-4 border-r bg-gray-50"></div>
+                      {weekDays.map((date: Date, i: number) => (
+                        <div key={i} className={`p-4 text-center border-r last:border-r-0 ${date.toDateString() === new Date().toDateString() ? 'bg-grass-50' : ''}`}>
+                          <p className="text-[10px] font-black text-gray-400 uppercase">
+                            {date.toLocaleDateString('pt-BR', { weekday: 'short' })}
+                          </p>
+                          <p className={`text-lg font-black ${date.toDateString() === new Date().toDateString() ? 'text-grass-600' : 'text-pitch'}`}>
+                            {date.getDate()}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Body */}
+                    <div className="relative">
+                      {calendarHours.map(hour => (
+                        <div key={hour} className="grid grid-cols-[80px_repeat(7,1fr)] border-b last:border-b-0 min-h-[80px]">
+                          <div className="p-4 border-r bg-gray-50 flex items-start justify-center">
+                            <span className="text-[10px] font-black text-gray-400 uppercase">{hour}:00</span>
+                          </div>
+                          {weekDays.map((date: Date, i: number) => {
+                            const dateStr = date.toISOString().split('T')[0];
+                            const hourStr = hour.toString().padStart(2, '0') + ':00';
+                            const slotsAtTime = combinedSlots.filter(s => s.date === dateStr && s.time.startsWith(hour.toString().padStart(2, '0')));
+                            
+                            return (
+                              <div key={i} className="border-r last:border-r-0 p-1 relative group">
+                                {slotsAtTime.map(slot => (
+                                  <div 
+                                    key={slot.id}
+                                    onClick={() => {
+                                      if (slot.fieldId === field.id) {
+                                        setEditingSlotId(slot.id);
+                                        setSlotDate(slot.date);
+                                        setSlotTime(slot.time);
+                                        setSlotDuration(slot.durationMinutes);
+                                        setSlotMatchType(slot.matchType);
+                                        setSlotSport(slot.sport);
+                                        setSlotCourt(slot.courtName || '');
+                                        setSlotPrice(slot.price);
+                                        setSelectedRegisteredTeamId(slot.localTeamName ? (registeredTeams.find(t => t.name === slot.localTeamName)?.id || '') : '');
+                                        setShowAddSlotModal(true);
+                                      }
+                                    }}
+                                    className={`mb-1 p-2 rounded-xl text-[8px] font-black uppercase leading-tight cursor-pointer transition-all hover:scale-[1.02] shadow-sm ${getSlotColor(slot)}`}
+                                  >
+                                    <div className="flex items-center justify-between gap-1">
+                                      <span className="truncate">
+                                        {slot.fieldId !== field.id ? `FORA: ${slot.localTeamName || slot.bookedByTeamName}` : (slot.localTeamName || slot.bookedByTeamName || 'Livre')}
+                                      </span>
+                                      {slot.status === 'confirmed' && <CheckCircle className="w-2 h-2 flex-shrink-0" />}
+                                    </div>
+                                    <div className="mt-1 opacity-70 flex items-center gap-1">
+                                      <Clock className="w-2 h-2" /> {slot.time}
+                                    </div>
+                                  </div>
+                                ))}
+                                {slotsAtTime.length === 0 && (
+                                  <button 
+                                    onClick={() => {
+                                      setEditingSlotId(null);
+                                      setSlotDate(dateStr);
+                                      setSlotTime(hourStr);
+                                      setShowAddSlotModal(true);
+                                    }}
+                                    className="absolute inset-0 opacity-0 group-hover:opacity-100 bg-grass-50/50 flex items-center justify-center transition-opacity"
+                                  >
+                                    <Plus className="w-4 h-4 text-grass-600" />
+                                  </button>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
               </div>
             )}
           </div>

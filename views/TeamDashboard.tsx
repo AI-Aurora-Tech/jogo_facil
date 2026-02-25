@@ -50,6 +50,7 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
   const [filterDate, setFilterDate] = useState('');
   const [filterSport, setFilterSport] = useState('');
   const [filterCategory, setFilterCategory] = useState('');
+  const [filterGender, setFilterGender] = useState<Gender | ''>('');
   // Padrão 100km conforme solicitado pelo usuário
   const [filterMaxDistance, setFilterMaxDistance] = useState<number | ''>(100); 
   const [searchQuery, setSearchQuery] = useState('');
@@ -131,6 +132,16 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
       if (filterCategory) {
           const baseCat = slot.localTeamCategory || slot.bookedByTeamCategory;
           if (baseCat && baseCat !== filterCategory) return false;
+      }
+
+      if (filterGender) {
+          const baseGender = slot.localTeamGender || slot.bookedByTeamGender;
+          if (baseGender && baseGender !== filterGender) return false;
+          
+          // If available, check if the requested gender is allowed
+          if (!baseGender && slot.allowedOpponentGenders.length > 0) {
+            if (!slot.allowedOpponentGenders.includes(filterGender)) return false;
+          }
       }
 
       if (filterRange === 'SPECIFIC') {
@@ -258,6 +269,7 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
       if (isFirstTeam) {
           updateData.bookedByTeamName = team.name;
           updateData.bookedByTeamCategory = selectedCategory;
+          updateData.bookedByTeamGender = team.gender;
           updateData.bookedByUserPhone = currentUser.phoneNumber;
           updateData.bookedByTeamLogoUrl = team.logoUrl;
           updateData.allowedOpponentCategories = [selectedCategory]; // Strict matching
@@ -521,7 +533,18 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
                       </select>
                    </div>
                </div>
-               <button onClick={() => { setSearchQuery(''); setFilterMaxDistance(100); setFilterRange('ALL'); setFilterDate(''); setFilterSport(''); setFilterCategory(''); }} className="text-[8px] font-black text-red-500 uppercase w-full text-right mt-1">Resetar filtros</button>
+               <div className="grid grid-cols-1 gap-2">
+                   <div className="bg-white p-3 rounded-xl border flex items-center gap-2">
+                      <Swords className="w-4 h-4 text-gray-400" />
+                      <select value={filterGender} onChange={e => setFilterGender(e.target.value as Gender | '')} className="bg-transparent w-full font-bold text-[10px] uppercase outline-none">
+                         <option value="">Todos Gêneros</option>
+                         <option value="MASCULINO">Masculino</option>
+                         <option value="FEMININO">Feminino</option>
+                         <option value="MISTO">Misto</option>
+                      </select>
+                   </div>
+               </div>
+               <button onClick={() => { setSearchQuery(''); setFilterMaxDistance(100); setFilterRange('ALL'); setFilterDate(''); setFilterSport(''); setFilterCategory(''); setFilterGender(''); }} className="text-[8px] font-black text-red-500 uppercase w-full text-right mt-1">Resetar filtros</button>
             </div>
           )}
         </div>
