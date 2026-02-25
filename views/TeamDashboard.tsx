@@ -185,8 +185,8 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
                                (slot.localTeamName && myTeamsNames.includes(slot.localTeamName.toLowerCase()));
         const isMyBooking = slot.bookedByUserId === currentUser.id || 
                               isMyTeamInSlot || 
-                              (currentUser.teams.some(t => t.name.toLowerCase() === slot.localTeamName?.toLowerCase()) && slot.fieldId !== currentUser.fieldId) ||
-                              (currentUser.teams.some(t => t.name.toLowerCase() === slot.opponentTeamName?.toLowerCase()) && slot.fieldId !== currentUser.fieldId);
+                              (currentUser.teams.some(t => t.name.toLowerCase() === slot.localTeamName?.toLowerCase())) ||
+                              (currentUser.teams.some(t => t.name.toLowerCase() === slot.opponentTeamName?.toLowerCase()));
         if (!isMyBooking) return false;
         if (myGamesSubTab === 'FUTUROS' && slot.date < todayStr) return false;
         if (myGamesSubTab === 'HISTORICO' && slot.date >= todayStr) return false;

@@ -189,9 +189,11 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({ categories, 
             longitude: finalLng,
             pixConfig: { key: pixKey, name: pixName }
           };
+
+          onUpdate(updatedUser, updatedField);
+        } else {
+          onUpdate(updatedUser);
         }
-        
-        onUpdate(updatedUser, updatedField);
     } catch (e) {
         setError("Erro ao salvar dados.");
     } finally {
