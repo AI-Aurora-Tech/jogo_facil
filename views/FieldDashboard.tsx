@@ -697,7 +697,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
     return 'bg-gray-200 text-gray-500';
   };
 
-  const combinedSlots = [...slots, ...awayGames]
+  const combinedSlots = [...slots, ...awayGames].map(slot => ({ ...slot, isAwayGame: slot.fieldId !== field.id }))
     .filter(s => {
        if (s.fieldId !== field.id) return true;
 

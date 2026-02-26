@@ -159,7 +159,7 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, onCancel }) => {
             pixKey: undefined,
             pixName: undefined,
             complement,
-            courts
+            courts: courts
           } : undefined
         };
         const newUser = await api.register(payload);

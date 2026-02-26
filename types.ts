@@ -134,7 +134,7 @@ export const CATEGORY_ORDER = [
   "Sport", "35+", "40+", "45+", "50+", "60+", "70+"
 ];
 
-export const SPORTS = ["Futebol", "Volei", "Handball", "Basquete", "Tênis", "Beach Tenis", "Society", "Futsal"];
+export const SPORTS = ["handball", "volei", "futebol", "beach tennis", "tenis", "basquete"];
 
 /**
  * Interface representing the result of a PIX receipt verification processed by AI.
