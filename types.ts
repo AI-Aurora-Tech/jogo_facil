@@ -40,6 +40,9 @@ export interface User {
   teamRating?: number;
   teamRatingCount?: number;
   fieldId?: string;
+  createdAt: string; // ISO 8601 date string
+  isSubscribed?: boolean;
+  subscriptionId?: string;
 }
 
 export interface Notification {

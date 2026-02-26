@@ -91,6 +91,10 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
   const [paymentField, setPaymentField] = useState<Field | null>(null);
   const [isUploadingReceipt, setIsUploadingReceipt] = useState(false);
 
+  const [pixKey, setPixKey] = useState(field.pixConfig?.key || '');
+  const [pixName, setPixName] = useState(field.pixConfig?.name || '');
+  const [showPixModal, setShowPixModal] = useState(false);
+
   const handleOpenPayment = async (slot: MatchSlot) => {
     setIsLoading(true);
     try {
@@ -144,6 +148,17 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
       loadMensalistas();
     } catch (error) {
       alert('Erro ao aprovar mensalista.');
+    }
+  };
+
+  const handleSavePix = async () => {
+    try {
+      await onUpdateField(field.id, { pixConfig: { key: pixKey, name: pixName } });
+      alert('PIX salvo com sucesso!');
+      setShowPixModal(false);
+      onRefreshData();
+    } catch (e) {
+      alert('Erro ao salvar PIX.');
     }
   };
 

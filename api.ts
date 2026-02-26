@@ -1,5 +1,5 @@
 import { supabase } from './supabaseClient';
-import { User, Field, MatchSlot, RegisteredTeam, PendingUpdate, UserRole, Notification } from './types';
+import { User, Field, MatchSlot, RegisteredTeam, PendingUpdate, UserRole, Notification, SubscriptionPlan } from './types';
 
 const mapUserFromDb = (u: any): User => ({
   id: u.id,
@@ -14,7 +14,10 @@ const mapUserFromDb = (u: any): User => ({
   longitude: u.longitude,
   teamRating: u.team_rating,
   teamRatingCount: u.team_rating_count,
-  password: u.password
+  password: u.password,
+  createdAt: u.created_at,
+  isSubscribed: u.isSubscribed,
+  subscriptionId: u.subscriptionId
 });
 
 export const api = {
@@ -53,7 +56,8 @@ export const api = {
         team_name: userFields.teamName,
         team_categories: userFields.teamCategories,
         team_logo_url: userFields.teamLogoUrl,
-        teams: userFields.teams || []
+        teams: userFields.teams || [],
+        created_at: new Date().toISOString()
       }])
       .select().single();
 
@@ -103,15 +107,13 @@ export const api = {
     return mapUserFromDb(data);
   },
 
-  confirmProSubscription: async (userId: string, planType: 'PRO_FIELD' | 'PRO_TEAM'): Promise<User> => {
-    const expiry = new Date();
-    expiry.setDate(expiry.getDate() + 60);
-
+  confirmProSubscription: async (userId: string, subscriptionId: string): Promise<User> => {
     const { data, error } = await supabase
       .from('user')
       .update({ 
-        subscription: planType,
-        subscription_expiry: expiry.toISOString()
+        isSubscribed: true,
+        subscriptionId: subscriptionId,
+        subscription: SubscriptionPlan.PRO_TEAM // ou determinar dinamicamente se necessário
       })
       .eq('id', userId)
       .select()

@@ -1,94 +1,71 @@
-
 import React from 'react';
-import { Check, Star, ShieldCheck, Trophy, Wallet, Sparkles } from 'lucide-react';
-import { Button } from '../components/Button';
-import { SubscriptionPlan, UserRole } from '../types';
+import { ShieldCheck, Calendar, Search, BarChart2, LogOut } from 'lucide-react';
 
-interface SubscriptionProps {
-  userRole: UserRole;
-  onSubscribe: (plan: SubscriptionPlan) => void;
-  onBack: () => void;
-}
+export const Subscription: React.FC = () => {
 
-// Link oficial enviado pelo usuário
-const MERCADO_PAGO_SUBSCRIBE_LINK: string = "https://www.mercadopago.com.br/subscriptions/checkout?preapproval_plan_id=5efc581a3ff84478bf1a349617285115"; 
-
-export const Subscription: React.FC<SubscriptionProps> = ({ userRole, onSubscribe, onBack }) => {
-  const isFieldOwner = userRole === UserRole.FIELD_OWNER;
-
-  const handleSubscribeClick = () => {
-    window.location.href = MERCADO_PAGO_SUBSCRIBE_LINK;
+  const handleSubscription = () => {
+    window.location.href = 'https://www.mercadopago.com.br/subscriptions/checkout?preapproval_plan_id=5efc581a3ff84478bf1a349617285115';
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 py-12 px-6 flex flex-col items-center justify-center">
-      <div className="max-w-md text-center mb-10">
-        <h2 className="text-4xl font-black text-pitch mb-4 tracking-tight uppercase italic">Ative seu Jogo Fácil</h2>
-        <p className="text-lg text-gray-500 font-medium">
-          {isFieldOwner 
-            ? "Gerencie sua arena com ferramentas profissionais." 
-            : "Agende partidas, encontre adversários e organize seu time."}
-        </p>
+    <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4 font-sans">
+      <div className="text-center mb-8">
+        <h1 className="text-4xl font-black text-pitch italic uppercase tracking-tighter">ATIVE SEU JOGO FÁCIL</h1>
+        <p className="text-gray-500 mt-2">Agende partidas, encontre adversários e organize seu time.</p>
       </div>
 
-      <div className="bg-pitch rounded-[3rem] shadow-2xl overflow-hidden w-full max-w-md relative text-white border-4 border-pitch">
-        <div className="bg-gradient-to-r from-yellow-400 to-orange-500 text-pitch text-center py-3 text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2">
-          <Sparkles className="w-4 h-4" /> 
-          Período de teste: 60 Dias Grátis
+      <div className="w-full max-w-sm bg-pitch rounded-3xl shadow-2xl overflow-hidden transform -rotate-1">
+        <div className="bg-gradient-to-r from-yellow-400 to-orange-500 text-center p-3">
+          <p className="text-white text-xs font-bold uppercase tracking-wider">✨ Período de Teste: 60 Dias Grátis</p>
         </div>
         
-        <div className="p-10 relative">
-          <div className="text-center">
-            <h3 className="text-2xl font-black uppercase italic">{isFieldOwner ? "Arena Pro" : "Capitão Pro"}</h3>
-            <div className="mt-4 flex items-center justify-center gap-1">
-                <span className="text-xs text-gray-400 mt-2 font-bold">R$</span>
-                <span className="text-6xl font-black text-grass-500 tracking-tighter">19</span>
-                <div className="flex flex-col items-start leading-none">
-                   <span className="text-2xl font-black text-grass-500">,90</span>
-                   <span className="text-[10px] text-gray-400 font-bold uppercase">/mês</span>
-                </div>
-            </div>
-            <p className="text-[9px] text-yellow-400 font-black uppercase mt-4 bg-white/10 inline-block px-4 py-1.5 rounded-full border border-white/10">
-              Primeira cobrança após 60 dias
-            </p>
-          </div>
+        <div className="p-8 text-white">
+          <h2 className="text-2xl font-black uppercase text-center">Capitão Pro</h2>
           
-          <ul className="mt-10 space-y-4">
-            {(isFieldOwner ? [
-              "Grade de horários ilimitada",
-              "Verificação de PIX por IA",
-              "Gestão de mensalistas e times",
-              "Destaque prioritário nas buscas"
-            ] : [
-              "Agendamentos ilimitados",
-              "Filtro de busca por 100km",
-              "Selo de Time Verificado",
-              "Histórico e Estatísticas PRO"
-            ]).map((feature, i) => (
-              <li key={i} className="flex items-center gap-3 text-sm text-gray-300 font-medium">
-                <div className="p-1 bg-grass-500 rounded-full flex-shrink-0">
-                  <Check className="w-3 h-3 text-pitch" />
-                </div>
-                <span>{feature}</span>
-              </li>
-            ))}
+          <div className="text-center my-6">
+            <span className="text-4xl font-light">R$</span>
+            <span className="text-8xl font-black tracking-tighter -ml-2">19</span>
+            <span className="text-4xl font-light relative -top-4 -ml-1">,90</span>
+            <span className="text-2xl font-light text-gray-300">/mês</span>
+          </div>
+
+          <div className="text-center mb-8">
+            <span className="bg-white/10 text-white text-[10px] font-bold uppercase px-4 py-2 rounded-full">Primeira cobrança após 60 dias</span>
+          </div>
+
+          <ul className="space-y-4 mb-10">
+            <li className="flex items-center">
+              <ShieldCheck className="w-5 h-5 text-grass-400 mr-3" />
+              <span>Agendamentos ilimitados</span>
+            </li>
+            <li className="flex items-center">
+              <Search className="w-5 h-5 text-grass-400 mr-3" />
+              <span>Filtro de busca por 100km</span>
+            </li>
+            <li className="flex items-center">
+              <ShieldCheck className="w-5 h-5 text-grass-400 mr-3" />
+              <span>Selo de Time Verificado</span>
+            </li>
+            <li className="flex items-center">
+              <BarChart2 className="w-5 h-5 text-grass-400 mr-3" />
+              <span>Histórico e Estatísticas PRO</span>
+            </li>
           </ul>
 
-          <Button 
-            className="w-full mt-10 py-6 text-sm rounded-[2rem] bg-grass-500 text-pitch font-black uppercase tracking-widest hover:bg-white transition-all shadow-xl shadow-grass-900/20 active:scale-95"
-            onClick={handleSubscribeClick}
+          <button 
+            onClick={handleSubscription}
+            className="w-full bg-grass-500 hover:bg-grass-600 text-white font-bold uppercase py-4 rounded-xl transition-all shadow-lg active:scale-95"
           >
             Começar Teste Grátis
-          </Button>
-          
-          <p className="text-[9px] text-gray-500 text-center mt-6 font-bold uppercase tracking-widest">
-            Sem fidelidade • Cancele quando quiser
-          </p>
+          </button>
+
+          <p className="text-center text-gray-400 text-xs mt-4">Sem fidelidade • Cancele quando quiser</p>
         </div>
       </div>
-      
-      <button onClick={onBack} className="mt-10 text-gray-400 font-black hover:text-red-500 uppercase text-[10px] tracking-widest transition-colors">
-         Sair da conta
+
+      <button className="text-gray-400 font-bold text-sm mt-8 flex items-center gap-2">
+        <LogOut className="w-4 h-4" />
+        Sair da conta
       </button>
     </div>
   );

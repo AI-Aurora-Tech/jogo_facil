@@ -12,11 +12,12 @@ import { supabase } from './supabaseClient';
 
 const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
-  const [view, setView] = useState<'LANDING' | 'AUTH' | 'APP' | 'SUBSCRIPTION'>('LANDING');
+  const [view, setView] = useState<'LANDING' | 'AUTH' | 'APP'>('LANDING');
   const [activeTab, setActiveTab] = useState<'EXPLORE' | 'MY_GAMES' | 'ADMIN' | 'PROFILE' | 'SUPER'>('EXPLORE');
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const [fieldDashForceTab, setFieldDashForceTab] = useState<'AGENDA' | 'SOLICITACOES' | 'MENSALISTAS' | 'HISTORICO' | undefined>(undefined);
+  const [showNeedsSubscription, setShowNeedsSubscription] = useState(false);
   
   const [fields, setFields] = useState<Field[]>([]);
   const [slots, setSlots] = useState<MatchSlot[]>([]);
@@ -41,13 +42,14 @@ const App: React.FC = () => {
 
   // Efeito "Gatekeeper": Se logado mas sem plano, forçar tela de assinatura
   useEffect(() => {
-    if (user && !impersonatingUser) {
-      // Se a assinatura for NONE ou FREE (legado), manda para o fluxo de pagamento obrigatório
-      if (user.subscription === SubscriptionPlan.NONE || user.subscription === SubscriptionPlan.FREE) {
-        setView('SUBSCRIPTION');
-      } else if (view === 'SUBSCRIPTION') {
-        // Se já pagou e ainda está na tela de assinatura, manda pro App
-        setView('APP');
+    if (user && !impersonatingUser && user.role === UserRole.TEAM_CAPTAIN) {
+      const createdAt = new Date(user.createdAt);
+      const now = new Date();
+      const diffTime = Math.abs(now.getTime() - createdAt.getTime());
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+      if (diffDays > 60 && !user.isSubscribed) {
+        setShowNeedsSubscription(true);
       }
     }
   }, [user, impersonatingUser]);
@@ -107,7 +109,6 @@ const App: React.FC = () => {
   useEffect(() => {
     const checkPaymentReturn = async () => {
       const query = new URLSearchParams(window.location.search);
-      // O Mercado Pago retorna 'status' ou 'collection_status'
       const status = query.get('status') || query.get('collection_status');
       const preapproval_id = query.get('preapproval_id');
       
@@ -117,20 +118,18 @@ const App: React.FC = () => {
            // Remove parametros da URL para não processar novamente
            window.history.replaceState({}, document.title, window.location.pathname);
            
-           const planType = user.role === UserRole.FIELD_OWNER ? SubscriptionPlan.PRO_FIELD : SubscriptionPlan.PRO_TEAM;
-           const updatedUser = await api.confirmProSubscription(user.id, planType);
+           const updatedUser = await api.confirmProSubscription(user.id, preapproval_id || '');
            
            setUser(updatedUser);
            localStorage.setItem('jf_session_user', JSON.stringify(updatedUser));
            
-           // Força a mudança de view após a atualização
-           setView('APP');
+           setShowNeedsSubscription(false);
            
-           alert("Pagamento Confirmado! Bem-vindo ao Plano PRO com 60 dias grátis! 🚀");
+           alert("Pagamento Confirmado! Bem-vindo ao Plano PRO! 🚀");
            await api.createNotification({
              userId: user.id,
              title: "Assinatura Ativa 🏆",
-             description: "Sua assinatura PRO foi ativada com sucesso. Aproveite os 60 dias de teste!",
+             description: "Sua assinatura PRO foi ativada com sucesso.",
              type: 'success'
            });
         } catch (e) {
@@ -431,7 +430,6 @@ const App: React.FC = () => {
         categories={categories} 
         onLogin={(u) => { 
           setUser(u); 
-          // O useEffect vai checar a assinatura e redirecionar se for NONE
           setView('APP'); 
           localStorage.setItem('jf_session_user', JSON.stringify(u)); 
           if(u.role === UserRole.SUPER_ADMIN) setActiveTab('SUPER');
@@ -444,21 +442,8 @@ const App: React.FC = () => {
     );
   }
 
-  if (view === 'SUBSCRIPTION') {
-      return (
-         <Subscription 
-            userRole={user?.role || UserRole.TEAM_CAPTAIN} 
-            onSubscribe={() => {}} // Lógica via link direto
-            onBack={() => {
-              // Bloqueia voltar se a assinatura for obrigatória
-              if (user?.subscription !== SubscriptionPlan.NONE && user?.subscription !== SubscriptionPlan.FREE) {
-                 setView('APP');
-              } else {
-                 handleLogout(); // Se tentar voltar sem pagar, faz logout
-              }
-            }} 
-         />
-      );
+  if (showNeedsSubscription) {
+    return <Subscription />;
   }
 
   const currentUserContext = impersonatingUser || user;
