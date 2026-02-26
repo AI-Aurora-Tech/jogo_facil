@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { Plus, Trash2, Calendar, Clock, RefreshCcw, X, Swords, Edit3, MessageCircle, UserCheck, Phone, Edit, Building2, MapPin, LayoutGrid, Flag, Trophy, CheckCircle, XCircle, AlertCircle, CalendarPlus, Mail, Camera, UserPlus, Smartphone, CalendarDays, History as HistoryIcon, BadgeCheck, Ban, Lock, Search, Filter, Sparkles, ChevronDown, CalendarRange, Check, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Plus, Trash2, Calendar, Clock, RefreshCcw, X, Swords, Edit3, MessageCircle, UserCheck, Phone, Edit, Building2, MapPin, LayoutGrid, Flag, Trophy, CheckCircle, XCircle, AlertCircle, CalendarPlus, Mail, Camera, UserPlus, Smartphone, CalendarDays, History as HistoryIcon, BadgeCheck, Ban, Lock, Search, Filter, Sparkles, ChevronDown, CalendarRange, Check, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
 import { Button } from '../components/Button';
 import { Field, MatchSlot, MatchType, User, CATEGORY_ORDER, RegisteredTeam, SPORTS, Gender, MatchStatus } from '../types';
 import { api } from '../api';
@@ -34,6 +34,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
   const [showAddSlotModal, setShowAddSlotModal] = useState(false);
   const [editingSlotId, setEditingSlotId] = useState<string | null>(null);
   const [showAddMensalistaModal, setShowAddMensalistaModal] = useState(false);
+  const [showInviteMensalistaModal, setShowInviteMensalistaModal] = useState(false);
   
   // States Criação/Edição Slot
   const [slotDate, setSlotDate] = useState(new Date().toISOString().split('T')[0]);
@@ -81,6 +82,9 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
   const [mensalistaSport, setMensalistaSport] = useState('Society');
   const [mensalistaCourt, setMensalistaCourt] = useState(field.courts?.[0] || 'Principal');
   const [mensalistaDuration, setMensalistaDuration] = useState(60);
+
+  const [inviteTeamName, setInviteTeamName] = useState('');
+  const [foundTeams, setFoundTeams] = useState<User[]>([]);
 
   const todayStr = new Date().toISOString().split('T')[0];
 
@@ -260,6 +264,28 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
       const teams = await api.getRegisteredTeams(field.id);
       setRegisteredTeams(teams);
     } catch (e) { console.error(e); }
+  };
+
+  const handleSearchTeams = async () => {
+    if (!inviteTeamName) return;
+    setIsLoading(true);
+    try {
+      const users = await api.findUsersByTeamName(inviteTeamName);
+      setFoundTeams(users);
+    } catch (e) {
+      alert('Erro ao buscar times.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleSendInvite = async (teamCaptain: User) => {
+    const url = `${window.location.origin}?inviteFieldId=${field.id}`;
+    const message = `Olá ${teamCaptain.name}, você foi convidado para ser mensalista da arena ${field.name}. Acesse o link para aceitar: ${url}`;
+    const whatsappUrl = `https://api.whatsapp.com/send?phone=${teamCaptain.phoneNumber}&text=${encodeURIComponent(message)}`;
+    window.open(whatsappUrl, '_blank');
+    alert('Convite enviado! O capitão receberá uma mensagem no WhatsApp.');
+    setShowInviteMensalistaModal(false);
   };
 
 
@@ -1237,6 +1263,19 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
 
         {activeTab === 'MENSALISTAS' && (
           <div className="space-y-4">
+             <div className="flex justify-between items-center">
+                <h2 className="font-black text-pitch uppercase italic">Mensalistas</h2>
+                <div className="flex gap-2">
+                  <button onClick={() => setShowInviteMensalistaModal(true)} className="p-2 bg-grass-500 text-white rounded-lg active:scale-95 shadow-md flex items-center gap-2">
+                    <UserPlus className="w-4 h-4"/>
+                    <span className="text-[9px] font-black uppercase">Convidar Time</span>
+                  </button>
+                  <button onClick={() => { setEditingMensalista(null); setShowAddMensalistaModal(true); }} className="p-2 bg-pitch text-white rounded-lg active:scale-95 shadow-md flex items-center gap-2">
+                    <Plus className="w-4 h-4"/>
+                    <span className="text-[9px] font-black uppercase">Novo</span>
+                  </button>
+                </div>
+              </div>
              {registeredTeams.filter(t => t.status === 'approved').map(t => (
                <div key={t.id} className="bg-white p-6 rounded-[3rem] border shadow-sm space-y-4">
                   <div className="flex items-center justify-between">
@@ -1262,9 +1301,41 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                   </Button>
                </div>
              ))}
-             <div className="grid grid-cols-1 gap-4">
-               <button onClick={() => { setEditingMensalista(null); setMensalistaName(''); setMensalistaPhone(''); setShowAddMensalistaModal(true); }} className="w-full py-5 border-2 border-dashed border-gray-200 rounded-[2rem] text-gray-400 font-black uppercase text-[10px]">Adicionar Manualmente</button>
-             </div>
+             
+          </div>
+        )}
+
+        {showInviteMensalistaModal && (
+          <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 animate-in fade-in duration-300">
+            <div className="bg-white rounded-3xl w-full max-w-lg shadow-2xl p-6 space-y-4">
+              <div className="flex justify-between items-center">
+                <h3 className="font-black text-pitch uppercase italic">Convidar Mensalista</h3>
+                <button onClick={() => setShowInviteMensalistaModal(false)}><X className="w-6 h-6"/></button>
+              </div>
+              <div className="flex items-center gap-2">
+                <input 
+                  type="text"
+                  placeholder="Nome do time"
+                  value={inviteTeamName}
+                  onChange={e => setInviteTeamName(e.target.value)}
+                  className="w-full p-3 bg-gray-50 rounded-lg border"
+                />
+                <Button onClick={handleSearchTeams} disabled={isLoading} className="whitespace-nowrap">
+                  {isLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Buscar'}
+                </Button>
+              </div>
+              <div className="space-y-2 max-h-60 overflow-y-auto">
+                {foundTeams.map(team => (
+                  <div key={team.id} className="bg-gray-50 p-3 rounded-lg flex justify-between items-center">
+                    <div>
+                      <p className="font-bold text-pitch">{team.teams[0]?.name || 'Nome não encontrado'}</p>
+                      <p className="text-xs text-gray-500">Capitão: {team.name}</p>
+                    </div>
+                    <Button onClick={() => handleSendInvite(team)}>Convidar</Button>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
         )}
 

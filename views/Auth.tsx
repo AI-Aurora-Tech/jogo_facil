@@ -32,8 +32,7 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, onCancel }) => {
   const [arenaName, setArenaName] = useState('');
   const [arenaPrice, setArenaPrice] = useState('');
   const [arenaPhoto, setArenaPhoto] = useState('');
-  const [pixKey, setPixKey] = useState('');
-  const [pixName, setPixName] = useState('');
+
   const [complement, setComplement] = useState('');
   const [courts, setCourts] = useState<string[]>(['Principal']);
   const [newCourt, setNewCourt] = useState('');
@@ -53,7 +52,7 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, onCancel }) => {
   const [teamGender, setTeamGender] = useState<Gender>('MASCULINO');
   const [teamSport, setTeamSport] = useState('Society');
   const [teamLogo, setTeamLogo] = useState('');
-  const [showPaymentLink, setShowPaymentLink] = useState(false);
+
 
   const toggleCategory = (cat: string) => {
     if (teamCategories.includes(cat)) {
@@ -158,18 +157,14 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, onCancel }) => {
             contactPhone: phone,
             imageUrl: arenaPhoto,
             hourlyRate: Number(arenaPrice) || 0,
-            pixKey,
-            pixName,
+            pixKey: undefined,
+            pixName: undefined,
             complement,
             courts
           } : undefined
         };
         const newUser = await api.register(payload);
-        if (role === UserRole.TEAM_CAPTAIN) {
-          setShowPaymentLink(true);
-        } else {
-          onLogin(newUser);
-        }
+        onLogin(newUser);
       } else if (mode === 'LOGIN') {
         const user = await api.login(email, password);
         onLogin(user);
@@ -185,37 +180,7 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, onCancel }) => {
     }
   };
 
-  if (showPaymentLink) {
-    return (
-      <div className="min-h-screen bg-pitch flex items-center justify-center p-6 font-sans">
-        <div className="bg-white rounded-[3.5rem] w-full max-w-lg overflow-hidden shadow-2xl p-10 text-center space-y-6">
-          <div className="bg-grass-100 w-20 h-20 rounded-full flex items-center justify-center mx-auto">
-            <Shield className="w-10 h-10 text-grass-600" />
-          </div>
-          <h2 className="text-3xl font-black italic uppercase tracking-tighter leading-none text-pitch">
-            Quase lá, Capitão!
-          </h2>
-          <p className="text-sm font-bold text-gray-500">
-            Para ativar sua conta e aproveitar os 60 dias grátis, realize o pagamento da mensalidade de R$ 19,90.
-          </p>
-          <div className="bg-gray-50 p-6 rounded-3xl border-2 border-dashed border-gray-200">
-             <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-4">Link de Pagamento Seguro</p>
-             <a 
-               href="https://link.mercadopago.com.br/jogofacil" 
-               target="_blank" 
-               rel="noopener noreferrer"
-               className="block w-full py-4 bg-[#009EE3] text-white rounded-2xl font-black uppercase text-xs shadow-lg hover:scale-105 transition-transform"
-             >
-               Pagar com Mercado Pago
-             </a>
-          </div>
-          <Button onClick={() => window.location.reload()} className="w-full py-4 rounded-2xl font-black uppercase text-xs">
-            Já realizei o pagamento
-          </Button>
-        </div>
-      </div>
-    );
-  }
+
 
   return (
     <div className="min-h-screen bg-pitch flex items-center justify-center p-6 font-sans">
@@ -288,7 +253,7 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, onCancel }) => {
                           value={teamSport}
                           onChange={e => setTeamSport(e.target.value)}
                         >
-                          {["Futebol", "Society", "Futsal", "Vôlei", "Handball", "Basquete", "Tênis", "Beach Tennis"].map(s => (
+                          {["Futebol", "Volei", "Handball", "Basquete", "Tênis", "Beach Tenis"].map(s => (
                             <option key={s} value={s}>{s}</option>
                           ))}
                         </select>
@@ -345,16 +310,7 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, onCancel }) => {
                         </div>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-3">
-                        <div className="bg-white p-3 rounded-xl border">
-                           <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Chave PIX</label>
-                           <input className="w-full bg-transparent font-bold text-pitch outline-none" placeholder="CPF, E-mail ou Celular" value={pixKey} onChange={e => setPixKey(e.target.value)} required />
-                        </div>
-                        <div className="bg-white p-3 rounded-xl border">
-                           <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Nome do Titular PIX</label>
-                           <input className="w-full bg-transparent font-bold text-pitch outline-none" placeholder="Nome Completo" value={pixName} onChange={e => setPixName(e.target.value)} required />
-                        </div>
-                    </div>
+
 
                     {/* SEÇÃO DE ENDEREÇO COM CEP */}
                     <div className="bg-white p-4 rounded-xl border space-y-3">

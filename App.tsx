@@ -18,6 +18,7 @@ const App: React.FC = () => {
   const [showNotifications, setShowNotifications] = useState(false);
   const [fieldDashForceTab, setFieldDashForceTab] = useState<'AGENDA' | 'SOLICITACOES' | 'MENSALISTAS' | 'HISTORICO' | undefined>(undefined);
   const [showNeedsSubscription, setShowNeedsSubscription] = useState(false);
+
   
   const [fields, setFields] = useState<Field[]>([]);
   const [slots, setSlots] = useState<MatchSlot[]>([]);
@@ -53,6 +54,8 @@ const App: React.FC = () => {
       }
     }
   }, [user, impersonatingUser]);
+
+
 
   // Verifica convite de mensalista
   useEffect(() => {
@@ -443,7 +446,19 @@ const App: React.FC = () => {
   }
 
   if (showNeedsSubscription) {
-    return <Subscription />;
+    return <Subscription onBack={() => {
+      // Se a assinatura for obrigatória, não deixamos voltar para o app
+      if (user && !user.isSubscribed) return;
+      setShowNeedsSubscription(false);
+    }} />;
+  }
+
+  if (showNeedsSubscription) {
+    return <Subscription onBack={() => {
+      // Se a assinatura for obrigatória, não deixamos voltar para o app
+      if (user && !user.isSubscribed) return;
+      setShowNeedsSubscription(false);
+    }} />;
   }
 
   const currentUserContext = impersonatingUser || user;
@@ -734,6 +749,11 @@ const App: React.FC = () => {
                       </span>
                    )}
                 </div>
+                {currentUserContext.role === UserRole.TEAM_CAPTAIN && !currentUserContext.isSubscribed && (
+                  <div className="mt-4 text-xs font-bold text-gray-500">
+                    Você ainda tem {60 - Math.ceil((new Date().getTime() - new Date(currentUserContext.createdAt).getTime()) / (1000 * 60 * 60 * 24))} dias do período grátis.
+                  </div>
+                )}
                 
                 <div className="w-full mt-10 space-y-3">
                   {!isStandalone && (deferredPrompt || isIOS) && (
