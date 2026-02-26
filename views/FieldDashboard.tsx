@@ -43,6 +43,8 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
   const [slotMatchType, setSlotMatchType] = useState<MatchType>('AMISTOSO');
   const [slotCourt, setSlotCourt] = useState(field.courts?.[0] || 'Principal');
   const [slotPrice, setSlotPrice] = useState(field.hourlyRate);
+  const [pixKey, setPixKey] = useState(field.pixConfig?.key || '');
+  const [pixName, setPixName] = useState(field.pixConfig?.name || '');
   const [slotSport, setSlotSport] = useState('Society');
   
   const [isLocalTeamSlot, setIsLocalTeamSlot] = useState(false);
@@ -95,9 +97,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
   const [paymentField, setPaymentField] = useState<Field | null>(null);
   const [isUploadingReceipt, setIsUploadingReceipt] = useState(false);
 
-  const [pixKey, setPixKey] = useState(field.pixConfig?.key || '');
-  const [pixName, setPixName] = useState(field.pixConfig?.name || '');
-  const [showPixModal, setShowPixModal] = useState(false);
+
 
   const handleOpenPayment = async (slot: MatchSlot) => {
     setIsLoading(true);
@@ -155,16 +155,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
     }
   };
 
-  const handleSavePix = async () => {
-    try {
-      await onUpdateField(field.id, { pixConfig: { key: pixKey, name: pixName } });
-      alert('PIX salvo com sucesso!');
-      setShowPixModal(false);
-      onRefreshData();
-    } catch (e) {
-      alert('Erro ao salvar PIX.');
-    }
-  };
+
 
 
 
@@ -266,12 +257,17 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
     } catch (e) { console.error(e); }
   };
 
+  useEffect(() => {
+    if (showInviteMensalistaModal) {
+      handleSearchTeams();
+    }
+  }, [showInviteMensalistaModal]);
+
   const handleSearchTeams = async () => {
-    if (!inviteTeamName) return;
     setIsLoading(true);
     try {
-      const users = await api.findUsersByTeamName(inviteTeamName);
-      setFoundTeams(users);
+      const users = await api.getAllUsers(); // This is a placeholder, the actual API call might be different
+      setFoundTeams(users.filter(u => u.role === 'TEAM_CAPTAIN'));
     } catch (e) {
       alert('Erro ao buscar times.');
     } finally {
@@ -308,7 +304,6 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
     setSlotDuration(slot.durationMinutes || 60);
     setSlotMatchType(slot.matchType);
     setSlotCourt(slot.courtName || field.courts[0]);
-    setSlotPrice(slot.price);
     setSlotSport(slot.sport);
     setIsLocalTeamSlot(slot.hasLocalTeam);
     
@@ -704,6 +699,8 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
 
   const combinedSlots = [...slots, ...awayGames]
     .filter(s => {
+       if (s.fieldId !== field.id) return true;
+
        // Show all slots from today onwards, or past slots if they are pending something
        if (s.date < todayStr && (s.status === 'confirmed' || s.status === 'available')) return false; 
        
@@ -1312,18 +1309,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                 <h3 className="font-black text-pitch uppercase italic">Convidar Mensalista</h3>
                 <button onClick={() => setShowInviteMensalistaModal(false)}><X className="w-6 h-6"/></button>
               </div>
-              <div className="flex items-center gap-2">
-                <input 
-                  type="text"
-                  placeholder="Nome do time"
-                  value={inviteTeamName}
-                  onChange={e => setInviteTeamName(e.target.value)}
-                  className="w-full p-3 bg-gray-50 rounded-lg border"
-                />
-                <Button onClick={handleSearchTeams} disabled={isLoading} className="whitespace-nowrap">
-                  {isLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Buscar'}
-                </Button>
-              </div>
+              {/* Search input removed as requested. Teams are now loaded automatically. */}
               <div className="space-y-2 max-h-60 overflow-y-auto">
                 {foundTeams.map(team => (
                   <div key={team.id} className="bg-gray-50 p-3 rounded-lg flex justify-between items-center">

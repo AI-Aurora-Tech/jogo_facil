@@ -30,7 +30,7 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, onCancel }) => {
 
   // Field Owner Specific States
   const [arenaName, setArenaName] = useState('');
-  const [arenaPrice, setArenaPrice] = useState('');
+
   const [arenaPhoto, setArenaPhoto] = useState('');
 
   const [complement, setComplement] = useState('');
@@ -156,7 +156,6 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, onCancel }) => {
             location: fullAddress,
             contactPhone: phone,
             imageUrl: arenaPhoto,
-            hourlyRate: Number(arenaPrice) || 0,
             pixKey: undefined,
             pixName: undefined,
             complement,
@@ -288,6 +287,12 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, onCancel }) => {
                 {role === UserRole.FIELD_OWNER && (
                   <div className="bg-gray-50 p-5 rounded-[2rem] border-2 border-dashed border-gray-200 mt-4 space-y-3 animate-in slide-in-from-top-2">
                     <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3">Dados da Arena</p>
+                    <div className="grid grid-cols-1 gap-3">
+                        <div className="bg-white p-3 rounded-xl border">
+                           <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Nome da Arena</label>
+                           <input className="w-full bg-transparent font-bold text-pitch outline-none" value={arenaName} onChange={e => setArenaName(e.target.value)} required />
+                        </div>
+                    </div>
                     
                     <div className="flex flex-col items-center mb-2">
                        <div className="w-full h-32 bg-white rounded-2xl border-2 border-dashed border-gray-200 flex items-center justify-center relative overflow-hidden group">
@@ -299,16 +304,7 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, onCancel }) => {
                        </div>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-3">
-                        <div className="bg-white p-3 rounded-xl border">
-                           <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Nome da Arena</label>
-                           <input className="w-full bg-transparent font-bold text-pitch outline-none" value={arenaName} onChange={e => setArenaName(e.target.value)} required />
-                        </div>
-                        <div className="bg-white p-3 rounded-xl border">
-                           <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Preço/Hora</label>
-                           <input className="w-full bg-transparent font-bold text-pitch outline-none" type="number" placeholder="R$" value={arenaPrice} onChange={e => setArenaPrice(e.target.value)} required />
-                        </div>
-                    </div>
+
 
 
 
