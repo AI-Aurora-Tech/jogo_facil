@@ -87,6 +87,14 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
 
   const [inviteTeamName, setInviteTeamName] = useState('');
   const [foundTeams, setFoundTeams] = useState<User[]>([]);
+  
+  // States Invite Mensalista Form
+  const [inviteTeam, setInviteTeam] = useState<User | null>(null);
+  const [inviteCategory, setInviteCategory] = useState('');
+  const [inviteDay, setInviteDay] = useState(1);
+  const [inviteTime, setInviteTime] = useState('19:00');
+  const [inviteCourt, setInviteCourt] = useState(field.courts?.[0] || 'Principal');
+  const [inviteSport, setInviteSport] = useState('Society');
 
   const todayStr = new Date().toISOString().split('T')[0];
 
@@ -275,13 +283,52 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
     }
   };
 
-  const handleSendInvite = async (teamCaptain: User) => {
-    const url = `${window.location.origin}?inviteFieldId=${field.id}`;
-    const message = `Olá ${teamCaptain.name}, você foi convidado para ser mensalista da arena ${field.name}. Acesse o link para aceitar: ${url}`;
-    const whatsappUrl = `https://api.whatsapp.com/send?phone=${teamCaptain.phoneNumber}&text=${encodeURIComponent(message)}`;
-    window.open(whatsappUrl, '_blank');
-    alert('Convite enviado! O capitão receberá uma mensagem no WhatsApp.');
-    setShowInviteMensalistaModal(false);
+  const handleSelectTeamForInvite = (team: User) => {
+    setInviteTeam(team);
+    setInviteCategory(team.teams[0]?.categories[0] || CATEGORY_ORDER[0]);
+    setInviteSport(team.teams[0]?.sport || 'Society');
+    setInviteCourt(field.courts?.[0] || 'Principal');
+    setInviteDay(1);
+    setInviteTime('19:00');
+  };
+
+  const handleConfirmInvite = async () => {
+    if (!inviteTeam) return;
+    setIsLoading(true);
+    try {
+      const payload: Partial<RegisteredTeam> = {
+        fieldId: field.id,
+        name: inviteTeam.teams[0].name,
+        captainName: inviteTeam.name,
+        captainPhone: inviteTeam.phoneNumber,
+        email: inviteTeam.email,
+        fixedDay: String(inviteDay),
+        fixedTime: inviteTime,
+        fixedDurationMinutes: 60,
+        categories: [inviteCategory],
+        logoUrl: inviteTeam.teams[0].logoUrl,
+        gender: inviteTeam.teams[0].gender,
+        sport: inviteSport,
+        courtName: inviteCourt,
+        status: 'invited'
+      };
+      
+      const newTeam = await api.addRegisteredTeam(payload);
+      
+      const url = `${window.location.origin}?acceptInvite=${newTeam.id}`;
+      const message = `Olá ${inviteTeam.name}, você foi convidado para ser mensalista da arena ${field.name} (${inviteCategory} - ${['Dom','Seg','Ter','Qua','Qui','Sex','Sab'][inviteDay]} às ${inviteTime}). Acesse o link para aceitar: ${url}`;
+      const whatsappUrl = `https://api.whatsapp.com/send?phone=${inviteTeam.phoneNumber}&text=${encodeURIComponent(message)}`;
+      window.open(whatsappUrl, '_blank');
+      
+      alert('Convite enviado! O capitão receberá uma mensagem no WhatsApp.');
+      setShowInviteMensalistaModal(false);
+      setInviteTeam(null);
+      loadMensalistas();
+    } catch (e) {
+      alert('Erro ao enviar convite.');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
 
@@ -323,7 +370,11 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
         let title = "Desafio Aceito! 💸";
         let desc = `A arena ${field.name} aceitou seu desafio. Realize o pagamento via PIX para confirmar.`;
 
-        if (slot.status === 'pending_verification') {
+        if (slot.price === 0) {
+           newStatus = 'confirmed';
+           title = "Agendamento Confirmado! ⚽";
+           desc = `Seu jogo na arena ${field.name} foi confirmado!`;
+        } else if (slot.status === 'pending_verification') {
            newStatus = 'confirmed';
            title = "Pagamento Confirmado! ⚽";
            desc = `Seu pagamento para o jogo na arena ${field.name} foi validado!`;
@@ -894,8 +945,12 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                       </div>
                       <div className="flex gap-2 pt-2 border-t mt-1 justify-between items-center">
                         <div className="flex gap-2">
-                           <button onClick={() => handleEditSlot(slot)} className="p-3 bg-gray-50 text-pitch rounded-xl hover:bg-pitch hover:text-white transition-all"><Edit className="w-4 h-4"/></button>
-                           <button onClick={() => handleDeleteSlot(slot)} className="p-3 text-red-500 hover:bg-red-50 rounded-xl bg-gray-50"><Trash2 className="w-4 h-4"/></button>
+                           {!isAwayGame && (
+                             <>
+                               <button onClick={() => handleEditSlot(slot)} className="p-3 bg-gray-50 text-pitch rounded-xl hover:bg-pitch hover:text-white transition-all"><Edit className="w-4 h-4"/></button>
+                               <button onClick={() => handleDeleteSlot(slot)} className="p-3 text-red-500 hover:bg-red-50 rounded-xl bg-gray-50"><Trash2 className="w-4 h-4"/></button>
+                             </>
+                           )}
                         </div>
                         {slot.status === 'confirmed' && (
                            <button 
@@ -1197,61 +1252,57 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                   </button>
                 </div>
 
-                <div className="bg-gray-50 rounded-[2rem] p-6 space-y-4 border">
-                  <div className="flex justify-between items-center pb-4 border-b border-dashed">
-                    <span className="text-[10px] font-black text-gray-400 uppercase">Arena Destino</span>
-                    <span className="font-black text-pitch uppercase">{paymentField.name}</span>
-                  </div>
-                  <div className="flex justify-between items-center pb-4 border-b border-dashed">
-                    <span className="text-[10px] font-black text-gray-400 uppercase">Chave PIX</span>
-                    <div className="flex items-center gap-2">
-                      <span className="font-black text-pitch text-xs">{paymentField.pixConfig?.key}</span>
-                      <button 
-                        onClick={() => {
-                          navigator.clipboard.writeText(paymentField.pixConfig?.key || '');
-                          alert("Chave PIX copiada!");
-                        }}
-                        className="p-1.5 bg-white border rounded-lg hover:bg-gray-100"
-                      >
-                        <LayoutGrid className="w-3 h-3 text-gray-400" />
-                      </button>
-                    </div>
-                  </div>
+                <div className="bg-blue-50 p-4 rounded-2xl border border-blue-100 space-y-3">
                   <div className="flex justify-between items-center">
-                    <span className="text-[10px] font-black text-gray-400 uppercase">Valor a Pagar</span>
-                    <span className="text-xl font-black text-grass-600 italic">
-                      R$ {selectedPaymentSlot.homeTeamType === 'OUTSIDE' ? (selectedPaymentSlot.price / 2).toFixed(2) : selectedPaymentSlot.price.toFixed(2)}
-                    </span>
+                     <p className="text-[10px] font-black text-blue-600 uppercase">Pagamento Pendente</p>
+                     <span className="text-[9px] font-bold text-blue-400 uppercase">PIX</span>
                   </div>
-                </div>
-
-                <div className="space-y-4">
-                  <p className="text-[10px] font-black text-gray-400 uppercase text-center italic">
-                    * O comprovante deve ser enviado em até 24h antes do jogo.
-                  </p>
+                  <div className="bg-white p-3 rounded-xl border border-blue-100">
+                     <p className="text-[8px] font-black text-gray-400 uppercase mb-1">Chave PIX da Arena:</p>
+                     <div className="flex items-center gap-2">
+                        <p className="font-black text-pitch text-xs truncate">{paymentField?.pixConfig?.key || 'Não configurada'}</p>
+                        <button onClick={() => {
+                          navigator.clipboard.writeText(paymentField?.pixConfig?.key || '');
+                          alert("Chave PIX copiada!");
+                        }} className="p-2 bg-gray-100 rounded-lg active:scale-90 transition-transform">
+                           <LayoutGrid className="w-3 h-3 text-gray-400" />
+                        </button>
+                     </div>
+                     <p className="text-[8px] font-bold text-gray-400 mt-1 uppercase">{paymentField?.pixConfig?.name}</p>
+                      <div className="mt-2 pt-2 border-t border-dashed">
+                         <p className="text-[10px] font-black text-pitch uppercase">
+                            Valor a Pagar: <span className="text-grass-600">R$ {selectedPaymentSlot.homeTeamType === 'OUTSIDE' ? (selectedPaymentSlot.price / 2).toFixed(2) : selectedPaymentSlot.price.toFixed(2)}</span>
+                         </p>
+                         {selectedPaymentSlot.homeTeamType === 'OUTSIDE' && <p className="text-[7px] font-bold text-gray-400 uppercase italic">* Valor dividido entre os dois times (50% cada)</p>}
+                      </div>
+                  </div>
+                  <div className="flex gap-2">
+                     <label className="flex-1">
+                        <div className={`w-full py-3 rounded-xl flex items-center justify-center gap-2 cursor-pointer active:scale-95 transition-all ${isUploadingReceipt ? 'bg-gray-100 text-gray-400' : 'bg-pitch text-white'}`}>
+                           {isUploadingReceipt ? <RefreshCcw className="w-4 h-4 animate-spin" /> : <Camera className="w-4 h-4" />}
+                           <span className="text-[9px] font-black uppercase">{isUploadingReceipt ? 'Enviando...' : 'Anexar Comprovante'}</span>
+                        </div>
+                        <input 
+                          type="file" 
+                          accept="image/*" 
+                          className="hidden" 
+                          onChange={handleUploadReceipt}
+                          disabled={isUploadingReceipt}
+                        />
+                     </label>
+                  </div>
+                  <p className="text-[8px] text-blue-400 font-bold uppercase italic">* O comprovante deve ser enviado em até 24h antes do jogo.</p>
                   
-                  <div className="relative">
-                    <input
-                      type="file"
-                      id="receipt-upload"
-                      className="hidden"
-                      accept="image/*"
-                      onChange={handleUploadReceipt}
-                      disabled={isUploadingReceipt}
-                    />
-                    <label
-                      htmlFor="receipt-upload"
-                      className={`w-full py-5 rounded-2xl flex items-center justify-center gap-3 font-black uppercase text-xs transition-all cursor-pointer shadow-lg
-                        ${isUploadingReceipt ? 'bg-gray-100 text-gray-400' : 'bg-pitch text-white hover:bg-pitch/90 active:scale-95'}`}
-                    >
-                      {isUploadingReceipt ? (
-                        <RefreshCcw className="w-5 h-5 animate-spin" />
-                      ) : (
-                        <Camera className="w-5 h-5" />
-                      )}
-                      {isUploadingReceipt ? 'Enviando...' : 'Anexar Comprovante'}
-                    </label>
-                  </div>
+                  <button 
+                    onClick={() => {
+                      const msg = `Olá! Tenho uma dúvida sobre o agendamento do dia ${selectedPaymentSlot.date} às ${selectedPaymentSlot.time} na arena ${paymentField?.name}.`;
+                      if (paymentField?.contactPhone) window.open(api.getWhatsAppLink(paymentField.contactPhone, msg), '_blank');
+                    }}
+                    className="w-full py-3 bg-gray-50 text-pitch rounded-xl flex items-center justify-center gap-2 border hover:bg-gray-100 transition-all"
+                  >
+                     <MessageCircle className="w-4 h-4 text-grass-600" />
+                     <span className="text-[9px] font-black uppercase">Falar com Arena</span>
+                  </button>
                 </div>
               </div>
             </div>
@@ -1304,23 +1355,75 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
 
         {showInviteMensalistaModal && (
           <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 animate-in fade-in duration-300">
-            <div className="bg-white rounded-3xl w-full max-w-lg shadow-2xl p-6 space-y-4">
+            <div className="bg-white rounded-3xl w-full max-w-lg shadow-2xl p-6 space-y-4 max-h-[90vh] overflow-y-auto">
               <div className="flex justify-between items-center">
-                <h3 className="font-black text-pitch uppercase italic">Convidar Mensalista</h3>
-                <button onClick={() => setShowInviteMensalistaModal(false)}><X className="w-6 h-6"/></button>
+                <h3 className="font-black text-pitch uppercase italic">{inviteTeam ? 'Configurar Convite' : 'Convidar Mensalista'}</h3>
+                <button onClick={() => { setShowInviteMensalistaModal(false); setInviteTeam(null); }}><X className="w-6 h-6"/></button>
               </div>
-              {/* Search input removed as requested. Teams are now loaded automatically. */}
-              <div className="space-y-2 max-h-60 overflow-y-auto">
-                {foundTeams.map(team => (
-                  <div key={team.id} className="bg-gray-50 p-3 rounded-lg flex justify-between items-center">
-                    <div>
-                      <p className="font-bold text-pitch">{team.teams[0]?.name || 'Nome não encontrado'}</p>
-                      <p className="text-xs text-gray-500">Capitão: {team.name}</p>
+              
+              {!inviteTeam ? (
+                <div className="space-y-2 max-h-60 overflow-y-auto">
+                  {foundTeams.map(team => (
+                    <div key={team.id} className="bg-gray-50 p-3 rounded-lg flex justify-between items-center">
+                      <div>
+                        <p className="font-bold text-pitch">{team.teams[0]?.name || 'Nome não encontrado'}</p>
+                        <p className="text-xs text-gray-500">Capitão: {team.name}</p>
+                      </div>
+                      <Button onClick={() => handleSelectTeamForInvite(team)}>Selecionar</Button>
                     </div>
-                    <Button onClick={() => handleSendInvite(team)}>Convidar</Button>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="space-y-4 animate-in slide-in-from-right duration-300">
+                   <div className="bg-gray-50 p-4 rounded-2xl border">
+                      <p className="text-[10px] font-black text-gray-400 uppercase mb-1">Time Selecionado</p>
+                      <p className="font-black text-pitch uppercase text-lg">{inviteTeam.teams[0]?.name}</p>
+                      <p className="text-xs text-gray-500 uppercase">Capitão: {inviteTeam.name}</p>
+                   </div>
+                   
+                   <div className="grid grid-cols-2 gap-4">
+                      <div className="bg-gray-50 p-3 rounded-xl border">
+                         <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Dia da Semana</label>
+                         <select className="w-full bg-transparent font-black outline-none text-xs uppercase" value={inviteDay} onChange={e => setInviteDay(Number(e.target.value))}>
+                            {['Domingo','Segunda','Terça','Quarta','Quinta','Sexta','Sábado'].map((d, i) => (
+                               <option key={i} value={i}>{d}</option>
+                            ))}
+                         </select>
+                      </div>
+                      <div className="bg-gray-50 p-3 rounded-xl border">
+                         <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Horário</label>
+                         <input type="time" className="w-full bg-transparent font-black outline-none text-xs" value={inviteTime} onChange={e => setInviteTime(e.target.value)} />
+                      </div>
+                   </div>
+
+                   <div className="grid grid-cols-2 gap-4">
+                      <div className="bg-gray-50 p-3 rounded-xl border">
+                         <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Categoria</label>
+                         <select className="w-full bg-transparent font-black outline-none text-xs uppercase" value={inviteCategory} onChange={e => setInviteCategory(e.target.value)}>
+                            {CATEGORY_ORDER.map(c => <option key={c} value={c}>{c}</option>)}
+                         </select>
+                      </div>
+                      <div className="bg-gray-50 p-3 rounded-xl border">
+                         <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Esporte</label>
+                         <select className="w-full bg-transparent font-black outline-none text-xs uppercase" value={inviteSport} onChange={e => setInviteSport(e.target.value)}>
+                            {SPORTS.map(s => <option key={s} value={s}>{s}</option>)}
+                         </select>
+                      </div>
+                   </div>
+
+                   <div className="bg-gray-50 p-3 rounded-xl border">
+                      <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Quadra</label>
+                      <select className="w-full bg-transparent font-black outline-none text-xs uppercase" value={inviteCourt} onChange={e => setInviteCourt(e.target.value)}>
+                         {field.courts.map(c => <option key={c} value={c}>{c}</option>)}
+                      </select>
+                   </div>
+
+                   <div className="flex gap-2 pt-4">
+                      <Button variant="outline" onClick={() => setInviteTeam(null)} className="flex-1">Voltar</Button>
+                      <Button onClick={handleConfirmInvite} isLoading={isLoading} className="flex-1 bg-pitch text-white">Enviar Convite</Button>
+                   </div>
+                </div>
+              )}
             </div>
           </div>
         )}

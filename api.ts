@@ -600,8 +600,8 @@ export const api = {
     }));
   },
 
-  addRegisteredTeam: async (team: Partial<RegisteredTeam>): Promise<void> => {
-    await supabase.from('registered_team').insert([{
+  addRegisteredTeam: async (team: Partial<RegisteredTeam>): Promise<RegisteredTeam> => {
+    const { data, error } = await supabase.from('registered_team').insert([{
       field_id: team.fieldId,
       name: team.name,
       fixed_day: team.fixedDay,
@@ -609,17 +609,35 @@ export const api = {
       fixed_duration_minutes: team.fixedDurationMinutes,
       categories: team.categories,
       logo_url: team.logoUrl,
-      // Fix: Use camelCase properties on Partial<RegisteredTeam> object
       captain_name: team.captainName,
-      // Fix: Use camelCase properties on Partial<RegisteredTeam> object
       captain_phone: team.captainPhone,
       email: team.email,
       gender: team.gender,
       sport: team.sport,
-      // Fix: Use camelCase properties on Partial<RegisteredTeam> object
       court_name: team.courtName,
       status: team.status || 'approved'
-    }]);
+    }]).select().single();
+
+    if (error) throw error;
+    
+    return {
+      id: data.id,
+      name: data.name,
+      fieldId: data.field_id,
+      fixedDay: data.fixed_day,
+      fixedTime: data.fixed_time,
+      fixedDurationMinutes: data.fixed_duration_minutes,
+      categories: data.categories,
+      logoUrl: data.logo_url,
+      createdAt: data.created_at,
+      captainName: data.captain_name,
+      captainPhone: data.captain_phone,
+      email: data.email,
+      gender: data.gender,
+      sport: data.sport,
+      courtName: data.court_name,
+      status: data.status
+    };
   },
 
   updateRegisteredTeam: async (teamId: string, updates: Partial<RegisteredTeam>): Promise<void> => {

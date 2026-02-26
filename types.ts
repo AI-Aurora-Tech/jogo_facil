@@ -126,7 +126,7 @@ export interface RegisteredTeam {
   gender: Gender;
   sport: string;
   courtName: string;
-  status: 'pending' | 'approved' | 'rejected';
+  status: 'pending' | 'approved' | 'rejected' | 'invited';
 }
 
 export const CATEGORY_ORDER = [
