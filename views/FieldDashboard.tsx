@@ -45,6 +45,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
   const [slotPrice, setSlotPrice] = useState(field.hourlyRate);
   const [pixKey, setPixKey] = useState(field.pixConfig?.key || '');
   const [pixName, setPixName] = useState(field.pixConfig?.name || '');
+  const [bank, setBank] = useState(field.pixConfig?.bank || '');
   const [slotSport, setSlotSport] = useState('Society');
   
   const [isLocalTeamSlot, setIsLocalTeamSlot] = useState(false);
@@ -229,6 +230,14 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
   }, [field.name]);
 
   useEffect(() => {
+    if (field.pixConfig) {
+      setPixKey(field.pixConfig.key);
+      setPixName(field.pixConfig.name);
+      setBank(field.pixConfig.bank || '');
+    }
+  }, [field.pixConfig]);
+
+  useEffect(() => {
     if (field.courts && field.courts.length > 0) {
       if (!field.courts.includes(slotCourt)) setSlotCourt(field.courts[0]);
       if (!field.courts.includes(mensalistaCourt)) setMensalistaCourt(field.courts[0]);
@@ -371,9 +380,16 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
         let desc = `A arena ${field.name} aceitou seu desafio. Realize o pagamento via PIX para confirmar.`;
 
         if (slot.price === 0) {
-           newStatus = 'confirmed';
-           title = "Agendamento Confirmado! ⚽";
-           desc = `Seu jogo na arena ${field.name} foi confirmado!`;
+           // Se for jogo gratuito, verifica se precisa de oponente
+           if (!slot.hasLocalTeam && !slot.opponentTeamName) {
+              newStatus = 'waiting_opponent';
+              title = "Reserva Aprovada! ⏳";
+              desc = `Sua reserva foi aprovada pela arena. Aguardando um time adversário aceitar o jogo.`;
+           } else {
+              newStatus = 'confirmed';
+              title = "Agendamento Confirmado! ⚽";
+              desc = `Seu jogo na arena ${field.name} foi confirmado!`;
+           }
         } else if (slot.status === 'pending_verification') {
            newStatus = 'confirmed';
            title = "Pagamento Confirmado! ⚽";
@@ -541,6 +557,14 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
         delete updateData.isBooked;
         delete updateData.status;
         await onUpdateSlot(editingSlotId, updateData);
+        
+        // Update Field PIX Config if changed
+        if (pixKey !== field.pixConfig?.key || pixName !== field.pixConfig?.name || bank !== field.pixConfig?.bank) {
+            await onUpdateField(field.id, {
+                pixConfig: { key: pixKey, name: pixName, bank: bank }
+            });
+        }
+
         alert("Horário atualizado com sucesso!");
 
         const originalSlot = slots.find(s => s.id === editingSlotId);
@@ -554,6 +578,14 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
         }
       } else {
         await onAddSlot([slotData]);
+        
+        // Update Field PIX Config if changed
+        if (pixKey !== field.pixConfig?.key || pixName !== field.pixConfig?.name || bank !== field.pixConfig?.bank) {
+            await onUpdateField(field.id, {
+                pixConfig: { key: pixKey, name: pixName, bank: bank }
+            });
+        }
+
         alert("Horário criado com sucesso!");
       }
 
@@ -952,7 +984,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                              </>
                            )}
                         </div>
-                        {slot.status === 'confirmed' && (
+                        {slot.status === 'confirmed' && !isAwayGame && (
                            <button 
                              onClick={() => {
                                const msg = `Olá! Confirmando a partida na arena ${field.name} dia ${slot.date.split('-').reverse().join('/')} às ${slot.time}. Bom jogo!`;
@@ -1478,6 +1510,24 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                        <input type="number" className="w-full bg-transparent font-black outline-none" value={slotPrice} onChange={e => setSlotPrice(Number(e.target.value))} />
                     </div>
                  </div>
+
+                 <div className="bg-gray-50 p-4 rounded-2xl border space-y-3">
+                      <h4 className="font-black text-pitch text-xs uppercase border-b pb-2">Dados de Recebimento (PIX)</h4>
+                      <div className="grid grid-cols-2 gap-4">
+                          <div>
+                              <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Chave PIX</label>
+                              <input type="text" className="w-full bg-transparent font-black outline-none text-xs" value={pixKey} onChange={e => setPixKey(e.target.value)} placeholder="CPF, CNPJ, Email..." />
+                          </div>
+                          <div>
+                              <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Banco</label>
+                              <input type="text" className="w-full bg-transparent font-black outline-none text-xs" value={bank} onChange={e => setBank(e.target.value)} placeholder="Nome do Banco" />
+                          </div>
+                          <div className="col-span-2">
+                              <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Nome do Titular</label>
+                              <input type="text" className="w-full bg-transparent font-black outline-none text-xs" value={pixName} onChange={e => setPixName(e.target.value)} placeholder="Nome completo" />
+                          </div>
+                      </div>
+                  </div>
                  
                  <div className="bg-gray-50 p-4 rounded-2xl border flex items-center justify-between cursor-pointer" onClick={() => setIsLocalTeamSlot(!isLocalTeamSlot)}>
                     <div>

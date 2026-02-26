@@ -73,7 +73,8 @@ export const api = {
         image_url: fieldData.imageUrl || 'https://images.unsplash.com/photo-1529900748604-07564a03e7a6?auto=format&fit=crop&q=80&w=1000',
         complement: fieldData.complement || null,
         pix_key: fieldData.pixKey || null,
-        pix_name: fieldData.pixName || null
+        pix_name: fieldData.pixName || null,
+        courts: fieldData.courts || ['Principal']
       }]);
     }
     return mapUserFromDb(newUser);
@@ -206,7 +207,7 @@ export const api = {
         location: f.location,
         hourlyRate: f.hourly_rate,
         cancellationFeePercent: f.cancellation_fee_percent,
-        pixConfig: { key: f.pix_key || '', name: f.pix_name || '' },
+        pixConfig: { key: f.pix_key || '', name: (f.pix_name || '').split('|')[0]?.trim() || '', bank: (f.pix_name || '').split('|')[1]?.trim() || '' },
         imageUrl: f.image_url,
         contactPhone: f.contact_phone,
         latitude: Number(f.latitude) || 0,
@@ -231,7 +232,7 @@ export const api = {
 
     if (updates.pixConfig) {
       payload.pix_key = updates.pixConfig.key;
-      payload.pix_name = updates.pixConfig.name;
+      payload.pix_name = `${updates.pixConfig.name} | ${updates.pixConfig.bank || ''}`;
     }
     const { data, error } = await supabase.from('field').update(payload).eq('id', fieldId).select().single();
     if (error) throw error;
@@ -242,7 +243,7 @@ export const api = {
         location: data.location,
         hourlyRate: data.hourly_rate,
         cancellationFeePercent: data.cancellation_fee_percent,
-        pixConfig: { key: data.pix_key || '', name: data.pix_name || '' },
+        pixConfig: { key: data.pix_key || '', name: (data.pix_name || '').split('|')[0]?.trim() || '', bank: (data.pix_name || '').split('|')[1]?.trim() || '' },
         imageUrl: data.image_url,
         contactPhone: data.contact_phone,
         latitude: Number(data.latitude) || 0,
@@ -604,7 +605,7 @@ export const api = {
     const { data, error } = await supabase.from('registered_team').insert([{
       field_id: team.fieldId,
       name: team.name,
-      fixed_day: team.fixedDay,
+      fixed_day: parseInt(team.fixedDay || '0'),
       fixed_time: team.fixedTime,
       fixed_duration_minutes: team.fixedDurationMinutes,
       categories: team.categories,
@@ -615,7 +616,7 @@ export const api = {
       gender: team.gender,
       sport: team.sport,
       court_name: team.courtName,
-      status: team.status || 'approved'
+      status: (team.status === 'invited' ? 'pending' : team.status) || 'pending'
     }]).select().single();
 
     if (error) throw error;

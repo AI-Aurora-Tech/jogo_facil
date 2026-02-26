@@ -62,7 +62,7 @@ export interface Field {
   location: string;
   hourlyRate: number;
   cancellationFeePercent: number;
-  pixConfig: { key: string; name: string };
+  pixConfig: { key: string; name: string; bank?: string };
   imageUrl: string;
   contactPhone: string;
   latitude: number;
@@ -134,7 +134,7 @@ export const CATEGORY_ORDER = [
   "Sport", "35+", "40+", "45+", "50+", "60+", "70+"
 ];
 
-export const SPORTS = ["handball", "volei", "futebol", "beach tennis", "tenis", "basquete"];
+export const SPORTS = ["Handball", "Vôlei", "Futebol", "Beach Tennis", "Tênis", "Basquete"];
 
 /**
  * Interface representing the result of a PIX receipt verification processed by AI.
