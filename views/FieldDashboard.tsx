@@ -489,7 +489,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
       let teamPhone = null;
       let teamGender = null;
       let teamLogo = null;
-      let homeTeamType = 'LOCAL';
+      let homeTeamType = 'OUTSIDE';
 
       if (isLocalTeamSlot) {
         if (selectedRegisteredTeamId) {

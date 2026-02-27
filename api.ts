@@ -1,6 +1,10 @@
 import { supabase } from './supabaseClient';
 import { User, Field, MatchSlot, RegisteredTeam, PendingUpdate, UserRole, Notification, SubscriptionPlan } from './types';
 
+function normalizeSport(sport: string): string {
+  return sport.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase();
+}
+
 const mapUserFromDb = (u: any): User => ({
   id: u.id,
   name: u.name,
@@ -475,6 +479,7 @@ export const api = {
       allowed_opponent_categories: s.allowedOpponentCategories || [],
       court_name: s.courtName,
       sport: s.sport,
+      home_team_type: s.homeTeamType || 'OUTSIDE',
       receipt_url: s.receiptUrl || null,
       receipt_uploaded_at: s.receiptUploadedAt || null
     }));
@@ -616,7 +621,7 @@ export const api = {
     const { data, error } = await supabase.from('registered_team').insert([{
       field_id: team.fieldId,
       name: team.name,
-      fixed_day: parseInt(team.fixedDay || '0'),
+      fixed_day: parseInt(team.fixedDay || '0') || 0,
       fixed_time: team.fixedTime,
       fixed_duration_minutes: team.fixedDurationMinutes,
       categories: team.categories,
@@ -625,7 +630,7 @@ export const api = {
       captain_phone: team.captainPhone,
       email: team.email,
       gender: team.gender,
-      sport: team.sport,
+      sport: team.sport ? normalizeSport(team.sport) : 'FUTEBOL',
       court_name: team.courtName,
       status: (team.status === 'invited' ? 'pending' : team.status) || 'pending'
     }]).select().single();
@@ -655,7 +660,7 @@ export const api = {
   updateRegisteredTeam: async (teamId: string, updates: Partial<RegisteredTeam>): Promise<void> => {
     const payload: any = {};
     if (updates.name !== undefined) payload.name = updates.name;
-    if (updates.fixedDay !== undefined) payload.fixed_day = updates.fixedDay;
+    if (updates.fixedDay !== undefined) payload.fixed_day = parseInt(updates.fixedDay || '0') || 0;
     if (updates.fixedTime !== undefined) payload.fixed_time = updates.fixedTime;
     if (updates.fixedDurationMinutes !== undefined) payload.fixed_duration_minutes = updates.fixedDurationMinutes;
     if (updates.categories !== undefined) payload.categories = updates.categories;
@@ -664,7 +669,7 @@ export const api = {
     if (updates.captainPhone !== undefined) payload.captain_phone = updates.captainPhone;
     if (updates.email !== undefined) payload.email = updates.email;
     if (updates.gender !== undefined) payload.gender = updates.gender;
-    if (updates.sport !== undefined) payload.sport = updates.sport;
+    if (updates.sport !== undefined) payload.sport = normalizeSport(updates.sport);
     if (updates.courtName !== undefined) payload.court_name = updates.courtName;
     if (updates.status !== undefined) payload.status = updates.status;
     
