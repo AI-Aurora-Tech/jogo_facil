@@ -429,7 +429,7 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
         email: currentUser.email,
         gender: team.gender,
         sport: mensalistaSport,
-        courtName: mensalistaCourt || mensalistaRequestField.courts[0],
+        courtName: mensalistaCourt || mensalistaRequestField.courts[0] || 'Principal',
         status: 'pending'
       });
 

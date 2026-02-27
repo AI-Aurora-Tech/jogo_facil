@@ -193,7 +193,8 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
       }
       try {
         // Robust way to get away games
-        const teamSlots = await api.getSlotsForTeam(currentUser.id);
+        const myTeamNames = currentUser.teams.map(t => t.name);
+        const teamSlots = await api.getSlotsForTeam(currentUser.id, myTeamNames);
         
         // Filter out games that are on the current field
         const awaySlots = teamSlots.filter(slot => slot.fieldId !== field.id);
@@ -814,6 +815,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
   const getSlotBadges = (slot: MatchSlot) => {
     const badges = [];
     const isLocal = slot.hasLocalTeam || slot.matchType === 'FIXO';
+    const isAwayGame = slot.fieldId !== field.id;
     const hasOpponent = !!slot.opponentTeamName;
     const hasAtLeastOneTeam = !!(slot.bookedByTeamName || slot.hasLocalTeam);
 
@@ -824,7 +826,11 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
     } else if (slot.status === 'pending_payment') {
       badges.push({ label: 'AGUARDANDO PAGAMENTO', color: 'bg-blue-500 text-white', icon: <Clock className="w-3 h-3"/> });
     } else if (slot.status === 'pending_field_approval') {
-      badges.push({ label: 'AGUARDANDO SUA APROVAÇÃO', color: 'bg-orange-400 text-white', icon: <UserCheck className="w-3 h-3"/> });
+      if (isAwayGame) {
+         badges.push({ label: 'AGUARDANDO APROVAÇÃO DA ARENA', color: 'bg-orange-400 text-white', icon: <UserCheck className="w-3 h-3"/> });
+      } else {
+         badges.push({ label: 'AGUARDANDO SUA APROVAÇÃO', color: 'bg-orange-400 text-white', icon: <UserCheck className="w-3 h-3"/> });
+      }
     } else if (slot.status === 'pending_home_approval') {
       badges.push({ label: 'AGUARDANDO APROVAÇÃO DO MANDANTE', color: 'bg-yellow-400 text-pitch', icon: <Clock className="w-3 h-3"/> });
     } else if (slot.status === 'waiting_opponent') {
@@ -1021,7 +1027,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                              </span>
                            </button>
                         )}
-                        {(slot.status === 'pending_verification' || slot.status === 'pending_field_approval') && (
+                        {(slot.status === 'pending_verification' || slot.status === 'pending_field_approval') && !isAwayGame && (
                            <button onClick={() => setActiveTab('SOLICITACOES')} className="bg-orange-500 text-white text-[8px] font-black uppercase px-3 py-2 rounded-lg animate-pulse">Ver Solicitação</button>
                         )}
                       </div>

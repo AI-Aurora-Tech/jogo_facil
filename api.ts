@@ -343,15 +343,26 @@ export const api = {
     })) as unknown as MatchSlot[];
   },
 
-  getSlotsForTeam: async (userId: string): Promise<MatchSlot[]> => {
+  getSlotsForTeam: async (userId: string, teamNames: string[] = []): Promise<MatchSlot[]> => {
     const today = new Date().toISOString().split('T')[0];
-    const { data, error } = await supabase
+    
+    let query = supabase
       .from('match_slot')
       .select('*')
-      .eq('booked_by_user_id', userId)
       .gte('date', today)
       .order('date')
       .order('time');
+
+    if (teamNames.length > 0) {
+        const namesList = teamNames.map(n => `"${n.replace(/"/g, '')}"`).join(',');
+        const orCondition = `booked_by_user_id.eq.${userId},local_team_name.in.(${namesList}),opponent_team_name.in.(${namesList}),booked_by_team_name.in.(${namesList})`;
+        query = query.or(orCondition);
+    } else {
+        query = query.eq('booked_by_user_id', userId);
+    }
+
+    const { data, error } = await query;
+
     if (error) throw error;
     return (data || []).map(s => ({
       id: s.id,
