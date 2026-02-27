@@ -297,7 +297,9 @@ export const api = {
       receiptUploadedAt: s.receipt_uploaded_at,
       aiVerificationResult: s.ai_verification_result,
       courtName: s.court_name,
-      sport: s.sport
+      sport: s.sport,
+      homeTeamType: s.home_team_type || 'OUTSIDE',
+      pixKey: s.pix_key
     })) as unknown as MatchSlot[];
   },
   
@@ -343,7 +345,8 @@ export const api = {
       aiVerificationResult: s.ai_verification_result,
       courtName: s.court_name,
       sport: s.sport,
-      homeTeamType: s.home_team_type || 'OUTSIDE'
+      homeTeamType: s.home_team_type || 'OUTSIDE',
+      pixKey: s.pix_key
     })) as unknown as MatchSlot[];
   },
 
@@ -400,7 +403,8 @@ export const api = {
       aiVerificationResult: s.ai_verification_result,
       courtName: s.court_name,
       sport: s.sport,
-      homeTeamType: s.home_team_type || 'OUTSIDE'
+      homeTeamType: s.home_team_type || 'OUTSIDE',
+      pixKey: s.pix_key
     })) as unknown as MatchSlot[];
   },
 
@@ -446,7 +450,9 @@ export const api = {
       receiptUploadedAt: s.receipt_uploaded_at,
       aiVerificationResult: s.ai_verification_result,
       courtName: s.court_name,
-      sport: s.sport
+      sport: s.sport,
+      homeTeamType: s.home_team_type || 'OUTSIDE',
+      pixKey: s.pix_key
     })) as unknown as MatchSlot[];
   },
 
@@ -481,7 +487,8 @@ export const api = {
       sport: s.sport,
       home_team_type: s.homeTeamType || 'OUTSIDE',
       receipt_url: s.receiptUrl || null,
-      receipt_uploaded_at: s.receiptUploadedAt || null
+      receipt_uploaded_at: s.receiptUploadedAt || null,
+      pix_key: s.pixKey || null
     }));
     const { data, error } = await supabase.from('match_slot').insert(payload).select();
     if (error) throw error;
@@ -516,7 +523,9 @@ export const api = {
       receiptUploadedAt: s.receipt_uploaded_at,
       aiVerificationResult: s.ai_verification_result,
       courtName: s.court_name,
-      sport: s.sport
+      sport: s.sport,
+      homeTeamType: s.home_team_type || 'OUTSIDE',
+      pixKey: s.pix_key
     })) as unknown as MatchSlot[];
   },
 
@@ -552,6 +561,7 @@ export const api = {
     if (data.courtName !== undefined) payload.court_name = data.courtName;
     if (data.sport !== undefined) payload.sport = data.sport;
     if (data.allowedOpponentCategories !== undefined) payload.allowed_opponent_categories = data.allowedOpponentCategories;
+    if (data.pixKey !== undefined) payload.pix_key = data.pixKey;
 
     const { error } = await supabase.from('match_slot').update(payload).eq('id', slotId);
     if (error) throw error;

@@ -108,6 +108,7 @@ export interface MatchSlot {
   fieldRating?: number;
   courtName?: string;
   sport: string;
+  pixKey?: string;
 }
 
 export interface RegisteredTeam {

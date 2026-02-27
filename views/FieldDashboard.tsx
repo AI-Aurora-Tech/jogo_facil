@@ -34,7 +34,6 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
   const [showAddSlotModal, setShowAddSlotModal] = useState(false);
   const [editingSlotId, setEditingSlotId] = useState<string | null>(null);
   const [showAddMensalistaModal, setShowAddMensalistaModal] = useState(false);
-  const [showInviteMensalistaModal, setShowInviteMensalistaModal] = useState(false);
   
   // States Criação/Edição Slot
   const [slotDate, setSlotDate] = useState(new Date().toISOString().split('T')[0]);
@@ -70,6 +69,8 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
   const [autoGenStartTime, setAutoGenStartTime] = useState('08:00');
   const [autoGenEndTime, setAutoGenEndTime] = useState('22:00');
   const [autoGenDuration, setAutoGenDuration] = useState(60);
+  const [autoGenPrice, setAutoGenPrice] = useState(field.hourlyRate);
+  const [autoGenPixKey, setAutoGenPixKey] = useState(field.pixConfig?.key || '');
 
   // States Mensalista
   const [editingMensalista, setEditingMensalista] = useState<RegisteredTeam | null>(null);
@@ -88,16 +89,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
   const [mensalistaCourt, setMensalistaCourt] = useState(field.courts?.[0] || 'Principal');
   const [mensalistaDuration, setMensalistaDuration] = useState(60);
 
-  const [inviteTeamName, setInviteTeamName] = useState('');
-  const [foundTeams, setFoundTeams] = useState<User[]>([]);
-  
-  // States Invite Mensalista Form
-  const [inviteTeam, setInviteTeam] = useState<User | null>(null);
-  const [inviteCategory, setInviteCategory] = useState('');
-  const [inviteDay, setInviteDay] = useState(1);
-  const [inviteTime, setInviteTime] = useState('19:00');
-  const [inviteCourt, setInviteCourt] = useState(field.courts?.[0] || 'Principal');
-  const [inviteSport, setInviteSport] = useState('Society');
+
 
   const todayStr = new Date().toISOString().split('T')[0];
 
@@ -157,6 +149,32 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
   };
 
   const handleApproveMensalista = async (teamId: string) => {
+    const team = registeredTeams.find(t => t.id === teamId);
+    if (!team) return;
+
+    // Check conflict
+    const hasConflict = registeredTeams.some(t => {
+      if (t.id === teamId) return false;
+      if (t.status !== 'approved') return false;
+      if (t.courtName !== team.courtName) return false;
+      if (Number(t.fixedDay) !== Number(team.fixedDay)) return false;
+      
+      const [tH, tM] = t.fixedTime.split(':').map(Number);
+      const tStart = tH * 60 + tM;
+      const tEnd = tStart + (t.fixedDurationMinutes || 60);
+      
+      const [nH, nM] = team.fixedTime.split(':').map(Number);
+      const nStart = nH * 60 + nM;
+      const nEnd = nStart + (team.fixedDurationMinutes || 60);
+      
+      return (nStart < tEnd && nEnd > tStart);
+    });
+
+    if (hasConflict) {
+      alert('Não é possível aprovar: conflito com outro mensalista.');
+      return;
+    }
+
     try {
       await api.updateRegisteredTeam(teamId, { status: 'approved' });
       alert('Mensalista aprovado com sucesso!');
@@ -277,71 +295,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
     } catch (e) { console.error(e); }
   };
 
-  useEffect(() => {
-    if (showInviteMensalistaModal) {
-      handleSearchTeams();
-    }
-  }, [showInviteMensalistaModal]);
 
-  const handleSearchTeams = async () => {
-    setIsLoading(true);
-    try {
-      const users = await api.getAllUsers(); // This is a placeholder, the actual API call might be different
-      setFoundTeams(users.filter(u => u.role === 'TEAM_CAPTAIN'));
-    } catch (e) {
-      alert('Erro ao buscar times.');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleSelectTeamForInvite = (team: User) => {
-    setInviteTeam(team);
-    setInviteCategory(team.teams[0]?.categories[0] || CATEGORY_ORDER[0]);
-    setInviteSport(team.teams[0]?.sport || 'Society');
-    setInviteCourt(field.courts?.[0] || 'Principal');
-    setInviteDay(1);
-    setInviteTime('19:00');
-  };
-
-  const handleConfirmInvite = async () => {
-    if (!inviteTeam) return;
-    setIsLoading(true);
-    try {
-      const payload: Partial<RegisteredTeam> = {
-        fieldId: field.id,
-        name: inviteTeam.teams[0].name,
-        captainName: inviteTeam.name,
-        captainPhone: inviteTeam.phoneNumber,
-        email: inviteTeam.email,
-        fixedDay: String(inviteDay),
-        fixedTime: inviteTime,
-        fixedDurationMinutes: 60,
-        categories: [inviteCategory],
-        logoUrl: inviteTeam.teams[0].logoUrl,
-        gender: inviteTeam.teams[0].gender,
-        sport: inviteSport,
-        courtName: inviteCourt,
-        status: 'invited'
-      };
-      
-      const newTeam = await api.addRegisteredTeam(payload);
-      
-      const url = `${window.location.origin}?acceptInvite=${newTeam.id}`;
-      const message = `Olá ${inviteTeam.name}, você foi convidado para ser mensalista da arena ${field.name} (${inviteCategory} - ${['Dom','Seg','Ter','Qua','Qui','Sex','Sab'][inviteDay]} às ${inviteTime}). Acesse o link para aceitar: ${url}`;
-      const whatsappUrl = `https://api.whatsapp.com/send?phone=${inviteTeam.phoneNumber}&text=${encodeURIComponent(message)}`;
-      window.open(whatsappUrl, '_blank');
-      
-      alert('Convite enviado! O capitão receberá uma mensagem no WhatsApp.');
-      setShowInviteMensalistaModal(false);
-      setInviteTeam(null);
-      loadMensalistas();
-    } catch (e) {
-      alert('Erro ao enviar convite.');
-    } finally {
-      setIsLoading(false);
-    }
-  };
 
 
 
@@ -467,6 +421,49 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
     }
   };
 
+  const checkConflict = (date: string, time: string, duration: number, court: string, excludeSlotId?: string): boolean => {
+    // Check against existing slots
+    const hasSlotConflict = slots.some(s => {
+      if (s.id === excludeSlotId) return false;
+      if (s.courtName !== court) return false;
+      if (s.date !== date) return false;
+      
+      const [sH, sM] = s.time.split(':').map(Number);
+      const sStart = sH * 60 + sM;
+      const sEnd = sStart + (s.durationMinutes || 60);
+      
+      const [nH, nM] = time.split(':').map(Number);
+      const nStart = nH * 60 + nM;
+      const nEnd = nStart + duration;
+      
+      return (nStart < sEnd && nEnd > sStart);
+    });
+
+    if (hasSlotConflict) return true;
+
+    // Check against Mensalistas
+    const dateObj = new Date(date + 'T00:00:00');
+    const dayOfWeek = dateObj.getDay(); 
+
+    const hasMensalistaConflict = registeredTeams.some(t => {
+      if (t.status !== 'approved') return false;
+      if (t.courtName !== court) return false;
+      if (Number(t.fixedDay) !== dayOfWeek) return false;
+      
+      const [tH, tM] = t.fixedTime.split(':').map(Number);
+      const tStart = tH * 60 + tM;
+      const tEnd = tStart + (t.fixedDurationMinutes || 60);
+      
+      const [nH, nM] = time.split(':').map(Number);
+      const nStart = nH * 60 + nM;
+      const nEnd = nStart + duration;
+      
+      return (nStart < tEnd && nEnd > tStart);
+    });
+
+    return hasMensalistaConflict;
+  };
+
   const handleCreateOrUpdateSlot = async () => {
     setIsLoading(true);
     try {
@@ -477,21 +474,8 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
       }
 
       // Check for overlapping slots
-      const newSlotStart = new Date(`${slotDate}T${slotTime}`);
-      const newSlotEnd = new Date(newSlotStart.getTime() + slotDuration * 60000);
-
-      const overlappingSlot = slots.find(slot => {
-        if (slot.id === editingSlotId) return false; // Don't compare with itself when editing
-        if (slot.date !== slotDate || slot.courtName !== slotCourt) return false;
-
-        const existingSlotStart = new Date(`${slot.date}T${slot.time}`);
-        const existingSlotEnd = new Date(existingSlotStart.getTime() + slot.durationMinutes * 60000);
-
-        return newSlotStart < existingSlotEnd && newSlotEnd > existingSlotStart;
-      });
-
-      if (overlappingSlot) {
-        alert(`Este horário conflita com um horário existente (${overlappingSlot.time}) na mesma quadra.`);
+      if (checkConflict(slotDate, slotTime, slotDuration, slotCourt, editingSlotId || undefined)) {
+        alert(`Este horário conflita com um horário existente ou mensalista na mesma quadra.`);
         setIsLoading(false);
         return;
       }
@@ -560,7 +544,8 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
         courtName: slotCourt,
         sport: slotSport,
         allowedOpponentCategories: isLocalTeamSlot ? allowedCats : [],
-        allowedOpponentGenders: allowedGenders
+        allowedOpponentGenders: allowedGenders,
+        pixKey: pixKey
       } as any;
 
       if (editingSlotId) {
@@ -620,6 +605,33 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
 
     setIsLoading(true);
     try {
+      // Check conflict for mensalista
+      // We need to check if there are any slots on the mensalista day/time for the next few weeks?
+      // Or just check if there is another mensalista on the same day/time/court.
+      
+      const hasMensalistaConflict = registeredTeams.some(t => {
+        if (t.id === editingMensalista?.id) return false;
+        if (t.status !== 'approved') return false;
+        if (t.courtName !== mensalistaCourt) return false;
+        if (Number(t.fixedDay) !== Number(mensalistaDay)) return false;
+        
+        const [tH, tM] = t.fixedTime.split(':').map(Number);
+        const tStart = tH * 60 + tM;
+        const tEnd = tStart + (t.fixedDurationMinutes || 60);
+        
+        const [nH, nM] = mensalistaTime.split(':').map(Number);
+        const nStart = nH * 60 + nM;
+        const nEnd = nStart + mensalistaDuration;
+        
+        return (nStart < tEnd && nEnd > tStart);
+      });
+
+      if (hasMensalistaConflict) {
+        alert('Já existe um mensalista neste horário e quadra.');
+        setIsLoading(false);
+        return;
+      }
+
       const payload: Partial<RegisteredTeam> = {
         name: mensalistaName,
         captainName: mensalistaCaptain,
@@ -662,7 +674,8 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
 
       while (currentTime < endDate) {
         const timeStr = currentTime.toTimeString().slice(0, 5);
-        if (!slots.some(s => s.date === autoGenDate && s.time === timeStr && s.courtName === slotCourt)) {
+        
+        if (!checkConflict(autoGenDate, timeStr, autoGenDuration, slotCourt)) {
           slotsToCreate.push({
             fieldId: field.id,
             date: autoGenDate,
@@ -671,13 +684,14 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
             matchType: 'AMISTOSO',
             isBooked: false,
             hasLocalTeam: false,
-            price: field.hourlyRate,
+            price: autoGenPrice,
             status: 'available',
             courtName: slotCourt,
             sport: slotSport,
             homeTeamType: 'OUTSIDE',
             allowedOpponentCategories: [],
             allowedOpponentGenders: ['MASCULINO', 'FEMININO', 'MISTO'],
+            pixKey: autoGenPixKey
           });
         }
         currentTime.setMinutes(currentTime.getMinutes() + autoGenDuration);
@@ -1364,10 +1378,6 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
              <div className="flex justify-between items-center">
                 <h2 className="font-black text-pitch uppercase italic">Mensalistas</h2>
                 <div className="flex gap-2">
-                  <button onClick={() => setShowInviteMensalistaModal(true)} className="p-2 bg-grass-500 text-white rounded-lg active:scale-95 shadow-md flex items-center gap-2">
-                    <UserPlus className="w-4 h-4"/>
-                    <span className="text-[9px] font-black uppercase">Convidar Time</span>
-                  </button>
                   <button onClick={() => { setEditingMensalista(null); setShowAddMensalistaModal(true); }} className="p-2 bg-pitch text-white rounded-lg active:scale-95 shadow-md flex items-center gap-2">
                     <Plus className="w-4 h-4"/>
                     <span className="text-[9px] font-black uppercase">Novo</span>
@@ -1403,80 +1413,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
           </div>
         )}
 
-        {showInviteMensalistaModal && (
-          <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 animate-in fade-in duration-300">
-            <div className="bg-white rounded-3xl w-full max-w-lg shadow-2xl p-6 space-y-4 max-h-[90vh] overflow-y-auto">
-              <div className="flex justify-between items-center">
-                <h3 className="font-black text-pitch uppercase italic">{inviteTeam ? 'Configurar Convite' : 'Convidar Mensalista'}</h3>
-                <button onClick={() => { setShowInviteMensalistaModal(false); setInviteTeam(null); }}><X className="w-6 h-6"/></button>
-              </div>
-              
-              {!inviteTeam ? (
-                <div className="space-y-2 max-h-60 overflow-y-auto">
-                  {foundTeams.map(team => (
-                    <div key={team.id} className="bg-gray-50 p-3 rounded-lg flex justify-between items-center">
-                      <div>
-                        <p className="font-bold text-pitch">{team.teams[0]?.name || 'Nome não encontrado'}</p>
-                        <p className="text-xs text-gray-500">Capitão: {team.name}</p>
-                      </div>
-                      <Button onClick={() => handleSelectTeamForInvite(team)}>Selecionar</Button>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="space-y-4 animate-in slide-in-from-right duration-300">
-                   <div className="bg-gray-50 p-4 rounded-2xl border">
-                      <p className="text-[10px] font-black text-gray-400 uppercase mb-1">Time Selecionado</p>
-                      <p className="font-black text-pitch uppercase text-lg">{inviteTeam.teams[0]?.name}</p>
-                      <p className="text-xs text-gray-500 uppercase">Capitão: {inviteTeam.name}</p>
-                   </div>
-                   
-                   <div className="grid grid-cols-2 gap-4">
-                      <div className="bg-gray-50 p-3 rounded-xl border">
-                         <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Dia da Semana</label>
-                         <select className="w-full bg-transparent font-black outline-none text-xs uppercase" value={inviteDay} onChange={e => setInviteDay(Number(e.target.value))}>
-                            {['Domingo','Segunda','Terça','Quarta','Quinta','Sexta','Sábado'].map((d, i) => (
-                               <option key={i} value={i}>{d}</option>
-                            ))}
-                         </select>
-                      </div>
-                      <div className="bg-gray-50 p-3 rounded-xl border">
-                         <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Horário</label>
-                         <input type="time" className="w-full bg-transparent font-black outline-none text-xs" value={inviteTime} onChange={e => setInviteTime(e.target.value)} />
-                      </div>
-                   </div>
 
-                   <div className="grid grid-cols-2 gap-4">
-                      <div className="bg-gray-50 p-3 rounded-xl border">
-                         <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Categoria</label>
-                         <select className="w-full bg-transparent font-black outline-none text-xs uppercase" value={inviteCategory} onChange={e => setInviteCategory(e.target.value)}>
-                            {CATEGORY_ORDER.map(c => <option key={c} value={c}>{c}</option>)}
-                         </select>
-                      </div>
-                      <div className="bg-gray-50 p-3 rounded-xl border">
-                         <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Esporte</label>
-                         <select className="w-full bg-transparent font-black outline-none text-xs uppercase" value={inviteSport} onChange={e => setInviteSport(e.target.value)}>
-                            {SPORTS.map(s => <option key={s} value={s}>{s}</option>)}
-                         </select>
-                      </div>
-                   </div>
-
-                   <div className="bg-gray-50 p-3 rounded-xl border">
-                      <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Quadra</label>
-                      <select className="w-full bg-transparent font-black outline-none text-xs uppercase" value={inviteCourt} onChange={e => setInviteCourt(e.target.value)}>
-                         {field.courts.map(c => <option key={c} value={c}>{c}</option>)}
-                      </select>
-                   </div>
-
-                   <div className="flex gap-2 pt-4">
-                      <Button variant="outline" onClick={() => setInviteTeam(null)} className="flex-1">Voltar</Button>
-                      <Button onClick={handleConfirmInvite} isLoading={isLoading} className="flex-1 bg-pitch text-white">Enviar Convite</Button>
-                   </div>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
 
       {/* Modal Add/Edit Slot */}
       {showAddSlotModal && (
@@ -1667,6 +1604,16 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
               <div>
                 <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Duração (minutos)</label>
                 <input type="number" step="15" value={autoGenDuration} onChange={e => setAutoGenDuration(parseInt(e.target.value))} className="w-full bg-gray-50 p-3 rounded-xl border font-bold text-sm uppercase" />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                 <div>
+                    <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Valor (R$)</label>
+                    <input type="number" value={autoGenPrice} onChange={e => setAutoGenPrice(Number(e.target.value))} className="w-full bg-gray-50 p-3 rounded-xl border font-bold text-sm uppercase" />
+                 </div>
+                 <div>
+                    <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Chave PIX</label>
+                    <input type="text" value={autoGenPixKey} onChange={e => setAutoGenPixKey(e.target.value)} className="w-full bg-gray-50 p-3 rounded-xl border font-bold text-sm uppercase" />
+                 </div>
               </div>
             </div>
             <div className="flex gap-2 mt-6">
