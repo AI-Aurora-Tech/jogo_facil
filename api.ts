@@ -613,7 +613,31 @@ export const api = {
       gender: t.gender,
       sport: t.sport,
       courtName: t.court_name,
-      status: t.status || 'pending'
+      status: t.status || 'pending',
+      rejectionReason: t.rejection_reason
+    }));
+  },
+
+  getRegisteredTeamsForCaptain: async (phone: string): Promise<RegisteredTeam[]> => {
+    const { data } = await supabase.from('registered_team').select('*').eq('captain_phone', phone);
+    return (data || []).map(t => ({
+      id: t.id,
+      name: t.name,
+      fieldId: t.field_id,
+      fixedDay: t.fixed_day,
+      fixedTime: t.fixed_time,
+      fixedDurationMinutes: t.fixed_duration_minutes,
+      categories: t.categories,
+      logoUrl: t.logo_url,
+      createdAt: t.created_at,
+      captainName: t.captain_name,
+      captainPhone: t.captain_phone,
+      email: t.email,
+      gender: t.gender,
+      sport: t.sport,
+      courtName: t.court_name,
+      status: t.status || 'pending',
+      rejectionReason: t.rejection_reason
     }));
   },
 
@@ -672,6 +696,7 @@ export const api = {
     if (updates.sport !== undefined) payload.sport = normalizeSport(updates.sport);
     if (updates.courtName !== undefined) payload.court_name = updates.courtName;
     if (updates.status !== undefined) payload.status = updates.status;
+    if (updates.rejectionReason !== undefined) payload.rejection_reason = updates.rejectionReason;
     
     await supabase.from('registered_team').update(payload).eq('id', teamId);
   },

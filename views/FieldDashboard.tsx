@@ -73,6 +73,8 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
 
   // States Mensalista
   const [editingMensalista, setEditingMensalista] = useState<RegisteredTeam | null>(null);
+  const [rejectingTeamId, setRejectingTeamId] = useState<string | null>(null);
+  const [rejectionReason, setRejectionReason] = useState('');
   const [mensalistaName, setMensalistaName] = useState('');
   const [mensalistaCaptain, setMensalistaCaptain] = useState('');
   const [mensalistaPhone, setMensalistaPhone] = useState('');
@@ -343,14 +345,24 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
 
 
 
-  const handleRejectMensalista = async (teamId: string) => {
-    if (!confirm("Deseja realmente recusar esta solicitação?")) return;
+  const handleRejectMensalista = (teamId: string) => {
+    setRejectingTeamId(teamId);
+    setRejectionReason('');
+  };
+
+  const confirmRejection = async () => {
+    if (!rejectingTeamId) return;
+    setIsLoading(true);
     try {
-      await api.updateRegisteredTeam(teamId, { status: 'rejected' });
+      await api.updateRegisteredTeam(rejectingTeamId, { status: 'rejected', rejectionReason });
       alert("Solicitação recusada.");
+      setRejectingTeamId(null);
+      setRejectionReason('');
       loadMensalistas();
     } catch (e) {
       alert("Erro ao recusar.");
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -1721,6 +1733,25 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                  <Button onClick={handleSaveMensalista} isLoading={isLoading} className="w-full py-6 rounded-[2.5rem] font-black uppercase text-xs shadow-xl">Salvar Mensalista</Button>
               </div>
            </div>
+        </div>
+      )}
+
+      {rejectingTeamId && (
+        <div className="fixed inset-0 bg-pitch/95 backdrop-blur-xl z-[400] flex items-center justify-center p-6">
+          <div className="bg-white w-full max-w-sm rounded-[2.5rem] p-8 animate-in zoom-in duration-300">
+             <h2 className="text-xl font-black text-pitch uppercase italic mb-4">Recusar Solicitação</h2>
+             <p className="text-xs text-gray-400 font-bold uppercase mb-4">Informe o motivo da recusa para o capitão do time.</p>
+             <textarea 
+               className="w-full h-32 bg-gray-50 rounded-2xl p-4 text-xs font-bold text-pitch outline-none resize-none mb-6 border focus:border-pitch"
+               placeholder="Ex: Horário indisponível, Categoria incorreta..."
+               value={rejectionReason}
+               onChange={e => setRejectionReason(e.target.value)}
+             />
+             <div className="grid grid-cols-2 gap-3">
+               <Button onClick={() => { setRejectingTeamId(null); setRejectionReason(''); }} variant="outline" className="py-4 rounded-2xl text-gray-400 font-black uppercase text-[10px]">Cancelar</Button>
+               <Button onClick={confirmRejection} isLoading={isLoading} className="py-4 rounded-2xl bg-red-500 text-white font-black uppercase text-[10px] shadow-lg shadow-red-500/20">Confirmar Recusa</Button>
+             </div>
+          </div>
         </div>
       )}
     </div>

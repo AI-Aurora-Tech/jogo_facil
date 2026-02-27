@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Search, MapPin, Clock, Swords, Filter, X, Check, MessageCircle, Phone, Navigation, Trophy, ChevronDown, Smartphone, Settings, AlertTriangle, ExternalLink, Activity, History as HistoryIcon, CalendarCheck, CalendarX, Locate, MapPinOff, Calendar, RotateCcw, ArrowUpDown, SlidersHorizontal, Camera, Upload, Clipboard } from 'lucide-react';
 import { Button } from '../components/Button';
-import { Field, MatchSlot, User, CATEGORY_ORDER, SPORTS, Gender, MatchStatus } from '../types';
+import { Field, MatchSlot, User, CATEGORY_ORDER, SPORTS, Gender, MatchStatus, RegisteredTeam } from '../types';
 
 
 const handleCopy = (text: string) => {
@@ -57,6 +57,7 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
   const [sortBy, setSortBy] = useState<SortOption>('DISTANCE_ASC');
   
   const [myGamesSubTab, setMyGamesSubTab] = useState<'FUTUROS' | 'HISTORICO'>('FUTUROS');
+  const [myRequests, setMyRequests] = useState<RegisteredTeam[]>([]);
 
   // Ao montar ou mudar fields, tenta calcular distâncias se já tiver userCoords
   useEffect(() => {
@@ -64,6 +65,12 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
       calculateAllDistances(userCoords);
     }
   }, [userCoords, fields]);
+
+  useEffect(() => {
+    if (currentUser.role === 'TEAM_CAPTAIN') {
+      api.getRegisteredTeamsForCaptain(currentUser.phoneNumber).then(setMyRequests);
+    }
+  }, [currentUser]);
 
   const activateGPS = async () => {
     setIsCalculatingDistances(true);
@@ -416,7 +423,7 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
     
     setIsLoading(true);
     try {
-      await api.addRegisteredTeam({
+      const newTeam = await api.addRegisteredTeam({
         fieldId: mensalistaRequestField.id,
         name: team.name,
         fixedDay: String(mensalistaDay),
@@ -432,6 +439,8 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
         courtName: mensalistaCourt || mensalistaRequestField.courts[0] || 'Principal',
         status: 'pending'
       });
+
+      setMyRequests(prev => [...prev, newTeam]);
 
       await api.createNotification({
         userId: mensalistaRequestField.ownerId,
@@ -557,6 +566,36 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
         </div>
       )}
 
+      {viewMode === 'MY_BOOKINGS' && myRequests.length > 0 && (
+        <div className="px-6 mt-6">
+          <h3 className="text-sm font-black text-pitch uppercase italic mb-3">Minhas Solicitações de Mensalista</h3>
+          <div className="space-y-3">
+            {myRequests.map(req => {
+              const reqField = fields.find(f => f.id === req.fieldId);
+              return (
+                <div key={req.id} className="bg-white p-4 rounded-2xl border shadow-sm flex justify-between items-center">
+                  <div>
+                    <p className="text-[10px] font-black text-pitch uppercase">{reqField?.name || 'Arena Desconhecida'}</p>
+                    <p className="text-[9px] text-gray-400 font-bold uppercase">{req.name} • {req.sport}</p>
+                    <p className="text-[9px] text-gray-400 font-bold uppercase">{['Dom','Seg','Ter','Qua','Qui','Sex','Sab'][parseInt(req.fixedDay)]} às {req.fixedTime}</p>
+                    {req.status === 'rejected' && req.rejectionReason && (
+                      <p className="text-[9px] text-red-500 font-bold uppercase mt-1">Motivo: {req.rejectionReason}</p>
+                    )}
+                  </div>
+                  <span className={`px-2 py-1 rounded-lg text-[8px] font-black uppercase ${
+                    req.status === 'approved' ? 'bg-green-100 text-green-600' :
+                    req.status === 'rejected' ? 'bg-red-100 text-red-600' :
+                    'bg-yellow-100 text-yellow-600'
+                  }`}>
+                    {req.status === 'approved' ? 'Aprovado' : req.status === 'rejected' ? 'Recusado' : 'Pendente'}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       <div className="p-6 space-y-6">
         {processedSlots.length === 0 ? (
           <div className="py-20 text-center flex flex-col items-center">
@@ -584,6 +623,7 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
                                onClick={(e) => {
                                  e.stopPropagation();
                                  setMensalistaRequestField(field || null);
+                                 setMensalistaCourt(field?.courts?.[0] || '');
                                  setShowMensalistaModal(true);
                                }}
                                className="text-[8px] font-black text-indigo-600 uppercase bg-indigo-50 px-2 py-1 rounded-lg hover:bg-indigo-100 transition-colors"
@@ -641,7 +681,7 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
                       <span className={`px-2 py-1 rounded-lg text-[8px] font-black uppercase mb-1 ${status.color}`}>
                          {status.label}
                       </span>
-                      <span className="text-xs font-black text-pitch">R$ {slot.price}</span>
+                      <span className="text-xs font-black text-pitch">R$ {slot.homeTeamType === 'OUTSIDE' ? (slot.price / 2).toFixed(2) : slot.price}</span>
                    </div>
                    {viewMode === 'EXPLORE' && (slot.status === 'available' || slot.status === 'waiting_opponent') && field?.ownerId !== currentUser.id && !((slot.bookedByTeamName && myTeamsNames.includes(slot.bookedByTeamName.toLowerCase())) || (slot.localTeamName && myTeamsNames.includes(slot.localTeamName.toLowerCase()))) &&
                      <Button onClick={() => setSelectedSlot(slot)} className="rounded-2xl px-8 py-4 font-black uppercase text-[10px] bg-pitch shadow-lg">

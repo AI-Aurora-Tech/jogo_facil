@@ -1,7 +1,11 @@
 import React from 'react';
 import { ShieldCheck, Calendar, Search, BarChart2, LogOut } from 'lucide-react';
 
-export const Subscription: React.FC = () => {
+interface SubscriptionProps {
+  onBack?: () => void;
+}
+
+export const Subscription: React.FC<SubscriptionProps> = ({ onBack }) => {
 
   const handleSubscription = () => {
     window.location.href = 'https://www.mercadopago.com.br/subscriptions/checkout?preapproval_plan_id=5efc581a3ff84478bf1a349617285115';
