@@ -409,6 +409,23 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
     }
   };
 
+  const handleResubmit = (req: RegisteredTeam) => {
+    const field = fields.find(f => f.id === req.fieldId);
+    if (!field) return;
+    
+    setMensalistaRequestField(field);
+    setMensalistaDay(Number(req.fixedDay));
+    setMensalistaTime(req.fixedTime);
+    setMensalistaSport(req.sport);
+    setMensalistaCourt(req.courtName);
+    
+    const teamIdx = currentUser.teams.findIndex(t => t.name === req.name);
+    if (teamIdx >= 0) setSelectedTeamIdx(teamIdx);
+    
+    if (req.categories.length > 0) setSelectedCategory(req.categories[0]);
+    setShowMensalistaModal(true);
+  };
+
   const handleRequestMensalista = async () => {
     if (!mensalistaRequestField) return;
     const team = currentUser.teams?.[selectedTeamIdx];
@@ -582,13 +599,20 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
                       <p className="text-[9px] text-red-500 font-bold uppercase mt-1">Motivo: {req.rejectionReason}</p>
                     )}
                   </div>
-                  <span className={`px-2 py-1 rounded-lg text-[8px] font-black uppercase ${
-                    req.status === 'approved' ? 'bg-green-100 text-green-600' :
-                    req.status === 'rejected' ? 'bg-red-100 text-red-600' :
-                    'bg-yellow-100 text-yellow-600'
-                  }`}>
-                    {req.status === 'approved' ? 'Aprovado' : req.status === 'rejected' ? 'Recusado' : 'Pendente'}
-                  </span>
+                  <div className="flex flex-col items-end gap-2">
+                    <span className={`px-2 py-1 rounded-lg text-[8px] font-black uppercase ${
+                      req.status === 'approved' ? 'bg-green-100 text-green-600' :
+                      req.status === 'rejected' ? 'bg-red-100 text-red-600' :
+                      'bg-yellow-100 text-yellow-600'
+                    }`}>
+                      {req.status === 'approved' ? 'Aprovado' : req.status === 'rejected' ? 'Recusado' : 'Pendente'}
+                    </span>
+                    {req.status === 'rejected' && (
+                      <button onClick={() => handleResubmit(req)} className="text-[8px] font-black text-indigo-600 uppercase bg-indigo-50 px-2 py-1 rounded-lg hover:bg-indigo-100 transition-colors">
+                        Reenviar
+                      </button>
+                    )}
+                  </div>
                 </div>
               );
             })}

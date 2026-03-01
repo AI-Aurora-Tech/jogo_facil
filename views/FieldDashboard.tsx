@@ -71,6 +71,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
   const [autoGenDuration, setAutoGenDuration] = useState(60);
   const [autoGenPrice, setAutoGenPrice] = useState(field.hourlyRate);
   const [autoGenPixKey, setAutoGenPixKey] = useState(field.pixConfig?.key || '');
+  const [autoGenSport, setAutoGenSport] = useState('Society');
 
   // States Mensalista
   const [editingMensalista, setEditingMensalista] = useState<RegisteredTeam | null>(null);
@@ -687,7 +688,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
             price: autoGenPrice,
             status: 'available',
             courtName: slotCourt,
-            sport: slotSport,
+            sport: autoGenSport,
             homeTeamType: 'OUTSIDE',
             allowedOpponentCategories: [],
             allowedOpponentGenders: ['MASCULINO', 'FEMININO', 'MISTO'],
@@ -1604,6 +1605,12 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
               <div>
                 <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Duração (minutos)</label>
                 <input type="number" step="15" value={autoGenDuration} onChange={e => setAutoGenDuration(parseInt(e.target.value))} className="w-full bg-gray-50 p-3 rounded-xl border font-bold text-sm uppercase" />
+              </div>
+              <div>
+                <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Esporte</label>
+                <select className="w-full bg-gray-50 p-3 rounded-xl border font-bold text-sm uppercase" value={autoGenSport} onChange={e => setAutoGenSport(e.target.value)}>
+                   {SPORTS.map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
               </div>
               <div className="grid grid-cols-2 gap-4">
                  <div>
