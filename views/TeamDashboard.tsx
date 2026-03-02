@@ -468,8 +468,9 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
 
       alert("Solicitação enviada! O dono da arena irá analisar seu pedido.");
       setShowMensalistaModal(false);
-    } catch (e) {
-      alert("Erro ao enviar solicitação.");
+    } catch (e: any) {
+      console.error("Erro ao solicitar mensalista:", e);
+      alert("Erro ao enviar solicitação: " + (e.message || "Erro desconhecido"));
     } finally {
       setIsLoading(false);
     }

@@ -185,8 +185,9 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
       });
       alert('Mensalista aprovado com sucesso!');
       loadMensalistas();
-    } catch (error) {
-      alert('Erro ao aprovar mensalista.');
+    } catch (error: any) {
+      console.error("Erro ao aprovar mensalista:", error);
+      alert('Erro ao aprovar mensalista: ' + (error.message || "Erro desconhecido"));
     }
   };
 
@@ -324,8 +325,9 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
       setRejectingTeamId(null);
       setRejectionReason('');
       loadMensalistas();
-    } catch (e) {
-      alert("Erro ao recusar.");
+    } catch (e: any) {
+      console.error("Erro ao recusar mensalista:", e);
+      alert("Erro ao recusar: " + (e.message || "Erro desconhecido"));
     } finally {
       setIsLoading(false);
     }
@@ -747,14 +749,34 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
     try {
       const slotsToCreate: Omit<MatchSlot, 'id'>[] = [];
       const targetDay = Number(team.fixedDay);
+      
+      if (isNaN(targetDay)) {
+        throw new Error("Dia da semana inválido para este mensalista.");
+      }
+
       let currentDate = new Date();
       currentDate.setHours(12, 0, 0, 0);
+      
       let count = 0;
-      while (count < 8) {
-          if (currentDate.getDay() === targetDay) {
-          const dateStr = currentDate.toISOString().split('T')[0];
-          // Check collision in both local state and existing slots
-          if (!slots.some(s => s.date === dateStr && s.time === team.fixedTime && s.courtName === team.courtName)) {
+      let iterations = 0;
+      const maxIterations = 100; // Segurança contra loop infinito
+
+      while (count < 8 && iterations < maxIterations) {
+        iterations++;
+        if (currentDate.getDay() === targetDay) {
+          const y = currentDate.getFullYear();
+          const m = String(currentDate.getMonth() + 1).padStart(2, '0');
+          const d = String(currentDate.getDate()).padStart(2, '0');
+          const dateStr = `${y}-${m}-${d}`;
+          
+          // Verifica colisão na agenda atual
+          const hasConflict = slots.some(s => 
+            s.date === dateStr && 
+            s.time === team.fixedTime && 
+            s.courtName === team.courtName
+          );
+
+          if (!hasConflict) {
             slotsToCreate.push({
               fieldId: field.id, 
               date: dateStr, 
@@ -764,33 +786,37 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
               isBooked: true, 
               hasLocalTeam: true, 
               localTeamName: team.name, 
-              localTeamCategory: team.categories[0], 
+              localTeamCategory: team.categories?.[0] || 'Livre', 
               localTeamPhone: team.captainPhone, 
               localTeamLogoUrl: team.logoUrl, 
               localTeamGender: team.gender, 
-              allowedOpponentCategories: team.categories, 
+              allowedOpponentCategories: team.categories || [], 
               allowedOpponentGenders: [team.gender],
-              status: 'confirmed', // Mensalista games are usually confirmed by default
+              status: 'confirmed', 
               price: field.hourlyRate, 
               sport: team.sport, 
               courtName: team.courtName, 
               homeTeamType: 'MENSALISTA',
-              pixKey: field.pixConfig.key
+              pixKey: field.pixConfig?.key || ''
             });
             count++;
           }
         }
         currentDate.setDate(currentDate.getDate() + 1);
       }
+
       if (slotsToCreate.length > 0) {
         await onAddSlot(slotsToCreate);
-        alert("Agenda gerada com sucesso!");
+        alert(`${slotsToCreate.length} jogos gerados com sucesso!`);
+      } else {
+        alert("Nenhum horário novo pôde ser gerado. Verifique se os horários já existem na agenda.");
       }
     } catch (e: any) { 
-      console.error(e);
+      console.error("Erro ao gerar agenda mensalista:", e);
       alert(e.message || "Erro ao gerar."); 
+    } finally {
+      setIsLoading(false);
     }
-    finally { setIsLoading(false); }
   };
 
   const getWeekDays = (baseDate: Date) => {
