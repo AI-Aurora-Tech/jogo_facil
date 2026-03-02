@@ -72,6 +72,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
   const [autoGenPrice, setAutoGenPrice] = useState(field.hourlyRate);
   const [autoGenPixKey, setAutoGenPixKey] = useState(field.pixConfig?.key || '');
   const [autoGenSport, setAutoGenSport] = useState('Society');
+  const [autoGenCourt, setAutoGenCourt] = useState(field.courts[0] || 'Principal');
 
   // States Mensalista
   const [editingMensalista, setEditingMensalista] = useState<RegisteredTeam | null>(null);
@@ -177,7 +178,11 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
     }
 
     try {
-      await api.updateRegisteredTeam(teamId, { status: 'approved' });
+      await api.updateRegisteredTeam(teamId, { 
+        status: 'approved',
+        updatedAt: new Date().toISOString(),
+        processedBy: currentUser.id
+      });
       alert('Mensalista aprovado com sucesso!');
       loadMensalistas();
     } catch (error) {
@@ -280,12 +285,12 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
       team = registeredTeams.find(t => t.id === selectedRegisteredTeamId);
     }
 
-    if (team && team.categories) {
-      if (team.categories.length === 1) {
+    if (team) {
+      if (team.categories && team.categories.length > 0) {
         setLocalTeamCategory(team.categories[0]);
-      } else {
-        setLocalTeamCategory('');
       }
+      if (team.gender) setLocalTeamGender(team.gender);
+      if (team.sport) setSlotSport(team.sport);
     }
   }, [selectedRegisteredTeamId, currentUser.teams, registeredTeams]);
 
@@ -309,7 +314,12 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
     if (!rejectingTeamId) return;
     setIsLoading(true);
     try {
-      await api.updateRegisteredTeam(rejectingTeamId, { status: 'rejected', rejectionReason });
+      await api.updateRegisteredTeam(rejectingTeamId, { 
+        status: 'rejected', 
+        rejectionReason,
+        updatedAt: new Date().toISOString(),
+        processedBy: currentUser.id
+      });
       alert("Solicitação recusada.");
       setRejectingTeamId(null);
       setRejectionReason('');
@@ -676,7 +686,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
       while (currentTime < endDate) {
         const timeStr = currentTime.toTimeString().slice(0, 5);
         
-        if (!checkConflict(autoGenDate, timeStr, autoGenDuration, slotCourt)) {
+        if (!checkConflict(autoGenDate, timeStr, autoGenDuration, autoGenCourt)) {
           slotsToCreate.push({
             fieldId: field.id,
             date: autoGenDate,
@@ -687,7 +697,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
             hasLocalTeam: false,
             price: autoGenPrice,
             status: 'available',
-            courtName: slotCourt,
+            courtName: autoGenCourt,
             sport: autoGenSport,
             homeTeamType: 'OUTSIDE',
             allowedOpponentCategories: [],
@@ -732,7 +742,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
   };
 
   const handleGenerateRecurringSlots = async (team: RegisteredTeam) => {
-    if (!confirm(`Gerar próximos 10 jogos para ${team.name}?`)) return;
+    if (!confirm(`Gerar próximos 8 jogos para ${team.name}?`)) return;
     setIsLoading(true);
     try {
       const slotsToCreate: Omit<MatchSlot, 'id'>[] = [];
@@ -740,9 +750,10 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
       let currentDate = new Date();
       currentDate.setHours(12, 0, 0, 0);
       let count = 0;
-      while (count < 10) {
+      while (count < 8) {
           if (currentDate.getDay() === targetDay) {
           const dateStr = currentDate.toISOString().split('T')[0];
+          // Check collision in both local state and existing slots
           if (!slots.some(s => s.date === dateStr && s.time === team.fixedTime && s.courtName === team.courtName)) {
             slotsToCreate.push({
               fieldId: field.id, 
@@ -759,11 +770,12 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
               localTeamGender: team.gender, 
               allowedOpponentCategories: team.categories, 
               allowedOpponentGenders: [team.gender],
-              status: 'pending_payment', 
+              status: 'confirmed', // Mensalista games are usually confirmed by default
               price: field.hourlyRate, 
               sport: team.sport, 
               courtName: team.courtName, 
-              homeTeamType: 'MENSALISTA'
+              homeTeamType: 'MENSALISTA',
+              pixKey: field.pixConfig.key
             });
             count++;
           }
@@ -812,8 +824,8 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
     .filter(s => {
        if (s.fieldId !== field.id) return true;
 
-       // Show all slots from today onwards, or past slots if they are pending something
-       if (s.date < todayStr && (s.status === 'confirmed' || s.status === 'available')) return false; 
+       // Show all slots from today onwards, or past slots if they are confirmed
+       if (s.date < todayStr && s.status !== 'confirmed') return false; 
        
        if (filterRange === 'SPECIFIC') {
           if (filterSpecificDate && s.date !== filterSpecificDate) return false;
@@ -992,7 +1004,16 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                                <p className="text-[9px] font-bold text-gray-400 uppercase mt-1 truncate">
                                   {displayLocalNameSafe} vs {slot.opponentTeamName || '?'}
                                </p>
-                               <span className="text-[8px] font-black text-grass-600 uppercase mt-1 inline-block">{slot.sport} • {slot.courtName}</span>
+                               <div className="flex flex-wrap gap-1 mt-1">
+                                  <span className="text-[8px] font-black text-grass-600 uppercase bg-grass-50 px-1.5 py-0.5 rounded-md">{slot.sport}</span>
+                                  <span className="text-[8px] font-black text-indigo-600 uppercase bg-indigo-50 px-1.5 py-0.5 rounded-md">{slot.courtName}</span>
+                                  <span className="text-[8px] font-black text-blue-600 uppercase bg-blue-50 px-1.5 py-0.5 rounded-md">{slot.localTeamGender || slot.opponentTeamGender || 'MISTO'}</span>
+                                  {(slot.localTeamCategory || slot.opponentTeamCategory) && (
+                                    <span className="text-[8px] font-black text-orange-600 uppercase bg-orange-50 px-1.5 py-0.5 rounded-md">
+                                      {slot.localTeamCategory || slot.opponentTeamCategory}
+                                    </span>
+                                  )}
+                               </div>
                             </div>
                          </div>
                          <div className="text-right">
@@ -1377,15 +1398,9 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
         {activeTab === 'MENSALISTAS' && (
           <div className="space-y-4">
              <div className="flex justify-between items-center">
-                <h2 className="font-black text-pitch uppercase italic">Mensalistas</h2>
-                <div className="flex gap-2">
-                  <button onClick={() => { setEditingMensalista(null); setShowAddMensalistaModal(true); }} className="p-2 bg-pitch text-white rounded-lg active:scale-95 shadow-md flex items-center gap-2">
-                    <Plus className="w-4 h-4"/>
-                    <span className="text-[9px] font-black uppercase">Novo</span>
-                  </button>
-                </div>
+                <h2 className="font-black text-pitch uppercase italic">Mensalistas Ativos</h2>
               </div>
-             {registeredTeams.filter(t => t.status === 'approved').map(t => (
+             {registeredTeams.filter(t => t.status === 'approved' || t.status === 'active').map(t => (
                <div key={t.id} className="bg-white p-6 rounded-[3rem] border shadow-sm space-y-4">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-4">
@@ -1449,7 +1464,12 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                     </div>
                     <div className="bg-gray-50 p-4 rounded-2xl border">
                        <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Esporte</label>
-                       <select className="w-full bg-transparent font-black outline-none text-xs" value={slotSport} onChange={e => setSlotSport(e.target.value)}>
+                       <select 
+                         className={`w-full bg-transparent font-black outline-none text-xs ${isLocalTeamSlot ? 'opacity-50' : ''}`} 
+                         value={slotSport} 
+                         onChange={e => setSlotSport(e.target.value)}
+                         disabled={isLocalTeamSlot}
+                       >
                           {SPORTS.map(s => <option key={s} value={s}>{s}</option>)}
                        </select>
                     </div>
@@ -1610,6 +1630,12 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                 <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Esporte</label>
                 <select className="w-full bg-gray-50 p-3 rounded-xl border font-bold text-sm uppercase" value={autoGenSport} onChange={e => setAutoGenSport(e.target.value)}>
                    {SPORTS.map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Quadra</label>
+                <select className="w-full bg-gray-50 p-3 rounded-xl border font-bold text-sm uppercase" value={autoGenCourt} onChange={e => setAutoGenCourt(e.target.value)}>
+                   {field.courts.map(c => <option key={c} value={c}>{c}</option>)}
                 </select>
               </div>
               <div className="grid grid-cols-2 gap-4">

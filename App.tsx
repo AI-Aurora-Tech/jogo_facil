@@ -165,7 +165,7 @@ const App: React.FC = () => {
       // Fetch everything in parallel for maximum speed
       const [fetchedFields, fetchedSlots, fetchedCats] = await Promise.all([
         api.getFields().catch(() => [] as Field[]),
-        api.getSlots().catch(() => [] as MatchSlot[]),
+        api.getSlotsByFieldId(currentUser?.fieldId || '', true).catch(() => api.getSlots().catch(() => [] as MatchSlot[])),
         api.getCategories().catch(() => ["Livre"] as string[])
       ]);
       

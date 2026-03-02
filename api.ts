@@ -303,15 +303,18 @@ export const api = {
     })) as unknown as MatchSlot[];
   },
   
-  getSlotsByFieldId: async (fieldId: string): Promise<MatchSlot[]> => {
-    const today = new Date().toISOString().split('T')[0];
-    const { data, error } = await supabase
+  getSlotsByFieldId: async (fieldId: string, includeHistory: boolean = false): Promise<MatchSlot[]> => {
+    let query = supabase
       .from('match_slot')
       .select('*')
-      .eq('field_id', fieldId)
-      .gte('date', today)
-      .order('date')
-      .order('time');
+      .eq('field_id', fieldId);
+    
+    if (!includeHistory) {
+      const today = new Date().toISOString().split('T')[0];
+      query = query.gte('date', today);
+    }
+
+    const { data, error } = await query.order('date').order('time');
     if (error) throw error;
     return (data || []).map(s => ({
       id: s.id,
@@ -687,7 +690,10 @@ export const api = {
       gender: data.gender,
       sport: data.sport,
       courtName: data.court_name,
-      status: data.status
+      status: data.status,
+      rejectionReason: data.rejection_reason,
+      updatedAt: data.updated_at,
+      processedBy: data.processed_by
     };
   },
 
