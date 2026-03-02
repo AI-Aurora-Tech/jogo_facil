@@ -1677,7 +1677,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
             </div>
             <div className="flex gap-2 mt-6">
               <Button onClick={() => setShowAutoGenerateModal(false)} variant="outline" className="w-full">Cancelar</Button>
-              <Button onClick={handleGenerateAgenda} className="w-full">Gerar</Button>
+              <Button onClick={handleGenerateAgenda} isLoading={isLoading} className="w-full">Gerar</Button>
             </div>
           </div>
         </div>

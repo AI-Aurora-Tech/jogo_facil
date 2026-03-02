@@ -493,42 +493,11 @@ export const api = {
       receipt_uploaded_at: s.receiptUploadedAt || null,
       pix_key: s.pixKey || null
     }));
-    const { data, error } = await supabase.from('match_slot').insert(payload).select();
+    const { data, error } = await supabase.from('match_slot').insert(payload).select('id');
     if (error) throw error;
-    return data.map(s => ({
-      id: s.id,
-      fieldId: s.field_id,
-      date: s.date,
-      time: s.time,
-      durationMinutes: s.duration_minutes,
-      matchType: s.match_type,
-      isBooked: s.is_booked,
-      hasLocalTeam: s.has_local_team,
-      localTeamName: s.local_team_name,
-      localTeamCategory: s.local_team_category,
-      localTeamPhone: s.local_team_phone,
-      localTeamLogoUrl: s.local_team_logo_url,
-      localTeamGender: s.local_team_gender,
-      bookedByUserId: s.booked_by_user_id,
-      bookedByTeamName: s.booked_by_team_name,
-      bookedByTeamCategory: s.booked_by_category,
-      bookedByTeamLogoUrl: s.booked_by_team_logo_url,
-      bookedByUserPhone: s.booked_by_user_phone,
-      opponentTeamName: s.opponent_team_name,
-      opponentTeamCategory: s.opponent_team_category,
-      opponentTeamPhone: s.opponent_team_phone,
-      opponentTeamLogoUrl: s.opponent_team_logo_url,
-      opponentTeamGender: s.opponent_team_gender,
-      status: s.status,
-      price: s.price,
-      allowedOpponentCategories: s.allowed_opponent_categories || [],
-      receiptUrl: s.receipt_url,
-      receiptUploadedAt: s.receipt_uploaded_at,
-      aiVerificationResult: s.ai_verification_result,
-      courtName: s.court_name,
-      sport: s.sport,
-      homeTeamType: s.home_team_type || 'OUTSIDE',
-      pixKey: s.pix_key
+    return data.map((d, index) => ({
+      ...slots[index],
+      id: d.id
     })) as unknown as MatchSlot[];
   },
 

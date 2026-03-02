@@ -39,3 +39,8 @@ CREATE TRIGGER update_registered_team_updated_at
 
 -- Fix MatchSlot history visibility: ensure we have an index for faster history lookups
 CREATE INDEX IF NOT EXISTS idx_match_slot_date_field ON match_slot(field_id, date);
+CREATE INDEX IF NOT EXISTS idx_match_slot_field_id ON match_slot(field_id);
+CREATE INDEX IF NOT EXISTS idx_match_slot_date ON match_slot(date);
+CREATE INDEX IF NOT EXISTS idx_match_slot_field_date_time ON match_slot(field_id, date, time);
+CREATE INDEX IF NOT EXISTS idx_match_slot_field_date_court ON match_slot(field_id, date, court_name);
+CREATE INDEX IF NOT EXISTS idx_match_slot_status ON match_slot(status);
