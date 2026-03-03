@@ -49,7 +49,7 @@ const App: React.FC = () => {
       const diffTime = Math.abs(now.getTime() - createdAt.getTime());
       const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 
-      if (diffDays > 60 && !user.isSubscribed) {
+      if (diffDays > 6 && !user.isSubscribed) {
         setShowNeedsSubscription(true);
       }
     }
@@ -702,7 +702,7 @@ const App: React.FC = () => {
                 </div>
                 {currentUserContext.role === UserRole.TEAM_CAPTAIN && !currentUserContext.isSubscribed && (
                   <div className="mt-4 text-xs font-bold text-gray-500">
-                    Você ainda tem {60 - Math.ceil((new Date().getTime() - new Date(currentUserContext.createdAt).getTime()) / (1000 * 60 * 60 * 24))} dias do período grátis.
+                    Você ainda tem {6 - Math.ceil((new Date().getTime() - new Date(currentUserContext.createdAt).getTime()) / (1000 * 60 * 60 * 24))} dias do período grátis.
                   </div>
                 )}
                 

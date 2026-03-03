@@ -792,7 +792,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
               localTeamGender: team.gender, 
               allowedOpponentCategories: team.categories || [], 
               allowedOpponentGenders: [team.gender],
-              status: 'confirmed', 
+              status: 'waiting_opponent', 
               price: field.hourlyRate, 
               sport: team.sport, 
               courtName: team.courtName, 
@@ -1438,11 +1438,22 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                           <p className="text-[9px] font-black text-gray-400 uppercase mt-2 flex items-center gap-1">
                              {['Dom','Seg','Ter','Qua','Qui','Sex','Sab'][Number(t.fixedDay)]} às {t.fixedTime}
                           </p>
-                          <p className="text-[8px] font-bold text-grass-600 uppercase mt-1">{t.sport} • {t.courtName}</p>
+                          <p className="text-[8px] font-bold text-grass-600 uppercase mt-1">{t.sport} • {t.courtName} • {t.categories?.[0] || 'Livre'}</p>
                       </div>
                     </div>
                     <div className="flex gap-2">
-                      <button onClick={() => { setEditingMensalista(t); setMensalistaName(t.name); setMensalistaPhone(t.captainPhone || ''); setShowAddMensalistaModal(true); }} className="p-3 text-gray-300 hover:text-pitch"><Edit className="w-5 h-5"/></button>
+                      <button onClick={() => { 
+                        setEditingMensalista(t); 
+                        setMensalistaName(t.name); 
+                        setMensalistaPhone(t.captainPhone || ''); 
+                        setMensalistaCategory(t.categories?.[0] || '');
+                        setMensalistaDay(Number(t.fixedDay));
+                        setMensalistaTime(t.fixedTime);
+                        setMensalistaDuration(t.fixedDurationMinutes || 60);
+                        setMensalistaSport(t.sport);
+                        setMensalistaCourt(t.courtName);
+                        setShowAddMensalistaModal(true); 
+                      }} className="p-3 text-gray-300 hover:text-pitch"><Edit className="w-5 h-5"/></button>
                       <button onClick={() => { if(confirm("Remover mensalista?")) api.deleteRegisteredTeam(t.id).then(loadMensalistas); }} className="p-3 text-gray-300 hover:text-red-500"><Trash2 className="w-4 h-4"/></button>
                     </div>
                   </div>
