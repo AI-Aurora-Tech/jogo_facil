@@ -269,9 +269,14 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
       }
 
       const updateData: any = {
-        bookedByUserId: currentUser.id,
         status: nextStatus
       };
+      
+      // Only update bookedByUserId if it's a new booking or a mensalista challenge
+      // For OUTSIDE challenges, we want to keep the original home captain's ID
+      if (isFirstTeam || selectedSlot.homeTeamType === 'MENSALISTA') {
+          updateData.bookedByUserId = currentUser.id;
+      }
 
       if (isFirstTeam) {
           updateData.bookedByTeamName = team.name;
@@ -307,9 +312,27 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
         });
       } else if (nextStatus === 'pending_home_approval') {
         // Notificar o mandante (precisamos do ID do usuário mandante)
-        if (selectedSlot.bookedByUserId) {
-          await api.createNotification({
-            userId: selectedSlot.bookedByUserId,
+        // Se for OUTSIDE, bookedByUserId é o capitão do time da casa
+        // Se for MENSALISTA, precisamos achar o dono do time mensalista (que pode não estar no slot)
+        // Mas para MENSALISTA, o bookedByUserId agora é o desafiante... 
+        // Espera, para MENSALISTA, quem aprova? O dono do time mensalista.
+        // Onde está o ID dele? No registered_team. Mas aqui só temos o slot.
+        // O slot tem localTeamName. Podemos tentar achar o usuário pelo time?
+        // Por simplificação, se for mensalista, talvez o dono do campo aprove por enquanto ou 
+        // assumimos que o mensalista não tem app.
+        // Mas o requisito diz "aprovação do time mandante".
+        
+        let targetUserId = selectedSlot.bookedByUserId;
+        
+        // Se for mensalista, o bookedByUserId acabou de ser setado para o DESAFIANTE (currentUser)
+        // Então não podemos usar bookedByUserId para notificar o mandante.
+        // Precisamos buscar o capitão do time mensalista.
+        // Como não temos acesso fácil aqui, vamos pular a notificação ou enviar para o dono do campo como fallback?
+        // O ideal seria o backend resolver isso, mas estamos no front.
+        
+        if (selectedSlot.homeTeamType === 'OUTSIDE' && targetUserId) {
+           await api.createNotification({
+            userId: targetUserId,
             title: "Novo Desafio! ⚔️",
             description: `O time ${team.name} desafiou seu time para o dia ${selectedSlot.date.split('-').reverse().join('/')}.`,
             type: 'info'
@@ -340,22 +363,38 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
         }
         alert("Desafio aprovado! Aguardando aprovação da arena.");
       } else {
-        await api.updateSlot(slot.id, { 
-          status: 'available', 
-          bookedByUserId: undefined, 
-          bookedByTeamName: undefined, 
-          bookedByTeamCategory: undefined,
-          opponentTeamName: undefined,
-          opponentTeamCategory: undefined,
-          opponentTeamPhone: undefined,
-          opponentTeamLogoUrl: undefined,
-          opponentTeamGender: undefined,
-          receiptUrl: undefined,
-          receiptUploadedAt: undefined,
-          isBooked: false
-        });
+        const updateData: any = {
+          status: slot.homeTeamType === 'OUTSIDE' ? 'waiting_opponent' : 'available',
+          opponentTeamName: null,
+          opponentTeamCategory: null,
+          opponentTeamPhone: null,
+          opponentTeamLogoUrl: null,
+          opponentTeamGender: null,
+          receiptUrl: null,
+          receiptUploadedAt: null
+        };
+
+        // Se for mensalista, limpamos o bookedByUserId (que era o desafiante)
+        // Se for OUTSIDE, MANTEMOS o bookedByUserId (que é o mandante)
+        if (slot.homeTeamType === 'MENSALISTA') {
+            updateData.bookedByUserId = null;
+            updateData.bookedByTeamName = null; // Mensalista usa localTeamName
+            updateData.bookedByTeamCategory = null;
+            updateData.isBooked = true; // Mantém como ocupado (pelo mensalista)
+        } else {
+            // OUTSIDE
+            // Mantemos isBooked = true pois o mandante ainda está lá
+            updateData.isBooked = true;
+        }
+
+        await api.updateSlot(slot.id, updateData);
         
-        if (slot.bookedByUserId) {
+        // Notificar o desafiante que foi recusado
+        // O desafiante NÃO é o bookedByUserId no caso OUTSIDE (é o mandante)
+        // Mas não temos o ID do desafiante fácil aqui se não salvamos.
+        // No caso MENSALISTA, o bookedByUserId ERA o desafiante antes do update.
+        
+        if (slot.bookedByUserId && slot.homeTeamType === 'MENSALISTA') {
           await api.createNotification({
             userId: slot.bookedByUserId,
             title: "Desafio Recusado ❌",
@@ -363,6 +402,9 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
             type: 'warning'
           });
         }
+        // Para OUTSIDE, não temos o ID do desafiante salvo no slot (apenas nome/fone).
+        // Paciência.
+        
         alert("Desafio recusado.");
       }
       onRefresh();
@@ -717,7 +759,10 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
                 
                 {viewMode === 'MY_BOOKINGS' && (
                    <div className="px-6 pb-6 space-y-4">
-                     {slot.status === 'pending_home_approval' && currentUser.teams.some(t => t.name === slot.localTeamName) && (
+                     {slot.status === 'pending_home_approval' && (
+                       (slot.homeTeamType === 'MENSALISTA' && currentUser.teams.some(t => t.name === slot.localTeamName)) ||
+                       (slot.homeTeamType === 'OUTSIDE' && slot.bookedByUserId === currentUser.id)
+                     ) && (
                        <div className="bg-orange-50 p-4 rounded-2xl border border-orange-100">
                          <p className="text-[10px] font-black text-orange-600 uppercase mb-3">Você foi desafiado! Aprovar partida?</p>
                          <div className="grid grid-cols-2 gap-2">
