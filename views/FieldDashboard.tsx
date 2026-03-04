@@ -1129,7 +1129,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                            >
                              <Check className="w-4 h-4"/>
                              <span className="text-[10px] font-black uppercase">
-                               PAGAR R$ {slot.homeTeamType === 'OUTSIDE' ? (slot.price / 2).toFixed(2) : slot.price.toFixed(2)}
+                               PAGAR R$ {(slot.homeTeamType === 'OUTSIDE' || slot.homeTeamType === 'MENSALISTA') ? (slot.price / 2).toFixed(2) : slot.price.toFixed(2)}
                              </span>
                            </button>
                         )}
@@ -1415,9 +1415,9 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                      <p className="text-[8px] font-bold text-gray-400 mt-1 uppercase">{paymentField?.pixConfig?.name}</p>
                       <div className="mt-2 pt-2 border-t border-dashed">
                          <p className="text-[10px] font-black text-pitch uppercase">
-                            Valor a Pagar: <span className="text-grass-600">R$ {selectedPaymentSlot.homeTeamType === 'OUTSIDE' ? (selectedPaymentSlot.price / 2).toFixed(2) : selectedPaymentSlot.price.toFixed(2)}</span>
+                            Valor a Pagar: <span className="text-grass-600">R$ {(selectedPaymentSlot.homeTeamType === 'OUTSIDE' || selectedPaymentSlot.homeTeamType === 'MENSALISTA') ? (selectedPaymentSlot.price / 2).toFixed(2) : selectedPaymentSlot.price.toFixed(2)}</span>
                          </p>
-                         {selectedPaymentSlot.homeTeamType === 'OUTSIDE' && <p className="text-[7px] font-bold text-gray-400 uppercase italic">* Valor dividido entre os dois times (50% cada)</p>}
+                         {(selectedPaymentSlot.homeTeamType === 'OUTSIDE' || selectedPaymentSlot.homeTeamType === 'MENSALISTA') && <p className="text-[7px] font-bold text-gray-400 uppercase italic">* Valor dividido entre os dois times (50% cada)</p>}
                       </div>
                   </div>
                   <div className="flex gap-2">

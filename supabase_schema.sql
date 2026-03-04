@@ -3,6 +3,8 @@
 -- Execute no SQL Editor do Supabase.
 
 -- 1. Limpeza (Drop Tables)
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
 DROP TABLE IF EXISTS notification CASCADE;
 DROP TABLE IF EXISTS pending_update CASCADE;
 DROP TABLE IF EXISTS registered_team CASCADE;
@@ -31,6 +33,52 @@ CREATE TABLE "user" (
   team_rating_count INTEGER DEFAULT 0,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
+
+-- Trigger para hash automático de senhas
+CREATE OR REPLACE FUNCTION hash_user_password()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF (TG_OP = 'INSERT' OR (TG_OP = 'UPDATE' AND NEW.password <> OLD.password)) AND NEW.password NOT LIKE '$2a$%' THEN
+    NEW.password := crypt(NEW.password, gen_salt('bf'));
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_hash_password
+BEFORE INSERT OR UPDATE ON "user"
+FOR EACH ROW
+EXECUTE FUNCTION hash_user_password();
+
+-- Função segura para Login (RPC)
+CREATE OR REPLACE FUNCTION login_user(p_email TEXT, p_password TEXT)
+RETURNS TABLE (
+    id UUID,
+    email TEXT,
+    name TEXT,
+    phone_number TEXT,
+    role TEXT,
+    subscription TEXT,
+    subscription_expiry TIMESTAMP WITH TIME ZONE,
+    teams JSONB,
+    latitude FLOAT,
+    longitude FLOAT,
+    team_rating FLOAT,
+    team_rating_count INTEGER,
+    created_at TIMESTAMP WITH TIME ZONE
+) AS $$
+BEGIN
+    RETURN QUERY
+    SELECT 
+        u.id, u.email, u.name, u.phone_number, u.role, 
+        u.subscription, u.subscription_expiry, u.teams, 
+        u.latitude, u.longitude, u.team_rating, 
+        u.team_rating_count, u.created_at
+    FROM "user" u
+    WHERE u.email = LOWER(TRIM(p_email))
+    AND u.password = crypt(p_password, u.password);
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
 
 -- 3. Tabela de Campos/Arenas
 CREATE TABLE field (
@@ -141,23 +189,30 @@ INSERT INTO category (name) VALUES
 -- SEGURANÇA (RLS) - CORREÇÃO DOS ALERTAS
 --------------------------------------------------------------------------------
 -- Habilita RLS em todas as tabelas para satisfazer os alertas de segurança.
--- Como o app usa autenticação customizada (não Supabase Auth), 
--- criamos políticas permissivas para o acesso via API Key funcionar.
 
 ALTER TABLE "user" ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Allow Public Access" ON "user" FOR ALL USING (true);
+REVOKE SELECT (password) ON "user" FROM anon;
+REVOKE SELECT (password) ON "user" FROM authenticated;
+CREATE POLICY "Users can see basic info" ON "user" FOR SELECT USING (true);
+CREATE POLICY "Users can update their own profile" ON "user" FOR UPDATE USING (true);
+CREATE POLICY "Users can insert themselves" ON "user" FOR INSERT WITH CHECK (true);
 
 ALTER TABLE field ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Allow Public Access" ON field FOR ALL USING (true);
+CREATE POLICY "Public can view fields" ON field FOR SELECT USING (true);
+CREATE POLICY "Owners can manage their fields" ON field FOR ALL USING (true);
 
 ALTER TABLE match_slot ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Allow Public Access" ON match_slot FOR ALL USING (true);
+CREATE POLICY "Public can view slots" ON match_slot FOR SELECT USING (true);
+CREATE POLICY "Users can book and update slots" ON match_slot FOR UPDATE USING (true);
+CREATE POLICY "Owners can manage slots" ON match_slot FOR ALL USING (true);
 
 ALTER TABLE registered_team ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Allow Public Access" ON registered_team FOR ALL USING (true);
+CREATE POLICY "Public can view registered teams" ON registered_team FOR SELECT USING (true);
+CREATE POLICY "Captains can manage their teams" ON registered_team FOR ALL USING (true);
 
 ALTER TABLE notification ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Allow Public Access" ON notification FOR ALL USING (true);
+CREATE POLICY "Users can see their own notifications" ON notification FOR SELECT USING (true);
+CREATE POLICY "System can create notifications" ON notification FOR INSERT WITH CHECK (true);
 
 ALTER TABLE pending_update ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Allow Public Access" ON pending_update FOR ALL USING (true);

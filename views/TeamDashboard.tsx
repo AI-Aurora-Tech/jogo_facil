@@ -434,7 +434,8 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
       // Aqui vamos apenas salvar a URL base64 ou uma URL fake por enquanto
       // Mas o fluxo pede verificação por IA
       
-      const verification = await verifyPixReceipt(file, slot.price, field.pixConfig.name || field.name);
+      const expectedAmount = (slot.homeTeamType === 'OUTSIDE' || slot.homeTeamType === 'MENSALISTA') ? slot.price / 2 : slot.price;
+      const verification = await verifyPixReceipt(file, expectedAmount, field.pixConfig.name || field.name);
       
       if (!verification.isValid) {
         alert(`Comprovante inválido: ${verification.reason}`);
@@ -774,7 +775,7 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
                       <span className={`px-2 py-1 rounded-lg text-[8px] font-black uppercase mb-1 ${status.color}`}>
                          {status.label}
                       </span>
-                      <span className="text-xs font-black text-pitch">R$ {slot.homeTeamType === 'OUTSIDE' ? (slot.price / 2).toFixed(2) : slot.price}</span>
+                      <span className="text-xs font-black text-pitch">R$ {(slot.homeTeamType === 'OUTSIDE' || slot.homeTeamType === 'MENSALISTA') ? (slot.price / 2).toFixed(2) : slot.price}</span>
                    </div>
                    {viewMode === 'EXPLORE' && (slot.status === 'available' || slot.status === 'waiting_opponent') && field?.ownerId !== currentUser.id && !((slot.bookedByTeamName && myTeamsNames.includes(slot.bookedByTeamName.toLowerCase())) || (slot.localTeamName && myTeamsNames.includes(slot.localTeamName.toLowerCase()))) &&
                      <Button onClick={() => setSelectedSlot(slot)} className="rounded-2xl px-8 py-4 font-black uppercase text-[10px] bg-pitch shadow-lg">
@@ -815,9 +816,9 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
                             <p className="text-[8px] font-bold text-gray-400 mt-1 uppercase">{field?.pixConfig.name}</p>
                              <div className="mt-2 pt-2 border-t border-dashed">
                                 <p className="text-[10px] font-black text-pitch uppercase">
-                                   Valor a Pagar: <span className="text-grass-600">R$ {slot.homeTeamType === 'OUTSIDE' ? (slot.price / 2).toFixed(2) : slot.price.toFixed(2)}</span>
+                                   Valor a Pagar: <span className="text-grass-600">R$ {(slot.homeTeamType === 'OUTSIDE' || slot.homeTeamType === 'MENSALISTA') ? (slot.price / 2).toFixed(2) : slot.price.toFixed(2)}</span>
                                 </p>
-                                {slot.homeTeamType === 'OUTSIDE' && <p className="text-[7px] font-bold text-gray-400 uppercase italic">* Valor dividido entre os dois times (50% cada)</p>}
+                                {(slot.homeTeamType === 'OUTSIDE' || slot.homeTeamType === 'MENSALISTA') && <p className="text-[7px] font-bold text-gray-400 uppercase italic">* Valor dividido entre os dois times (50% cada)</p>}
                              </div>
                          </div>
                          <div className="flex gap-2">

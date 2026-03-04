@@ -18,7 +18,7 @@ const mapUserFromDb = (u: any): User => ({
   longitude: u.longitude,
   teamRating: u.team_rating,
   teamRatingCount: u.team_rating_count,
-  password: u.password,
+  password: u.password || undefined, // Password may be missing if using secure RPC
   createdAt: u.created_at,
   isSubscribed: u.isSubscribed,
   subscriptionId: u.subscriptionId
@@ -27,15 +27,20 @@ const mapUserFromDb = (u: any): User => ({
 export const api = {
   login: async (email: string, password: string): Promise<User> => {
     const normalizedEmail = email.toLowerCase().trim();
-    const { data: user, error } = await supabase
-      .from('user')
-      .select('*')
-      .eq('email', normalizedEmail)
-      .eq('password', password)
-      .single();
+    
+    // Usando a função RPC segura para evitar expor a senha no front-end
+    const { data: user, error } = await supabase.rpc('login_user', {
+      p_email: normalizedEmail,
+      p_password: password
+    });
 
-    if (error || !user) throw new Error('E-mail ou senha incorretos.');
-    return mapUserFromDb(user);
+    if (error || !user || (Array.isArray(user) && user.length === 0)) {
+       throw new Error('E-mail ou senha incorretos.');
+    }
+    
+    // O RPC retorna um array de resultados
+    const userData = Array.isArray(user) ? user[0] : user;
+    return mapUserFromDb(userData);
   },
 
   register: async (userData: any): Promise<User> => {
@@ -63,7 +68,8 @@ export const api = {
         teams: userFields.teams || [],
         created_at: new Date().toISOString()
       }])
-      .select().single();
+      .select('id, email, name, phone_number, role, subscription, subscription_expiry, teams, latitude, longitude, team_rating, team_rating_count, created_at')
+      .single();
 
     if (userError) throw userError;
 
@@ -107,7 +113,12 @@ export const api = {
         payload.password = user.password;
     }
 
-    const { data, error } = await supabase.from('user').update(payload).eq('id', user.id).select().single();
+    const { data, error } = await supabase
+      .from('user')
+      .update(payload)
+      .eq('id', user.id)
+      .select('id, email, name, phone_number, role, subscription, subscription_expiry, teams, latitude, longitude, team_rating, team_rating_count, created_at')
+      .single();
     if (error) throw error;
     return mapUserFromDb(data);
   },
@@ -157,7 +168,10 @@ export const api = {
   },
 
   getAllUsers: async (): Promise<User[]> => {
-    const { data, error } = await supabase.from('user').select('*').order('name');
+    const { data, error } = await supabase
+      .from('user')
+      .select('id, email, name, phone_number, role, subscription, subscription_expiry, teams, latitude, longitude, team_rating, team_rating_count, created_at')
+      .order('name');
     if (error) throw error;
     return (data || []).map(mapUserFromDb);
   },
