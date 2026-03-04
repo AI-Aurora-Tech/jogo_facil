@@ -400,30 +400,62 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
         }
         alert(newStatus === 'confirmed' ? "Pagamento confirmado!" : newStatus === 'waiting_opponent' ? "Reserva aprovada! Aguardando adversário." : "Desafio aceito! Aguardando pagamento.");
       } else {
-        await api.updateSlot(slot.id, { 
-          status: 'available', 
-          bookedByUserId: undefined, 
-          bookedByTeamName: undefined, 
-          bookedByTeamCategory: undefined,
-          opponentTeamName: undefined,
-          opponentTeamCategory: undefined,
-          opponentTeamPhone: undefined,
-          opponentTeamLogoUrl: undefined,
-          opponentTeamGender: undefined,
-          receiptUrl: undefined,
-          receiptUploadedAt: undefined,
-          isBooked: false
-        });
-        
-        if (slot.bookedByUserId) {
-          await api.createNotification({
-            userId: slot.bookedByUserId,
-            title: "Desafio Recusado ❌",
-            description: `A arena ${field.name} não pôde aceitar seu desafio para o dia ${slot.date}.`,
-            type: 'warning'
-          });
+        // REJECT ACTION
+        if (slot.status === 'pending_field_approval' && slot.opponentTeamName) {
+           // Rejecting the MATCH (Team 2), but keeping Team 1 (Home)
+           await api.updateSlot(slot.id, { 
+             status: 'waiting_opponent',
+             opponentTeamName: null,
+             opponentTeamCategory: null,
+             opponentTeamPhone: null,
+             opponentTeamLogoUrl: null,
+             opponentTeamGender: null,
+             receiptUrl: null,
+             receiptUploadedAt: null
+           });
+           
+           // Notify the challenger (if we have their ID, which might be lost if we didn't store it separately from bookedByUserId for OUTSIDE)
+           // For OUTSIDE, bookedByUserId is the HOME team. We don't have Challenger ID easily.
+           // For MENSALISTA, bookedByUserId IS the Challenger (if we followed the logic).
+           
+           if (slot.bookedByUserId && slot.homeTeamType === 'MENSALISTA') {
+              await api.createNotification({
+                userId: slot.bookedByUserId,
+                title: "Desafio Recusado ❌",
+                description: `A arena ${field.name} não aceitou o confronto.`,
+                type: 'warning'
+              });
+           }
+           
+           alert("Confronto recusado. O horário continua aguardando adversário.");
+        } else {
+           // Rejecting the entire booking (Team 1)
+           await api.updateSlot(slot.id, { 
+             status: 'available', 
+             bookedByUserId: null, 
+             bookedByTeamName: null, 
+             bookedByTeamCategory: null,
+             opponentTeamName: null,
+             opponentTeamCategory: null,
+             opponentTeamPhone: null,
+             opponentTeamLogoUrl: null,
+             opponentTeamGender: null,
+             receiptUrl: null,
+             receiptUploadedAt: null,
+             isBooked: false,
+             homeTeamType: 'OUTSIDE' // Reset to default
+           });
+           
+           if (slot.bookedByUserId) {
+             await api.createNotification({
+               userId: slot.bookedByUserId,
+               title: "Solicitação Recusada ❌",
+               description: `A arena ${field.name} não pôde aceitar sua reserva para o dia ${slot.date.split('-').reverse().join('/')}.`,
+               type: 'warning'
+             });
+           }
+           alert("Solicitação recusada e horário liberado.");
         }
-        alert("Solicitação recusada.");
       }
       onRefreshData();
     } catch (e) { 

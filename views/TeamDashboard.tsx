@@ -374,7 +374,7 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
         alert("Desafio aprovado! Aguardando aprovação da arena.");
       } else {
         const updateData: any = {
-          status: slot.homeTeamType === 'OUTSIDE' ? 'waiting_opponent' : 'available',
+          status: 'waiting_opponent', // Always waiting_opponent because Home Team (Mensalista or Outside) is still there
           opponentTeamName: null,
           opponentTeamCategory: null,
           opponentTeamPhone: null,
@@ -487,6 +487,21 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
     }
     if (!selectedCategory) {
       alert("Selecione uma categoria para o seu time mensalista.");
+      return;
+    }
+    
+    // Check for duplicate requests (Same Field, Day, Time, Category)
+    const isDuplicate = myRequests.some(req => 
+      req.fieldId === mensalistaRequestField.id &&
+      req.name === team.name && 
+      req.fixedDay === String(mensalistaDay) &&
+      req.fixedTime === mensalistaTime &&
+      req.categories.includes(selectedCategory) &&
+      (req.status === 'pending' || req.status === 'approved')
+    );
+
+    if (isDuplicate) {
+      alert("Este time já possui uma solicitação ou aprovação de mensalista para este mesmo dia, horário e categoria nesta arena.");
       return;
     }
     
