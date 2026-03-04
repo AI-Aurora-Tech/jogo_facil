@@ -43,7 +43,7 @@ const App: React.FC = () => {
 
   // Efeito "Gatekeeper": Se logado mas sem plano, forçar tela de assinatura
   useEffect(() => {
-    if (user && !impersonatingUser && (user.role === UserRole.TEAM_CAPTAIN || user.role === UserRole.FIELD_OWNER)) {
+    if (user && !impersonatingUser && user.role === UserRole.TEAM_CAPTAIN) {
       const createdAt = new Date(user.createdAt);
       const now = new Date();
       const diffTime = Math.abs(now.getTime() - createdAt.getTime());
@@ -695,7 +695,7 @@ const App: React.FC = () => {
                       </span>
                    )}
                 </div>
-                {(currentUserContext.role === UserRole.TEAM_CAPTAIN || currentUserContext.role === UserRole.FIELD_OWNER) && !currentUserContext.isSubscribed && (
+                {currentUserContext.role === UserRole.TEAM_CAPTAIN && !currentUserContext.isSubscribed && (
                   <div className="mt-4 text-xs font-bold text-gray-500">
                     Você ainda tem {7 - Math.ceil((new Date().getTime() - new Date(currentUserContext.createdAt).getTime()) / (1000 * 60 * 60 * 24))} dias do período grátis.
                   </div>

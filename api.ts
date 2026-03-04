@@ -20,7 +20,7 @@ const mapUserFromDb = (u: any): User => ({
   teamRatingCount: u.team_rating_count,
   password: u.password || undefined, // Password may be missing if using secure RPC
   createdAt: u.created_at,
-  isSubscribed: u.is_subscribed || u.subscription === SubscriptionPlan.PRO_TEAM || u.subscription === SubscriptionPlan.PRO_FIELD,
+  isSubscribed: u.role === UserRole.FIELD_OWNER || u.is_subscribed || u.subscription === SubscriptionPlan.PRO_TEAM || u.subscription === SubscriptionPlan.PRO_FIELD,
   subscriptionId: u.subscription_id
 });
 
