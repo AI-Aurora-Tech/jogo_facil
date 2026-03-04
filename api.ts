@@ -20,8 +20,8 @@ const mapUserFromDb = (u: any): User => ({
   teamRatingCount: u.team_rating_count,
   password: u.password || undefined, // Password may be missing if using secure RPC
   createdAt: u.created_at,
-  isSubscribed: u.isSubscribed,
-  subscriptionId: u.subscriptionId
+  isSubscribed: u.is_subscribed || u.subscription === SubscriptionPlan.PRO_TEAM || u.subscription === SubscriptionPlan.PRO_FIELD,
+  subscriptionId: u.subscription_id
 });
 
 export const api = {
@@ -68,7 +68,7 @@ export const api = {
         teams: userFields.teams || [],
         created_at: new Date().toISOString()
       }])
-      .select('id, email, name, phone_number, role, subscription, subscription_expiry, teams, latitude, longitude, team_rating, team_rating_count, created_at')
+      .select('id, email, name, phone_number, role, subscription, subscription_expiry, teams, latitude, longitude, team_rating, team_rating_count, is_subscribed, subscription_id, created_at')
       .single();
 
     if (userError) throw userError;
@@ -117,7 +117,7 @@ export const api = {
       .from('user')
       .update(payload)
       .eq('id', user.id)
-      .select('id, email, name, phone_number, role, subscription, subscription_expiry, teams, latitude, longitude, team_rating, team_rating_count, created_at')
+      .select('id, email, name, phone_number, role, subscription, subscription_expiry, teams, latitude, longitude, team_rating, team_rating_count, is_subscribed, subscription_id, created_at')
       .single();
     if (error) throw error;
     return mapUserFromDb(data);
@@ -127,8 +127,8 @@ export const api = {
     const { data, error } = await supabase
       .from('user')
       .update({ 
-        isSubscribed: true,
-        subscriptionId: subscriptionId,
+        is_subscribed: true,
+        subscription_id: subscriptionId,
         subscription: SubscriptionPlan.PRO_TEAM // ou determinar dinamicamente se necessário
       })
       .eq('id', userId)
@@ -170,7 +170,7 @@ export const api = {
   getAllUsers: async (): Promise<User[]> => {
     const { data, error } = await supabase
       .from('user')
-      .select('id, email, name, phone_number, role, subscription, subscription_expiry, teams, latitude, longitude, team_rating, team_rating_count, created_at')
+      .select('id, email, name, phone_number, role, subscription, subscription_expiry, teams, latitude, longitude, team_rating, team_rating_count, is_subscribed, subscription_id, created_at')
       .order('name');
     if (error) throw error;
     return (data || []).map(mapUserFromDb);

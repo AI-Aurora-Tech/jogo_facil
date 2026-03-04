@@ -405,13 +405,13 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
            // Rejecting the MATCH (Team 2), but keeping Team 1 (Home)
            await api.updateSlot(slot.id, { 
              status: 'waiting_opponent',
-             opponentTeamName: null,
-             opponentTeamCategory: null,
-             opponentTeamPhone: null,
-             opponentTeamLogoUrl: null,
-             opponentTeamGender: null,
-             receiptUrl: null,
-             receiptUploadedAt: null
+             opponentTeamName: undefined,
+             opponentTeamCategory: undefined,
+             opponentTeamPhone: undefined,
+             opponentTeamLogoUrl: undefined,
+             opponentTeamGender: undefined,
+             receiptUrl: undefined,
+             receiptUploadedAt: undefined
            });
            
            // Notify the challenger (if we have their ID, which might be lost if we didn't store it separately from bookedByUserId for OUTSIDE)
@@ -432,16 +432,16 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
            // Rejecting the entire booking (Team 1)
            await api.updateSlot(slot.id, { 
              status: 'available', 
-             bookedByUserId: null, 
-             bookedByTeamName: null, 
-             bookedByTeamCategory: null,
-             opponentTeamName: null,
-             opponentTeamCategory: null,
-             opponentTeamPhone: null,
-             opponentTeamLogoUrl: null,
-             opponentTeamGender: null,
-             receiptUrl: null,
-             receiptUploadedAt: null,
+             bookedByUserId: undefined, 
+             bookedByTeamName: undefined, 
+             bookedByTeamCategory: undefined,
+             opponentTeamName: undefined,
+             opponentTeamCategory: undefined,
+             opponentTeamPhone: undefined,
+             opponentTeamLogoUrl: undefined,
+             opponentTeamGender: undefined,
+             receiptUrl: undefined,
+             receiptUploadedAt: undefined,
              isBooked: false,
              homeTeamType: 'OUTSIDE' // Reset to default
            });

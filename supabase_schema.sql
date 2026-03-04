@@ -31,6 +31,8 @@ CREATE TABLE "user" (
   longitude FLOAT,
   team_rating FLOAT DEFAULT 5,
   team_rating_count INTEGER DEFAULT 0,
+  is_subscribed BOOLEAN DEFAULT FALSE,
+  subscription_id TEXT,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
@@ -51,6 +53,7 @@ FOR EACH ROW
 EXECUTE FUNCTION hash_user_password();
 
 -- Função segura para Login (RPC)
+DROP FUNCTION IF EXISTS login_user(TEXT, TEXT);
 CREATE OR REPLACE FUNCTION login_user(p_email TEXT, p_password TEXT)
 RETURNS TABLE (
     id UUID,
@@ -65,6 +68,8 @@ RETURNS TABLE (
     longitude FLOAT,
     team_rating FLOAT,
     team_rating_count INTEGER,
+    is_subscribed BOOLEAN,
+    subscription_id TEXT,
     created_at TIMESTAMP WITH TIME ZONE
 ) AS $$
 BEGIN
@@ -73,7 +78,7 @@ BEGIN
         u.id, u.email, u.name, u.phone_number, u.role, 
         u.subscription, u.subscription_expiry, u.teams, 
         u.latitude, u.longitude, u.team_rating, 
-        u.team_rating_count, u.created_at
+        u.team_rating_count, u.is_subscribed, u.subscription_id, u.created_at
     FROM "user" u
     WHERE u.email = LOWER(TRIM(p_email))
     AND u.password = crypt(p_password, u.password);

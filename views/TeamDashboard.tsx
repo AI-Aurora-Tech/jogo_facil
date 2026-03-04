@@ -375,21 +375,21 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
       } else {
         const updateData: any = {
           status: 'waiting_opponent', // Always waiting_opponent because Home Team (Mensalista or Outside) is still there
-          opponentTeamName: null,
-          opponentTeamCategory: null,
-          opponentTeamPhone: null,
-          opponentTeamLogoUrl: null,
-          opponentTeamGender: null,
-          receiptUrl: null,
-          receiptUploadedAt: null
+          opponentTeamName: undefined,
+          opponentTeamCategory: undefined,
+          opponentTeamPhone: undefined,
+          opponentTeamLogoUrl: undefined,
+          opponentTeamGender: undefined,
+          receiptUrl: undefined,
+          receiptUploadedAt: undefined
         };
 
         // Se for mensalista, limpamos o bookedByUserId (que era o desafiante)
         // Se for OUTSIDE, MANTEMOS o bookedByUserId (que é o mandante)
         if (slot.homeTeamType === 'MENSALISTA') {
-            updateData.bookedByUserId = null;
-            updateData.bookedByTeamName = null; // Mensalista usa localTeamName
-            updateData.bookedByTeamCategory = null;
+            updateData.bookedByUserId = undefined;
+            updateData.bookedByTeamName = undefined; // Mensalista usa localTeamName
+            updateData.bookedByTeamCategory = undefined;
             updateData.isBooked = true; // Mantém como ocupado (pelo mensalista)
         } else {
             // OUTSIDE

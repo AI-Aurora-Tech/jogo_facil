@@ -3,9 +3,10 @@ import { ShieldCheck, Calendar, Search, BarChart2, LogOut } from 'lucide-react';
 
 interface SubscriptionProps {
   onBack?: () => void;
+  onLogout?: () => void;
 }
 
-export const Subscription: React.FC<SubscriptionProps> = ({ onBack }) => {
+export const Subscription: React.FC<SubscriptionProps> = ({ onBack, onLogout }) => {
 
   const handleSubscription = () => {
     window.location.href = 'https://www.mercadopago.com.br/subscriptions/checkout?preapproval_plan_id=5efc581a3ff84478bf1a349617285115';
@@ -20,7 +21,7 @@ export const Subscription: React.FC<SubscriptionProps> = ({ onBack }) => {
 
       <div className="w-full max-w-sm bg-pitch rounded-3xl shadow-2xl overflow-hidden transform -rotate-1">
         <div className="bg-gradient-to-r from-yellow-400 to-orange-500 text-center p-3">
-          <p className="text-white text-xs font-bold uppercase tracking-wider">✨ Período de Teste: 60 Dias Grátis</p>
+          <p className="text-white text-xs font-bold uppercase tracking-wider">✨ Período de Teste: 7 Dias Grátis</p>
         </div>
         
         <div className="p-8 text-white">
@@ -34,7 +35,7 @@ export const Subscription: React.FC<SubscriptionProps> = ({ onBack }) => {
           </div>
 
           <div className="text-center mb-8">
-            <span className="bg-white/10 text-white text-[10px] font-bold uppercase px-4 py-2 rounded-full">Primeira cobrança após 60 dias</span>
+            <span className="bg-white/10 text-white text-[10px] font-bold uppercase px-4 py-2 rounded-full">Primeira cobrança após 7 dias</span>
           </div>
 
           <ul className="space-y-4 mb-10">
@@ -67,7 +68,7 @@ export const Subscription: React.FC<SubscriptionProps> = ({ onBack }) => {
         </div>
       </div>
 
-      <button className="text-gray-400 font-bold text-sm mt-8 flex items-center gap-2">
+      <button onClick={onLogout} className="text-gray-400 font-bold text-sm mt-8 flex items-center gap-2">
         <LogOut className="w-4 h-4" />
         Sair da conta
       </button>
