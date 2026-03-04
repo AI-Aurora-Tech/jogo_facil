@@ -553,7 +553,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
         localTeamLogoUrl: teamLogo,
         homeTeamType: homeTeamType,
         price: slotPrice,
-        status: isLocalTeamSlot ? 'confirmed' : 'available',
+        status: isLocalTeamSlot ? 'waiting_opponent' : 'available',
         courtName: slotCourt,
         sport: slotSport,
         allowedOpponentCategories: isLocalTeamSlot ? allowedCats : [],

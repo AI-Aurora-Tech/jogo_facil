@@ -56,7 +56,7 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState<SortOption>('DISTANCE_ASC');
   
-  const [myGamesSubTab, setMyGamesSubTab] = useState<'FUTUROS' | 'HISTORICO'>('FUTUROS');
+  const [myGamesSubTab, setMyGamesSubTab] = useState<'FUTUROS' | 'HISTORICO' | 'SOLICITACOES'>('FUTUROS');
   const [myRequests, setMyRequests] = useState<RegisteredTeam[]>([]);
 
   // Ao montar ou mudar fields, tenta calcular distâncias se já tiver userCoords
@@ -208,6 +208,16 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
         if (!isMyBooking) return false;
         if (myGamesSubTab === 'FUTUROS' && slot.date < todayStr) return false;
         if (myGamesSubTab === 'HISTORICO' && slot.date >= todayStr) return false;
+        if (myGamesSubTab === 'SOLICITACOES') {
+           // Only show slots that need home approval
+           if (slot.status !== 'pending_home_approval') return false;
+           
+           // Check if I am the one who needs to approve
+           const isMyApprovalNeeded = (slot.homeTeamType === 'MENSALISTA' && currentUser.teams.some(t => t.name === slot.localTeamName)) ||
+                                      (slot.homeTeamType === 'OUTSIDE' && slot.bookedByUserId === currentUser.id);
+           
+           if (!isMyApprovalNeeded) return false;
+        }
       }
       return true;
     });
@@ -621,6 +631,7 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
         <div className="bg-white border-b p-4 sticky top-0 z-30 shadow-sm">
            <div className="flex p-1 bg-gray-100 rounded-2xl">
               <button onClick={() => setMyGamesSubTab('FUTUROS')} className={`flex-1 py-3 text-[10px] font-black uppercase rounded-xl transition-all ${myGamesSubTab === 'FUTUROS' ? 'bg-white text-pitch shadow-sm' : 'text-gray-400'}`}>Próximos</button>
+              <button onClick={() => setMyGamesSubTab('SOLICITACOES')} className={`flex-1 py-3 text-[10px] font-black uppercase rounded-xl transition-all ${myGamesSubTab === 'SOLICITACOES' ? 'bg-white text-pitch shadow-sm' : 'text-gray-400'}`}>Solicitações</button>
               <button onClick={() => setMyGamesSubTab('HISTORICO')} className={`flex-1 py-3 text-[10px] font-black uppercase rounded-xl transition-all ${myGamesSubTab === 'HISTORICO' ? 'bg-white text-pitch shadow-sm' : 'text-gray-400'}`}>Histórico</button>
            </div>
         </div>
