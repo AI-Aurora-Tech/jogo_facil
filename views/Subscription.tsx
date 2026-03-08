@@ -21,7 +21,7 @@ export const Subscription: React.FC<SubscriptionProps> = ({ onBack, onLogout }) 
 
       <div className="w-full max-w-sm bg-pitch rounded-3xl shadow-2xl overflow-hidden transform -rotate-1">
         <div className="bg-gradient-to-r from-yellow-400 to-orange-500 text-center p-3">
-          <p className="text-white text-xs font-bold uppercase tracking-wider">✨ Período de Teste: 7 Dias Grátis</p>
+          <p className="text-white text-xs font-bold uppercase tracking-wider">✨ Acesso Completo ao Sistema</p>
         </div>
         
         <div className="p-8 text-white">
@@ -35,7 +35,7 @@ export const Subscription: React.FC<SubscriptionProps> = ({ onBack, onLogout }) 
           </div>
 
           <div className="text-center mb-8">
-            <span className="bg-white/10 text-white text-[10px] font-bold uppercase px-4 py-2 rounded-full">Primeira cobrança após 7 dias</span>
+            <span className="bg-white/10 text-white text-[10px] font-bold uppercase px-4 py-2 rounded-full">Cobrança mensal recorrente</span>
           </div>
 
           <ul className="space-y-4 mb-10">
@@ -61,7 +61,7 @@ export const Subscription: React.FC<SubscriptionProps> = ({ onBack, onLogout }) 
             onClick={handleSubscription}
             className="w-full bg-grass-500 hover:bg-grass-600 text-white font-bold uppercase py-4 rounded-xl transition-all shadow-lg active:scale-95"
           >
-            Começar Teste Grátis
+            Assinar Agora
           </button>
 
           <p className="text-center text-gray-400 text-xs mt-4">Sem fidelidade • Cancele quando quiser</p>
