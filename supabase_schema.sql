@@ -184,6 +184,14 @@ CREATE TABLE category (
   name TEXT UNIQUE NOT NULL
 );
 
+-- 9. Tabela de Vídeos Tutoriais
+CREATE TABLE tutorial_video (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  title TEXT NOT NULL,
+  video_url TEXT NOT NULL,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
 -- Dados Iniciais
 INSERT INTO category (name) VALUES 
 ('Sub-8'), ('Sub-9'), ('Sub-10'), ('Sub-11'), ('Sub-12'), ('Sub-13'), 
@@ -224,6 +232,19 @@ CREATE POLICY "Allow Public Access" ON pending_update FOR ALL USING (true);
 
 ALTER TABLE category ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Allow Public Access" ON category FOR ALL USING (true);
+
+ALTER TABLE tutorial_video ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Allow Public Access" ON tutorial_video FOR ALL USING (true);
+
+-- Criar bucket de storage para os vídeos (se não existir)
+INSERT INTO storage.buckets (id, name, public) 
+VALUES ('videos', 'videos', true)
+ON CONFLICT (id) DO NOTHING;
+
+CREATE POLICY "Public Access" ON storage.objects FOR SELECT USING (bucket_id = 'videos');
+CREATE POLICY "Public Insert" ON storage.objects FOR INSERT WITH CHECK (bucket_id = 'videos');
+CREATE POLICY "Public Update" ON storage.objects FOR UPDATE USING (bucket_id = 'videos');
+CREATE POLICY "Public Delete" ON storage.objects FOR DELETE USING (bucket_id = 'videos');
 
 
 --------------------------------------------------------------------------------

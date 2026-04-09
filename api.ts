@@ -1,5 +1,5 @@
 import { supabase } from './supabaseClient';
-import { User, Field, MatchSlot, RegisteredTeam, PendingUpdate, UserRole, Notification, SubscriptionPlan } from './types';
+import { User, Field, MatchSlot, RegisteredTeam, PendingUpdate, UserRole, Notification, SubscriptionPlan, TutorialVideo } from './types';
 
 function normalizeSport(sport: string): string {
   return sport.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase();
@@ -708,6 +708,47 @@ export const api = {
 
   adminUpdatePassword: async (userId: string, newPassword: string): Promise<void> => {
     const { error } = await supabase.from('user').update({ password: newPassword }).eq('id', userId);
+    if (error) throw error;
+  },
+
+  getTutorialVideos: async (): Promise<TutorialVideo[]> => {
+    const { data, error } = await supabase.from('tutorial_video').select('*').order('created_at', { ascending: false });
+    if (error) return [];
+    return data.map(v => ({
+      id: v.id,
+      title: v.title,
+      videoUrl: v.video_url,
+      createdAt: v.created_at
+    }));
+  },
+
+  createTutorialVideo: async (title: string, videoUrl: string): Promise<void> => {
+    const { error } = await supabase.from('tutorial_video').insert([{
+      title,
+      video_url: videoUrl
+    }]);
+    if (error) throw error;
+  },
+
+  uploadTutorialVideo: async (file: File): Promise<string> => {
+    const fileExt = file.name.split('.').pop();
+    const fileName = `${Math.random()}.${fileExt}`;
+    const filePath = `${fileName}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from('videos')
+      .upload(filePath, file);
+
+    if (uploadError) {
+      throw uploadError;
+    }
+
+    const { data } = supabase.storage.from('videos').getPublicUrl(filePath);
+    return data.publicUrl;
+  },
+
+  deleteTutorialVideo: async (id: string): Promise<void> => {
+    const { error } = await supabase.from('tutorial_video').delete().eq('id', id);
     if (error) throw error;
   }
 };

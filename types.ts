@@ -55,6 +55,13 @@ export interface Notification {
   read: boolean;
 }
 
+export interface TutorialVideo {
+  id: string;
+  title: string;
+  videoUrl: string;
+  createdAt: string;
+}
+
 export interface Field {
   id: string;
   ownerId: string;

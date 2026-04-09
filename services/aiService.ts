@@ -42,11 +42,12 @@ export const verifyPixReceipt = async (
     Destinatário esperado: "${expectedReceiverName}". 
     Data atual do sistema: ${new Date().toLocaleDateString('pt-BR')}.
     
-    Verifique se:
-    1. O valor coincide (permita pequenas variações de centavos se for o caso).
-    2. O destinatário coincide com o nome da arena ou do dono.
-    3. A data do comprovante é recente (hoje ou nos últimos 2 dias).
+    Verifique RIGOROSAMENTE se:
+    1. O valor do pagamento é EXATAMENTE o mesmo que o valor esperado (R$ ${expectedAmount}).
+    2. Os dados do recebedor/destinatário são EXATAMENTE iguais ao destinatário esperado ("${expectedReceiverName}").
+    3. A data do pagamento é relativamente próxima à data atual do sistema (hoje ou no máximo ontem).
     
+    Se qualquer uma dessas 3 condições não for atendida, o comprovante DEVE ser considerado inválido (isValid: false).
     Responda estritamente em JSON conforme o schema fornecido.`;
 
     // Use gemini-3-flash-preview for structured JSON extraction tasks.

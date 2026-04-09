@@ -6,8 +6,9 @@ import { FieldDashboard } from './views/FieldDashboard';
 import { TeamDashboard } from './views/TeamDashboard';
 import { Subscription } from './views/Subscription';
 import { EditProfileModal } from './components/EditProfileModal';
+import { HelpModal } from './views/HelpModal';
 import { api } from './api';
-import { RefreshCw, Settings, Building2, Shield, Search, Loader2, Bell, X, Info, History, KeyRound, Eye, LogOut, Smartphone, Download, Share, Trophy, Crown, Users, UserPlus } from 'lucide-react';
+import { RefreshCw, Settings, Building2, Shield, Search, Loader2, Bell, X, Info, History, KeyRound, Eye, LogOut, Smartphone, Download, Share, Trophy, Crown, Users, UserPlus, HelpCircle } from 'lucide-react';
 import { supabase } from './supabaseClient';
 
 const App: React.FC = () => {
@@ -15,6 +16,7 @@ const App: React.FC = () => {
   const [view, setView] = useState<'LANDING' | 'AUTH' | 'APP'>('LANDING');
   const [activeTab, setActiveTab] = useState<'EXPLORE' | 'MY_GAMES' | 'ADMIN' | 'PROFILE' | 'SUPER'>('EXPLORE');
   const [showProfileModal, setShowProfileModal] = useState(false);
+  const [showHelpModal, setShowHelpModal] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const [fieldDashForceTab, setFieldDashForceTab] = useState<'AGENDA' | 'SOLICITACOES' | 'MENSALISTAS' | 'HISTORICO' | undefined>(undefined);
   const [showNeedsSubscription, setShowNeedsSubscription] = useState(false);
@@ -721,6 +723,9 @@ const App: React.FC = () => {
                   }} className="w-full py-5 bg-indigo-500 text-white rounded-3xl font-black flex items-center justify-center gap-3 uppercase text-xs shadow-xl active:scale-95 transition-transform">
                       <UserPlus className="w-5 h-5" /> Convidar Amigos
                   </button>
+                  <button onClick={() => setShowHelpModal(true)} className="w-full py-5 bg-blue-50 text-blue-600 rounded-3xl font-black flex items-center justify-center gap-3 uppercase text-xs shadow-xl active:scale-95 transition-transform">
+                      <HelpCircle className="w-5 h-5" /> Ajuda e Tutoriais
+                  </button>
                   <button onClick={() => setShowProfileModal(true)} className="w-full py-5 bg-[#022c22] text-white rounded-3xl font-black flex items-center justify-center gap-3 uppercase text-xs shadow-xl active:scale-95 transition-transform">
                       <Settings className="w-5 h-5 text-[#10b981]" /> Configurações
                   </button>
@@ -770,6 +775,13 @@ const App: React.FC = () => {
           field={fields.find(f => f.ownerId === currentUserContext.id)} 
           onUpdate={handleUpdateProfile} 
           onClose={() => setShowProfileModal(false)} 
+        />
+      )}
+
+      {showHelpModal && currentUserContext && (
+        <HelpModal 
+          currentUser={currentUserContext}
+          onClose={() => setShowHelpModal(false)}
         />
       )}
     </div>
