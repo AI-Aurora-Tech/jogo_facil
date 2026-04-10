@@ -359,7 +359,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
         let title = "Desafio Aceito! 💸";
         let desc = `A arena ${field.name} aceitou seu desafio. Realize o pagamento via PIX para confirmar.`;
 
-        if (slot.price === 0) {
+        if (Number(slot.price) === 0) {
            // Se for jogo gratuito, verifica se precisa de oponente
            if (!slot.hasLocalTeam && !slot.opponentTeamName) {
               newStatus = 'waiting_opponent';
@@ -367,13 +367,13 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
               desc = `Sua reserva foi aprovada pela arena. Aguardando um time adversário aceitar o jogo.`;
            } else {
               newStatus = 'confirmed';
-              title = "Agendamento Confirmado! ⚽";
+              title = "Partida Confirmada! ⚽";
               desc = `Seu jogo na arena ${field.name} foi confirmado!`;
            }
         } else if (slot.status === 'pending_verification') {
            newStatus = 'confirmed';
-           title = "Pagamento Confirmado! ⚽";
-           desc = `Seu pagamento para o jogo na arena ${field.name} foi validado!`;
+           title = Number(slot.price) === 0 ? "Partida Confirmada! ⚽" : "Pagamento Confirmado! ⚽";
+           desc = Number(slot.price) === 0 ? `Sua partida na arena ${field.name} foi confirmada!` : `Seu pagamento para o jogo na arena ${field.name} foi validado!`;
         } else if (slot.status === 'pending_field_approval') {
            // Se não tem time local (é aluguel de horário livre), vai para waiting_opponent
            if (!slot.hasLocalTeam && !slot.opponentTeamName) {
@@ -398,7 +398,15 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
             type: 'success'
           });
         }
-        alert(newStatus === 'confirmed' ? "Pagamento confirmado!" : newStatus === 'waiting_opponent' ? "Reserva aprovada! Aguardando adversário." : "Desafio aceito! Aguardando pagamento.");
+        
+        let alertMessage = "Desafio aceito! Aguardando pagamento.";
+        if (newStatus === 'confirmed') {
+          alertMessage = Number(slot.price) === 0 ? "Partida confirmada!" : "Pagamento confirmado!";
+        } else if (newStatus === 'waiting_opponent') {
+          alertMessage = "Reserva aprovada! Aguardando adversário.";
+        }
+        
+        alert(alertMessage);
       } else {
         // REJECT ACTION
         if (slot.status === 'pending_field_approval' && slot.opponentTeamName) {
