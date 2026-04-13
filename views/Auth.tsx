@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { UserRole, SubscriptionPlan, CATEGORY_ORDER, Gender } from '../types';
 import { Button } from '../components/Button';
-import { Shield, MapPin, AlertCircle, KeyRound, ChevronLeft, Camera, LayoutGrid, Loader2, Eye, EyeOff } from 'lucide-react';
+import { Shield, MapPin, AlertCircle, KeyRound, ChevronLeft, Camera, LayoutGrid, Loader2, Eye, EyeOff, Info } from 'lucide-react';
 import { api } from '../api';
 import { convertFileToBase64, fetchAddressByCEP } from '../utils';
 
@@ -279,6 +279,16 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, onCancel }) => {
                            {cat}
                          </button>
                        ))}
+                    </div>
+                    
+                    <div className="mt-6 bg-blue-50 border border-blue-100 p-4 rounded-xl flex items-start gap-3">
+                       <Info className="w-5 h-5 text-blue-500 shrink-0 mt-0.5" />
+                       <div>
+                          <p className="text-xs font-bold text-blue-900">Período de Teste Gratuito</p>
+                          <p className="text-[10px] text-blue-700 mt-1 leading-relaxed">
+                             Sua conta de Capitão possui um período de teste de <strong>60 dias</strong>. Após esse período, o acesso completo ao sistema requer uma assinatura mensal no valor de <strong>R$ 19,90</strong>.
+                          </p>
+                       </div>
                     </div>
                   </div>
                 )}
