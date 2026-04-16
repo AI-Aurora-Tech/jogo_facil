@@ -50,7 +50,7 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, onCancel }) => {
   const [teamName, setTeamName] = useState('');
   const [teamCategories, setTeamCategories] = useState<string[]>([]);
   const [teamGender, setTeamGender] = useState<Gender>('MASCULINO');
-  const [teamSport, setTeamSport] = useState('Society');
+  const [teamSport, setTeamSport] = useState('Futebol');
   const [teamLogo, setTeamLogo] = useState('');
 
 

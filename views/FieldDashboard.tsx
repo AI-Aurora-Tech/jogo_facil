@@ -45,7 +45,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
   const [pixKey, setPixKey] = useState(field.pixConfig?.key || '');
   const [pixName, setPixName] = useState(field.pixConfig?.name || '');
   const [bank, setBank] = useState(field.pixConfig?.bank || '');
-  const [slotSport, setSlotSport] = useState('Society');
+  const [slotSport, setSlotSport] = useState('Futebol');
   
   const [isLocalTeamSlot, setIsLocalTeamSlot] = useState(false);
   const [manualLocalTeamName, setManualLocalTeamName] = useState(field.name || 'Time da Casa');
@@ -55,6 +55,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
   const [acceptNeighbors, setAcceptNeighbors] = useState(true);
   const [selectedRegisteredTeamId, setSelectedRegisteredTeamId] = useState<string>('');
   const [localTeamCategory, setLocalTeamCategory] = useState<string>('');
+  const [isRecurring, setIsRecurring] = useState(false);
 
   // States Filtros Agenda
   const [filterRange, setFilterRange] = useState<string>('7'); 
@@ -71,7 +72,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
   const [autoGenDuration, setAutoGenDuration] = useState(60);
   const [autoGenPrice, setAutoGenPrice] = useState(field.hourlyRate);
   const [autoGenPixKey, setAutoGenPixKey] = useState(field.pixConfig?.key || '');
-  const [autoGenSport, setAutoGenSport] = useState('Society');
+  const [autoGenSport, setAutoGenSport] = useState('Futebol');
   const [autoGenCourt, setAutoGenCourt] = useState(field.courts[0] || 'Principal');
 
   // States Mensalista
@@ -87,7 +88,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
   const [mensalistaCategory, setMensalistaCategory] = useState(CATEGORY_ORDER[0]);
   const [mensalistaLogo, setMensalistaLogo] = useState('');
   const [mensalistaGender, setMensalistaGender] = useState<Gender>('MASCULINO');
-  const [mensalistaSport, setMensalistaSport] = useState('Society');
+  const [mensalistaSport, setMensalistaSport] = useState('Futebol');
   const [mensalistaCourt, setMensalistaCourt] = useState(field.courts?.[0] || 'Principal');
   const [mensalistaDuration, setMensalistaDuration] = useState(60);
 
@@ -628,7 +629,27 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
           });
         }
       } else {
-        await onAddSlot([slotData]);
+        const slotsToCreate = [slotData];
+        
+        if (isRecurring) {
+          // Copiar para os próximos 2 meses (aproximadamente 8 semanas)
+          const baseDate = new Date(slotDate + 'T12:00:00');
+          for (let i = 1; i <= 8; i++) {
+            const nextDate = new Date(baseDate);
+            nextDate.setDate(baseDate.getDate() + (i * 7));
+            const nextSlotDate = nextDate.toISOString().split('T')[0];
+            
+            // Check for conflicts on each future date
+            if (!checkConflict(nextSlotDate, slotTime, slotDuration, slotCourt)) {
+              slotsToCreate.push({
+                ...slotData,
+                date: nextSlotDate
+              });
+            }
+          }
+        }
+        
+        await onAddSlot(slotsToCreate);
         
         // Update Field PIX Config if changed
         if (pixKey !== field.pixConfig?.key || pixName !== field.pixConfig?.name || bank !== field.pixConfig?.bank) {
@@ -637,7 +658,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
             });
         }
 
-        alert("Horário criado com sucesso!");
+        alert(isRecurring ? `${slotsToCreate.length} horários criados com sucesso!` : "Horário criado com sucesso!");
       }
 
       setShowAddSlotModal(false);
@@ -1591,6 +1612,18 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                         <div className={`w-4 h-4 rounded-full bg-white shadow-sm transition-all transform ${isLocalTeamSlot ? 'translate-x-6' : ''}`} />
                     </div>
                  </div>
+
+                 {!editingSlotId && (
+                   <div className="bg-gray-50 p-4 rounded-2xl border flex items-center justify-between cursor-pointer" onClick={() => setIsRecurring(!isRecurring)}>
+                      <div>
+                          <h4 className="font-black text-indigo-600 text-xs uppercase">Agendamento Recorrente?</h4>
+                          <p className="text-[8px] text-gray-400 font-bold uppercase">Repetir para os próximos 2 meses.</p>
+                      </div>
+                      <div className={`w-12 h-6 rounded-full p-1 transition-all ${isRecurring ? 'bg-indigo-600' : 'bg-gray-200'}`}>
+                          <div className={`w-4 h-4 rounded-full bg-white shadow-sm transition-all transform ${isRecurring ? 'translate-x-6' : ''}`} />
+                      </div>
+                   </div>
+                 )}
 
                  {isLocalTeamSlot && (
                     <div className="animate-in fade-in slide-in-from-top-2 space-y-4 bg-gray-50 p-4 rounded-2xl border">

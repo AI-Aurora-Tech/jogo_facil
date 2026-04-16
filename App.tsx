@@ -7,6 +7,7 @@ import { TeamDashboard } from './views/TeamDashboard';
 import { Subscription } from './views/Subscription';
 import { EditProfileModal } from './components/EditProfileModal';
 import { HelpModal } from './views/HelpModal';
+import { MensalistaSubscriptionModal } from './components/MensalistaSubscriptionModal';
 import { api } from './api';
 import { RefreshCw, Settings, Building2, Shield, Search, Loader2, Bell, X, Info, History, KeyRound, Eye, LogOut, Smartphone, Download, Share, Trophy, Crown, Users, UserPlus, HelpCircle } from 'lucide-react';
 import { supabase } from './supabaseClient';
@@ -17,6 +18,7 @@ const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'EXPLORE' | 'MY_GAMES' | 'ADMIN' | 'PROFILE' | 'SUPER'>('EXPLORE');
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [showHelpModal, setShowHelpModal] = useState(false);
+  const [showMensalistaSubModal, setShowMensalistaSubModal] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const [fieldDashForceTab, setFieldDashForceTab] = useState<'AGENDA' | 'SOLICITACOES' | 'MENSALISTAS' | 'HISTORICO' | undefined>(undefined);
   const [showNeedsSubscription, setShowNeedsSubscription] = useState(false);
@@ -714,6 +716,15 @@ const App: React.FC = () => {
                   )}
                   
                   {/* Botão de assinatura removido pois agora é obrigatória a partir da criação */}
+                  
+                  {currentUserContext.role === UserRole.TEAM_CAPTAIN && (
+                    <button 
+                      onClick={() => setShowMensalistaSubModal(true)} 
+                      className="w-full py-5 bg-indigo-600 text-white rounded-3xl font-black flex items-center justify-center gap-3 uppercase text-xs shadow-xl active:scale-95 transition-transform"
+                    >
+                        <Trophy className="w-5 h-5" /> Seja Mensalista
+                    </button>
+                  )}
 
                   <button onClick={() => {
                     const link = window.location.origin;
@@ -784,6 +795,14 @@ const App: React.FC = () => {
           onClose={() => setShowHelpModal(false)}
         />
       )}
+    {showMensalistaSubModal && currentUserContext && (
+      <MensalistaSubscriptionModal 
+        fields={fields} 
+        currentUser={currentUserContext} 
+        onClose={() => setShowMensalistaSubModal(false)}
+        onSuccess={(msg) => alert(msg)}
+      />
+    )}
     </div>
   );
 };
