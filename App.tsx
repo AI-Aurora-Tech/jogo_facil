@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { UserRole, Field, MatchSlot, User, Notification, SubscriptionPlan } from './types';
+import { UserRole, Field, MatchSlot, User, InAppNotification, SubscriptionPlan } from './types';
 import { Landing } from './views/Landing';
 import { Auth } from './views/Auth';
 import { FieldDashboard } from './views/FieldDashboard';
@@ -16,6 +16,10 @@ const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
   const [view, setView] = useState<'LANDING' | 'AUTH' | 'APP'>('LANDING');
   const [activeTab, setActiveTab] = useState<'EXPLORE' | 'MY_GAMES' | 'ADMIN' | 'PROFILE' | 'SUPER'>('EXPLORE');
+  const [notifPermission, setNotifPermission] = useState<NotificationPermission | 'unsupported'>(() => {
+    if (!("Notification" in window)) return 'unsupported';
+    return Notification.permission;
+  });
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [showHelpModal, setShowHelpModal] = useState(false);
   const [showMensalistaSubModal, setShowMensalistaSubModal] = useState(false);
@@ -28,7 +32,7 @@ const App: React.FC = () => {
   const [slots, setSlots] = useState<MatchSlot[]>([]);
   const [categories, setCategories] = useState<string[]>([]);
   const [allUsers, setAllUsers] = useState<User[]>([]);
-  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [notifications, setNotifications] = useState<InAppNotification[]>([]);
   
   // Super Admin Search State
   const [adminSearch, setAdminSearch] = useState('');
@@ -116,6 +120,47 @@ const App: React.FC = () => {
       }
     }
   };
+
+  const showLocalNotification = (title: string, body: string) => {
+    if (!("Notification" in window)) return;
+    
+    if (Notification.permission === "granted") {
+      const iconUrl = 'https://cdn-icons-png.flaticon.com/512/3112/3112946.png';
+      // Tenta usar o Service Worker para mostrar a notificação (funciona melhor em background)
+      if (navigator.serviceWorker && navigator.serviceWorker.controller) {
+        navigator.serviceWorker.ready.then(registration => {
+          (registration as any).showNotification(title, {
+            body,
+            icon: iconUrl,
+            vibrate: [200, 100, 200],
+            badge: iconUrl,
+          });
+        });
+      } else {
+        // Fallback para notificação simples
+        new Notification(title, { body, icon: iconUrl });
+      }
+    }
+  };
+
+  const requestNotificationPermission = async () => {
+    if (!("Notification" in window)) return;
+    
+    if (Notification.permission === "default") {
+      const permission = await Notification.requestPermission();
+      setNotifPermission(permission);
+      if (permission === 'granted') {
+        console.log('Permissão para notificações concedida!');
+        showLocalNotification("Notificações Ativadas! ⚽", "Você agora receberá alertas sobre suas partidas.");
+      }
+    }
+  };
+
+  useEffect(() => {
+    if (user) {
+      requestNotificationPermission();
+    }
+  }, [user]);
 
   useEffect(() => {
     window.addEventListener('beforeinstallprompt', (e) => {
@@ -213,6 +258,10 @@ const App: React.FC = () => {
         },
         (payload) => {
           console.log('Nova notificação recebida!', payload);
+          if (payload.new) {
+             const newNotif = payload.new as any;
+             showLocalNotification(newNotif.title, newNotif.description);
+          }
           refreshData(true); 
         }
       )
@@ -298,7 +347,7 @@ const App: React.FC = () => {
     }
   };
 
-  const handleNotificationClick = async (n: Notification) => {
+  const handleNotificationClick = async (n: InAppNotification) => {
     if (!n.read) {
       await api.markNotificationAsRead(n.id);
       const unreadCount = notifications.filter(not => !not.read && not.id !== n.id).length;
@@ -723,6 +772,15 @@ const App: React.FC = () => {
                       className="w-full py-5 bg-indigo-600 text-white rounded-3xl font-black flex items-center justify-center gap-3 uppercase text-xs shadow-xl active:scale-95 transition-transform"
                     >
                         <Trophy className="w-5 h-5" /> Seja Mensalista
+                    </button>
+                  )}
+
+                  {notifPermission === 'default' && (
+                    <button 
+                      onClick={requestNotificationPermission} 
+                      className="w-full py-5 bg-grass-50 text-grass-700 border-2 border-grass-500 rounded-3xl font-black flex items-center justify-center gap-3 uppercase text-xs shadow-xl active:scale-95 transition-transform animate-pulse"
+                    >
+                        <Bell className="w-5 h-5" /> Ativar Notificações
                     </button>
                   )}
 

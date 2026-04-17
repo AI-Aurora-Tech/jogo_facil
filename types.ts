@@ -45,7 +45,7 @@ export interface User {
   subscriptionId?: string;
 }
 
-export interface Notification {
+export interface InAppNotification {
   id: string;
   userId: string;
   title: string;

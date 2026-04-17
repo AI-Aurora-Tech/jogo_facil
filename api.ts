@@ -1,5 +1,5 @@
 import { supabase } from './supabaseClient';
-import { User, Field, MatchSlot, RegisteredTeam, PendingUpdate, UserRole, Notification, SubscriptionPlan, TutorialVideo } from './types';
+import { User, Field, MatchSlot, RegisteredTeam, PendingUpdate, UserRole, InAppNotification, SubscriptionPlan, TutorialVideo } from './types';
 
 function normalizeSport(sport: string): string {
   return sport.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase();
@@ -139,7 +139,7 @@ export const api = {
     return mapUserFromDb(data);
   },
 
-  getNotifications: async (userId: string): Promise<Notification[]> => {
+  getNotifications: async (userId: string): Promise<InAppNotification[]> => {
     const { data, error } = await supabase.from('notification').select('*').eq('user_id', userId).order('created_at', { ascending: false });
     if (error) return [];
     return data.map(n => ({
