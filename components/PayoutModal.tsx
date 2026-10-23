@@ -1,61 +1,39 @@
 import React, { useEffect, useState } from 'react';
-import { X, Wallet, CheckCircle2, Loader2 } from 'lucide-react';
+import { X, Wallet, CheckCircle2, Loader2, MessageCircle } from 'lucide-react';
 import { Button } from './Button';
 import { Field, User } from '../types';
 import { api } from '../api';
-import { fetchAddressByCEP } from '../utils';
+import { openPaymentSetupWhatsApp } from '../support';
 
 interface PayoutModalProps {
   field: Field;
   currentUser: User;
+  /** Admin geral acessando a conta do dono do campo: pode informar o Wallet ID. */
+  isAdminView?: boolean;
   onClose: () => void;
   onSaved: () => void;
 }
 
 /**
- * Conta de recebimento do dono do campo.
- * As taxas pagas pelos times caem direto nessa conta (split automático do Asaas).
+ * Conta de recebimento do dono do campo (split automático do Asaas).
+ * A configuração é feita com ajuda do suporte (WhatsApp); o admin geral salva o Wallet ID.
  */
-export const PayoutModal: React.FC<PayoutModalProps> = ({ field, currentUser, onClose, onSaved }) => {
+export const PayoutModal: React.FC<PayoutModalProps> = ({ field, currentUser, isAdminView, onClose, onSaved }) => {
   const [status, setStatus] = useState<{ hasWallet: boolean; walletIdEnd?: string | null; platformFeePercent?: number } | null>(null);
-  const [mode, setMode] = useState<'CREATE' | 'WALLET'>('CREATE');
+  const [walletId, setWalletId] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
-
-  const [walletId, setWalletId] = useState('');
-  const [form, setForm] = useState({
-    name: currentUser.name,
-    email: currentUser.email,
-    cpfCnpj: '',
-    birthDate: '',
-    companyType: 'MEI',
-    mobilePhone: currentUser.phoneNumber || '',
-    incomeValue: '',
-    postalCode: '',
-    address: '',
-    addressNumber: '',
-    province: '',
-  });
-  const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => setForm({ ...form, [k]: e.target.value });
-  const isCompany = form.cpfCnpj.replace(/\D/g, '').length === 14;
 
   useEffect(() => {
     api.payouts('status', field.id).then(setStatus).catch(e => setError(e.message));
   }, [field.id]);
 
-  const onCep = async () => {
-    const data = await fetchAddressByCEP(form.postalCode);
-    if (data) setForm(f => ({ ...f, address: data.logradouro || f.address, province: data.bairro || f.province }));
-  };
-
-  const submit = async () => {
+  const saveWallet = async () => {
     setSaving(true);
     setError('');
     try {
-      const res = mode === 'WALLET'
-        ? await api.payouts('set_wallet', field.id, { walletId })
-        : await api.payouts('create_account', field.id, { ...form, incomeValue: Number(form.incomeValue) });
-      alert(res.message || 'Recebimentos configurados!');
+      const res = await api.payouts('set_wallet', field.id, { walletId });
+      alert(res.message || 'Conta de recebimento salva!');
       onSaved();
     } catch (e: any) {
       setError(e.message);
@@ -63,8 +41,6 @@ export const PayoutModal: React.FC<PayoutModalProps> = ({ field, currentUser, on
       setSaving(false);
     }
   };
-
-  const input = 'w-full p-3 bg-gray-50 rounded-xl border font-bold text-xs outline-none';
 
   return (
     <div className="fixed inset-0 z-[600] flex items-end sm:items-center justify-center bg-pitch/70 backdrop-blur-sm">
@@ -84,62 +60,36 @@ export const PayoutModal: React.FC<PayoutModalProps> = ({ field, currentUser, on
             <CheckCircle2 className="w-10 h-10 text-grass-600 mx-auto" />
             <p className="font-black text-pitch uppercase text-sm">Conta de recebimento ativa</p>
             <p className="text-[10px] font-bold text-gray-500">Carteira ...{status.walletIdEnd}</p>
-            <p className="text-[10px] font-bold text-gray-500">
-              Você recebe {100 - (status.platformFeePercent || 0)}% do valor líquido de cada PIX, automaticamente.
-            </p>
           </div>
         )}
 
         {status && !status.hasWallet && (
           <div className="space-y-4">
-            <div className="flex p-1 bg-gray-100 rounded-2xl">
-              <button onClick={() => setMode('CREATE')} className={`flex-1 py-2 text-[10px] font-black uppercase rounded-xl ${mode === 'CREATE' ? 'bg-white shadow-sm text-pitch' : 'text-gray-400'}`}>Criar conta</button>
-              <button onClick={() => setMode('WALLET')} className={`flex-1 py-2 text-[10px] font-black uppercase rounded-xl ${mode === 'WALLET' ? 'bg-white shadow-sm text-pitch' : 'text-gray-400'}`}>Já tenho Asaas</button>
-            </div>
-
-            {mode === 'WALLET' ? (
-              <div className="space-y-2">
-                <p className="text-[10px] font-bold text-gray-500">No app do Asaas: Menu &gt; Integrações &gt; Wallet ID (ou Minha Conta &gt; Dados da conta).</p>
-                <input className={input} placeholder="Wallet ID (xxxxxxxx-xxxx-...)" value={walletId} onChange={e => setWalletId(e.target.value)} />
-              </div>
-            ) : (
-              <div className="space-y-2">
-                <p className="text-[10px] font-bold text-gray-500">Criamos uma conta Asaas no seu nome. Você recebe um e-mail para definir a senha e enviar documentos.</p>
-                <input className={input} placeholder="Nome completo ou razão social" value={form.name} onChange={set('name')} />
-                <input className={input} placeholder="E-mail" type="email" value={form.email} onChange={set('email')} />
-                <input className={input} placeholder="CPF ou CNPJ" inputMode="numeric" value={form.cpfCnpj} onChange={set('cpfCnpj')} />
-                {isCompany ? (
-                  <select className={input} value={form.companyType} onChange={set('companyType')}>
-                    <option value="MEI">MEI</option>
-                    <option value="LIMITED">Limitada</option>
-                    <option value="INDIVIDUAL">Individual</option>
-                    <option value="ASSOCIATION">Associação</option>
-                  </select>
-                ) : (
-                  <label className="block">
-                    <span className="text-[8px] font-black text-gray-400 uppercase">Data de nascimento</span>
-                    <input className={input} type="date" value={form.birthDate} onChange={set('birthDate')} />
-                  </label>
-                )}
-                <input className={input} placeholder="Celular (com DDD)" value={form.mobilePhone} onChange={set('mobilePhone')} />
-                <input className={input} placeholder={isCompany ? 'Faturamento mensal (R$)' : 'Renda mensal (R$)'} inputMode="decimal" value={form.incomeValue} onChange={set('incomeValue')} />
-                <input className={input} placeholder="CEP" inputMode="numeric" value={form.postalCode} onChange={set('postalCode')} onBlur={onCep} />
-                <input className={input} placeholder="Endereço" value={form.address} onChange={set('address')} />
-                <div className="grid grid-cols-2 gap-2">
-                  <input className={input} placeholder="Número" value={form.addressNumber} onChange={set('addressNumber')} />
-                  <input className={input} placeholder="Bairro" value={form.province} onChange={set('province')} />
-                </div>
-              </div>
-            )}
-
-            {error && <div className="bg-red-50 text-red-600 p-3 rounded-xl text-xs font-bold">{error}</div>}
-            <Button onClick={submit} isLoading={saving} className="w-full py-4 rounded-2xl font-black uppercase text-xs">
-              {mode === 'WALLET' ? 'Salvar carteira' : 'Criar conta de recebimento'}
+            <p className="text-xs font-bold text-gray-500">
+              Fale com a gente pelo WhatsApp: ajudamos você a configurar a conta para receber os pagamentos dos jogos.
+            </p>
+            <Button onClick={() => openPaymentSetupWhatsApp(currentUser.name)} className="w-full py-4 rounded-2xl font-black uppercase text-xs">
+              <MessageCircle className="w-4 h-4" /> Configurar pagamento
             </Button>
           </div>
         )}
 
-        {error && !status && <div className="bg-red-50 text-red-600 p-3 rounded-xl text-xs font-bold">{error}</div>}
+        {isAdminView && status && (
+          <div className="mt-6 pt-6 border-t space-y-2">
+            <p className="text-[10px] font-black text-gray-400 uppercase">Admin: Wallet ID do Asaas do dono do campo</p>
+            <input
+              className="w-full p-3 bg-gray-50 rounded-xl border font-bold text-xs outline-none"
+              placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+              value={walletId}
+              onChange={e => setWalletId(e.target.value)}
+            />
+            <Button onClick={saveWallet} isLoading={saving} disabled={!walletId} variant="outline" className="w-full py-3 rounded-2xl font-black uppercase text-xs">
+              Salvar carteira
+            </Button>
+          </div>
+        )}
+
+        {error && <div className="mt-4 bg-red-50 text-red-600 p-3 rounded-xl text-xs font-bold">{error}</div>}
       </div>
     </div>
   );

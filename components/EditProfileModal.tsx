@@ -4,19 +4,28 @@ import { User, UserRole, Field, TeamConfig, Gender } from '../types';
 import { Button } from './Button';
 import { X, User as UserIcon, Shield, Check, Plus, AlertCircle, Building2, MapPin, Smartphone, Camera, Trash2, LayoutGrid, Tag, Lock, PlusCircle, Globe, Search, Eye, EyeOff } from 'lucide-react';
 import { formatCategory, convertFileToBase64, geocodeAddress, fetchAddressByCEP } from '../utils';
+import { countBillableCategories, monthlyPriceForTeams, formatBRL, CATEGORY_MONTHLY_PRICE } from '../shared/pricing';
 
 interface EditProfileModalProps {
   categories: string[];
   user: User;
   field?: Field | null;
-  onUpdate: (updatedUser: User, updatedField?: Partial<Field>) => void;
+  onUpdate: (updatedUser: User, updatedField?: Partial<Field>, passwordChange?: PasswordChange) => void;
   onClose: () => void;
+  /** false quando o admin está editando outra conta (não sabe a senha atual dela). */
+  requireCurrentPassword?: boolean;
 }
 
-export const EditProfileModal: React.FC<EditProfileModalProps> = ({ categories, user, field, onUpdate, onClose }) => {
+export interface PasswordChange {
+  currentPassword: string;
+  newPassword: string;
+}
+
+export const EditProfileModal: React.FC<EditProfileModalProps> = ({ categories, user, field, onUpdate, onClose, requireCurrentPassword = true }) => {
   const [name, setName] = useState(user.name);
   const [phone, setPhone] = useState(user.phoneNumber);
   const [newPassword, setNewPassword] = useState('');
+  const [currentPassword, setCurrentPassword] = useState('');
   const [teams, setTeams] = useState<TeamConfig[]>(user.teams || []);
   const [showPassword, setShowPassword] = useState(false);
   
@@ -141,13 +150,23 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({ categories, 
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsLoading(true);
 
-    try {
-        const updatedUser: User = { ...user, name, phoneNumber: phone, teams };
-        if (newPassword.trim()) {
-            updatedUser.password = newPassword.trim();
+    let passwordChange: PasswordChange | undefined;
+    if (newPassword.trim()) {
+        if (newPassword.trim().length < 6) {
+            setError('A nova senha precisa ter pelo menos 6 caracteres.');
+            return;
         }
+        if (requireCurrentPassword && !currentPassword) {
+            setError('Informe a senha atual para trocar a senha.');
+            return;
+        }
+        passwordChange = { currentPassword, newPassword };
+    }
+
+    setIsLoading(true);
+    try {
+        const updatedUser: User = { ...user, name, phoneNumber: phone, teams, password: undefined };
 
         let updatedField;
         if (user.role === UserRole.FIELD_OWNER && field) {
@@ -190,9 +209,9 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({ categories, 
             pixConfig: { key: pixKey, name: pixName }
           };
 
-          onUpdate(updatedUser, updatedField);
+          onUpdate(updatedUser, updatedField, passwordChange);
         } else {
-          onUpdate(updatedUser);
+          onUpdate(updatedUser, undefined, passwordChange);
         }
     } catch (e) {
         setError("Erro ao salvar dados.");
@@ -241,6 +260,22 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({ categories, 
                     </button>
                 </div>
             </div>
+            {requireCurrentPassword && newPassword.trim() && (
+              <div className="bg-orange-50 p-4 rounded-2xl border border-orange-100 flex items-center gap-2">
+                  <Lock className="w-4 h-4 text-orange-400" />
+                  <div className="flex-1">
+                      <label className="text-[8px] font-black text-orange-400 uppercase block mb-1">Senha Atual</label>
+                      <input
+                          className="w-full bg-transparent font-bold outline-none text-pitch placeholder-orange-200"
+                          placeholder="Confirme sua senha atual"
+                          type={showPassword ? "text" : "password"}
+                          autoComplete="current-password"
+                          value={currentPassword}
+                          onChange={e => setCurrentPassword(e.target.value)}
+                      />
+                  </div>
+              </div>
+            )}
           </section>
 
           {user.role === UserRole.FIELD_OWNER && (
@@ -441,6 +476,23 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({ categories, 
               ))}
             </div>
           </section>
+
+          {user.role === UserRole.TEAM_CAPTAIN && (
+            <div className="bg-pitch text-white rounded-[2rem] p-5 space-y-2">
+              <p className="text-[10px] font-black uppercase text-grass-500">Sua mensalidade</p>
+              {teams.map((t, i) => (
+                <div key={i} className="flex justify-between text-[10px] font-bold uppercase">
+                  <span className="truncate mr-2">{t.name || 'Time'}</span>
+                  <span>{t.categories.length} categoria(s)</span>
+                </div>
+              ))}
+              <div className="flex justify-between items-end border-t border-white/10 pt-2">
+                <span className="text-[10px] font-bold uppercase text-gray-300">{countBillableCategories(teams)} categoria(s) no total</span>
+                <span className="text-xl font-black">{monthlyPriceForTeams(teams) > 0 ? `${formatBRL(monthlyPriceForTeams(teams))}/mês` : 'Grátis'}</span>
+              </div>
+              <p className="text-[9px] font-bold text-gray-400 uppercase">{formatBRL(CATEGORY_MONTHLY_PRICE)} por categoria • 1 categoria é grátis • o valor da assinatura é atualizado ao salvar</p>
+            </div>
+          )}
 
           <Button type="submit" isLoading={isLoading} className="w-full py-5 rounded-[2rem] font-black uppercase text-xs shadow-xl active:scale-95">{isLoading ? 'Salvando...' : 'Salvar Todas as Configurações'}</Button>
         </form>

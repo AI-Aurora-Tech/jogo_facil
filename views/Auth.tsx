@@ -26,6 +26,9 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, onCancel, initialMode, invi
   const [successMsg, setSuccessMsg] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  // Recuperação de senha: 1) pede o código por e-mail  2) informa código + nova senha
+  const [resetCodeSent, setResetCodeSent] = useState(false);
+  const [resetCode, setResetCode] = useState('');
 
   // Common Form States
   const [email, setEmail] = useState('');
@@ -122,8 +125,12 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, onCancel, initialMode, invi
     }
 
     if (mode === 'FORGOT_PASSWORD') {
-      if (!email || !password) {
-        setError('Preencha o e-mail e a nova senha.');
+      if (!email) {
+        setError('Informe o e-mail cadastrado.');
+        return;
+      }
+      if (resetCodeSent && (resetCode.replace(/\D/g, '').length !== 6 || !password)) {
+        setError('Informe o código de 6 dígitos e a nova senha.');
         return;
       }
     }
@@ -178,9 +185,17 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, onCancel, initialMode, invi
         const user = await api.login(email, password);
         onLogin(user);
       } else if (mode === 'FORGOT_PASSWORD') {
-        await api.resetPassword(email, password);
-        setSuccessMsg('Senha alterada com sucesso! Faça login agora.');
-        setTimeout(() => setMode('LOGIN'), 3000);
+        setError('');
+        if (!resetCodeSent) {
+          setSuccessMsg(await api.requestPasswordReset(email));
+          setResetCodeSent(true);
+          setPassword('');
+        } else {
+          setSuccessMsg(await api.resetPassword(email, resetCode, password));
+          setResetCodeSent(false);
+          setResetCode('');
+          setTimeout(() => { setMode('LOGIN'); setSuccessMsg(''); }, 3000);
+        }
       }
     } catch (err: any) {
       setError(err.message || 'Erro na operação.');
@@ -196,7 +211,7 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, onCancel, initialMode, invi
       <div className="bg-white rounded-[3.5rem] w-full max-w-lg overflow-hidden shadow-2xl animate-in zoom-in-95 my-10">
         <div className="bg-pitch p-10 text-center text-white relative">
           {mode !== 'LOGIN' && (
-             <button onClick={() => { setMode('LOGIN'); setError(''); }} className="absolute top-8 left-8 p-2 bg-white/10 rounded-full hover:bg-white/20 transition-colors">
+             <button onClick={() => { setMode('LOGIN'); setError(''); setSuccessMsg(''); setResetCodeSent(false); setResetCode(''); }} className="absolute top-8 left-8 p-2 bg-white/10 rounded-full hover:bg-white/20 transition-colors">
                 <ChevronLeft className="w-6 h-6 text-white" />
              </button>
           )}
@@ -429,20 +444,30 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, onCancel, initialMode, invi
           {mode === 'FORGOT_PASSWORD' && (
             <div className="space-y-4 animate-in fade-in slide-in-from-right-4">
               <div className="bg-orange-50 p-4 rounded-2xl border border-orange-100 text-orange-600 text-[10px] font-bold">
-                 Informe seu e-mail cadastrado e a nova senha desejada.
+                 {resetCodeSent
+                   ? 'Digite o código de 6 dígitos que enviamos para o seu e-mail e escolha a nova senha.'
+                   : 'Informe seu e-mail cadastrado. Vamos enviar um código para você criar uma nova senha.'}
               </div>
-              <input className="w-full p-5 bg-gray-50 rounded-2xl border font-bold outline-none" placeholder="Seu e-mail cadastrado" type="email" value={email} onChange={e => setEmail(e.target.value)} required />
-              <div className="relative">
-                 <input className="w-full p-5 bg-gray-50 rounded-2xl border font-bold outline-none pr-10" placeholder="Nova senha" type={showPassword ? "text" : "password"} value={password} onChange={e => setPassword(e.target.value)} required />
-                 <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-pitch">
-                    {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-                 </button>
-              </div>
+              <input className="w-full p-5 bg-gray-50 rounded-2xl border font-bold outline-none disabled:opacity-60" placeholder="Seu e-mail cadastrado" type="email" value={email} onChange={e => setEmail(e.target.value)} disabled={resetCodeSent} required />
+              {resetCodeSent && (
+                <>
+                  <input className="w-full p-5 bg-gray-50 rounded-2xl border font-bold outline-none tracking-[0.5em] text-center" placeholder="000000" inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={resetCode} onChange={e => setResetCode(e.target.value.replace(/\D/g, ''))} required />
+                  <div className="relative">
+                     <input className="w-full p-5 bg-gray-50 rounded-2xl border font-bold outline-none pr-10" placeholder="Nova senha (mínimo 6 caracteres)" type={showPassword ? "text" : "password"} autoComplete="new-password" value={password} onChange={e => setPassword(e.target.value)} required />
+                     <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-pitch">
+                        {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                     </button>
+                  </div>
+                  <button type="button" onClick={() => { setResetCodeSent(false); setResetCode(''); setSuccessMsg(''); setError(''); }} className="text-[9px] font-black text-gray-400 uppercase hover:text-pitch">
+                    Não recebeu? Enviar outro código
+                  </button>
+                </>
+              )}
             </div>
           )}
 
           <Button type="submit" isLoading={isLoading} className="w-full py-6 rounded-[2rem] font-black uppercase tracking-widest mt-6 text-sm shadow-xl active:scale-95">
-            {mode === 'REGISTER' ? 'Finalizar Cadastro' : mode === 'FORGOT_PASSWORD' ? 'Redefinir Senha' : 'Entrar na Conta'}
+            {mode === 'REGISTER' ? 'Finalizar Cadastro' : mode === 'FORGOT_PASSWORD' ? (resetCodeSent ? 'Redefinir Senha' : 'Enviar Código') : 'Entrar na Conta'}
           </Button>
 
           {mode === 'LOGIN' && (

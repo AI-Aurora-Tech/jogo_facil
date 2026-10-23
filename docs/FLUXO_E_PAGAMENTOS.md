@@ -56,6 +56,15 @@ stateDiagram-v2
 - Recusa do campo devolve o horário para a agenda e estorna o que foi pago.
 - 2h depois do fim do jogo: o time 1 recebe aviso para lançar o placar, e os dois times avaliam o adversário e o campo (o aviso automático usa `pg_cron`, ver passo 5).
 
+## 4.1 Configuração de recebimento do dono do campo
+
+O dono do campo vê o botão **Configurar pagamento** (no topo da Arena e na agenda). Ele abre o seu WhatsApp
+(`VITE_SUPPORT_WHATSAPP`) com a mensagem: *"Olá, me chamo {nome}, e criei conta no Jogo Facil agora, pode me
+ajudar a configurar a conta para receber meus pagamentos?"*.
+
+Para concluir: ajude a pessoa a abrir a conta Asaas dela, pegue o **Wallet ID**, entre no app como admin geral,
+"Acessar Conta" do dono do campo → Arena → **Recebimentos** → cole o Wallet ID → Salvar.
+
 ## 5. Convites
 
 Dono do campo, mensalista/time da casa ou o time 1 tocam em **Enviar convite**. O app gera um link
@@ -100,6 +109,9 @@ App (React/Vite)  ──>  Supabase (leitura e cadastros simples)
 | `api/payouts.ts` | Conta de recebimento do dono do campo. |
 | `api/webhooks/asaas.ts` | Confirmação de pagamentos (idempotente). |
 | `api/auth/login.ts` | Login que devolve a sessão usada nas ações do servidor. |
+| `api/auth/forgot.ts` | "Esqueci a senha": envia por e-mail um código de 6 dígitos (uso único, 15 min, 5 tentativas). |
+| `api/auth/reset.ts` | Confere o código e grava a nova senha. |
+| `api/auth/password.ts` | Troca de senha no perfil (pede a senha atual) e troca pelo admin geral (só `SUPER_ADMIN`). |
 
 ## 9. Passo a passo para colocar no ar
 
@@ -116,9 +128,12 @@ App (React/Vite)  ──>  Supabase (leitura e cadastros simples)
    - `SESSION_SECRET` (texto aleatório longo)
    - `ASAAS_API_KEY`, `ASAAS_ENV` (`sandbox` ou `production`), `ASAAS_WEBHOOK_TOKEN`
    - `PLATFORM_FEE_PERCENT` (opcional), `APP_URL` (ex.: `https://jogofacil.app`)
+   - `RESEND_API_KEY`, `EMAIL_FROM` (envio do código de recuperação de senha; crie a conta em https://resend.com e verifique o domínio do remetente)
 4. **Deploy** e teste o fluxo completo no sandbox.
 5. **Depois que a versão nova estiver no ar**, rode `supabase/migrations/20261022_02_endurecimento_colunas.sql`.
    Ele impede que o navegador altere status, pagamento, placar e assinatura (só o servidor muda).
+   Em seguida rode `supabase/migrations/20261023_01_senha_pelo_servidor.sql`: cria a tabela dos códigos de
+   recuperação e tira do navegador a permissão de alterar a senha.
 6. Troque `ASAAS_ENV` para `production` e a chave de API de produção.
 
 ### Rodar localmente

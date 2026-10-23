@@ -235,13 +235,25 @@ export const api = {
     return mapUserFromDb(newUser);
   },
 
-  resetPassword: async (email: string, newPassword: string): Promise<void> => {
-     const normalizedEmail = email.toLowerCase().trim();
-     const { data: user } = await supabase.from('user').select('id').eq('email', normalizedEmail).single();
-     if (!user) throw new Error('E-mail não encontrado.');
+  /** Envia por e-mail um código de 6 dígitos para criar uma nova senha. */
+  requestPasswordReset: async (email: string): Promise<string> => {
+    const { message } = await callServer<{ message: string }>('/api/auth/forgot', { email: email.toLowerCase().trim() });
+    return message;
+  },
 
-     const { error } = await supabase.from('user').update({ password: newPassword }).eq('id', user.id);
-     if (error) throw error;
+  /** Cria a nova senha usando o código recebido por e-mail. */
+  resetPassword: async (email: string, code: string, newPassword: string): Promise<string> => {
+    const { message } = await callServer<{ message: string }>('/api/auth/reset', {
+      email: email.toLowerCase().trim(),
+      code: code.trim(),
+      newPassword,
+    });
+    return message;
+  },
+
+  /** Troca a senha de quem está logado (pede a senha atual). */
+  changePassword: async (currentPassword: string, newPassword: string): Promise<void> => {
+    await callServer('/api/auth/password', { action: 'change', currentPassword, newPassword });
   },
 
   updateUser: async (user: User): Promise<User> => {
@@ -254,9 +266,7 @@ export const api = {
       team_logo_url: firstTeam?.logoUrl || '',
       teams: user.teams
     };
-    if (user.password && user.password.trim() !== '') {
-        payload.password = user.password;
-    }
+    // A senha não vai mais por aqui: use api.changePassword (servidor, com a senha atual)
 
     const { data, error } = await supabase
       .from('user')
@@ -699,9 +709,9 @@ export const api = {
 
 
 
+  /** Só o SUPER_ADMIN: o servidor confere a sessão antes de trocar. */
   adminUpdatePassword: async (userId: string, newPassword: string): Promise<void> => {
-    const { error } = await supabase.from('user').update({ password: newPassword }).eq('id', userId);
-    if (error) throw error;
+    await callServer('/api/auth/password', { action: 'admin_set', userId, newPassword });
   },
 
   getTutorialVideos: async (): Promise<TutorialVideo[]> => {
