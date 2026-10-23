@@ -1,14 +1,16 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { UserRole, Field, MatchSlot, User, InAppNotification, SubscriptionPlan } from './types';
 import { Landing } from './views/Landing';
-import { Auth } from './views/Auth';
+import { Auth, AuthMode } from './views/Auth';
+import { InviteLanding } from './views/InviteLanding';
 import { FieldDashboard } from './views/FieldDashboard';
 import { TeamDashboard } from './views/TeamDashboard';
 import { Subscription } from './views/Subscription';
 import { EditProfileModal } from './components/EditProfileModal';
 import { HelpModal } from './views/HelpModal';
 import { MensalistaSubscriptionModal } from './components/MensalistaSubscriptionModal';
-import { api } from './api';
+import { api, sessionToken, setActAsUser } from './api';
+import { monthlyPriceForTeams, countBillableCategories, formatBRL } from './shared/pricing';
 import { RefreshCw, Settings, Building2, Shield, Search, Loader2, Bell, X, Info, History, KeyRound, Eye, LogOut, Smartphone, Download, Share, Trophy, Crown, Users, UserPlus, HelpCircle } from 'lucide-react';
 import { supabase } from './supabaseClient';
 
@@ -26,6 +28,20 @@ const App: React.FC = () => {
   const [showNotifications, setShowNotifications] = useState(false);
   const [fieldDashForceTab, setFieldDashForceTab] = useState<'AGENDA' | 'SOLICITACOES' | 'MENSALISTAS' | 'HISTORICO' | undefined>(undefined);
   const [showNeedsSubscription, setShowNeedsSubscription] = useState(false);
+  const [showSubscriptionPage, setShowSubscriptionPage] = useState(false);
+  // Link de convite (?convite=TOKEN): guardado até a pessoa entrar/criar conta
+  const [inviteToken, setInviteToken] = useState<string | null>(() => {
+    try {
+      const fromUrl = new URLSearchParams(window.location.search).get('convite');
+      if (fromUrl) {
+        sessionStorage.setItem('jf_invite', fromUrl);
+        window.history.replaceState({}, document.title, window.location.pathname);
+        return fromUrl;
+      }
+      return sessionStorage.getItem('jf_invite');
+    } catch { return null; }
+  });
+  const [authOptions, setAuthOptions] = useState<{ mode?: AuthMode; inviteCategory?: string }>({});
 
   
   const [fields, setFields] = useState<Field[]>([]);
@@ -49,63 +65,47 @@ const App: React.FC = () => {
   const [isIOS] = useState(() => /iphone|ipad|ipod/.test(window.navigator.userAgent.toLowerCase()));
   const [isStandalone, setIsStandalone] = useState(false);
 
-  // Efeito "Gatekeeper": Se logado mas sem plano, forçar tela de assinatura
+  // Bloqueio da mensalidade: dono de time com mais de 1 categoria precisa estar com a assinatura ativa.
+  // Assinantes do plano antigo (Mercado Pago) continuam liberados até migrarem.
   useEffect(() => {
-    if (user && !impersonatingUser && user.role === UserRole.TEAM_CAPTAIN) {
-      const createdAt = new Date(user.createdAt);
-      const now = new Date();
-      const diffTime = Math.abs(now.getTime() - createdAt.getTime());
-      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-
-      if (diffDays > 60 && !user.isSubscribed) {
-        setShowNeedsSubscription(true);
-      }
+    if (!user || impersonatingUser || user.role !== UserRole.TEAM_CAPTAIN) {
+      setShowNeedsSubscription(false);
+      return;
     }
+    const price = monthlyPriceForTeams(user.teams);
+    const legacySubscriber = !!user.isSubscribed && (!user.billingStatus || user.billingStatus === 'FREE');
+    setShowNeedsSubscription(price > 0 && user.billingStatus !== 'ACTIVE' && !legacySubscriber);
   }, [user, impersonatingUser]);
 
-
-
-
-
-  // Verifica retorno do Mercado Pago
+  // Admin geral acessando outra conta: as ações no servidor vão em nome dela
   useEffect(() => {
-    const checkPaymentReturn = async () => {
-      const query = new URLSearchParams(window.location.search);
-      const status = query.get('status') || query.get('collection_status');
-      const preapproval_id = query.get('preapproval_id');
-      
-      if ((status === 'approved' || status === 'authorized' || preapproval_id) && user) {
-        setIsLoading(true);
-        try {
-           // Remove parametros da URL para não processar novamente
-           window.history.replaceState({}, document.title, window.location.pathname);
-           
-           const updatedUser = await api.confirmProSubscription(user.id, preapproval_id || '');
-           
-           setUser(updatedUser);
-           localStorage.setItem('jf_session_user', JSON.stringify(updatedUser));
-           
-           setShowNeedsSubscription(false);
-           
-           alert("Pagamento Confirmado! Bem-vindo ao Plano PRO! 🚀");
-           await api.createNotification({
-             userId: user.id,
-             title: "Assinatura Ativa 🏆",
-             description: "Sua assinatura PRO foi ativada com sucesso.",
-             type: 'success'
-           });
-        } catch (e) {
-           alert("Erro ao confirmar assinatura. Entre em contato com o suporte.");
-        } finally {
-           setIsLoading(false);
-        }
-      }
-    };
+    setActAsUser(impersonatingUser?.id || null);
+  }, [impersonatingUser]);
 
-    if (user) {
-      checkPaymentReturn();
-    }
-  }, [user]);
+  const saveSessionUser = (u: User) => {
+    setUser(u);
+    localStorage.setItem('jf_session_user', JSON.stringify(u));
+  };
+
+  const clearInvite = () => {
+    try { sessionStorage.removeItem('jf_invite'); } catch { /* ignore */ }
+    setInviteToken(null);
+  };
+
+  // Sessão expirada no servidor: volta para o login
+  useEffect(() => {
+    const onExpired = () => {
+      alert('Sua sessão expirou. Entre novamente.');
+      localStorage.removeItem('jf_session_user');
+      sessionToken.set(null);
+      setUser(null);
+      setImpersonatingUser(null);
+      setAuthOptions({ mode: 'LOGIN' });
+      setView('AUTH');
+    };
+    window.addEventListener('jf:session-expired', onExpired);
+    return () => window.removeEventListener('jf:session-expired', onExpired);
+  }, []);
 
   const updateAppBadge = (count: number) => {
     if ('setAppBadge' in navigator) {
@@ -278,7 +278,11 @@ const App: React.FC = () => {
       if (saved) {
         try {
           const u = JSON.parse(saved);
-          if (u && u.id) {
+          if (u && u.id && !sessionToken.get()) {
+            // Versão nova usa sessão do servidor: quem entrou na versão antiga precisa logar de novo
+            localStorage.removeItem('jf_session_user');
+            setAuthOptions({ mode: 'LOGIN' });
+          } else if (u && u.id) {
             setUser(u);
             // A view inicial depende da assinatura, mas deixamos o useEffect Gatekeeper decidir
             setView('APP'); 
@@ -299,51 +303,16 @@ const App: React.FC = () => {
   }, [refreshData]);
 
   const handleCancelBooking = async (slotId: string) => {
-    const slot = slots.find(s => s.id === slotId);
-    if (!slot) return;
-    const field = fields.find(f => f.id === slot.fieldId);
-
-    if (confirm("Deseja realmente cancelar este agendamento? Ele voltará a ficar disponível para outros times.")) {
-      setIsLoading(true);
-      try {
-        await api.updateSlot(slotId, { 
-          status: 'available', 
-          isBooked: false, 
-          bookedByTeamName: undefined, 
-          bookedByUserId: undefined, 
-          opponentTeamName: undefined, 
-          opponentTeamCategory: undefined,
-          opponentTeamPhone: undefined,
-          opponentTeamLogoUrl: undefined,
-          opponentTeamGender: undefined,
-          receiptUrl: undefined 
-        });
-
-        if (field) {
-          await api.createNotification({
-            userId: field.ownerId,
-            title: "Agendamento Cancelado ⚠️",
-            description: `A partida do dia ${slot.date.split('-').reverse().join('/')} às ${slot.time} foi cancelada e o horário voltou para a agenda.`,
-            type: 'warning'
-          });
-        }
-
-        if (slot.bookedByUserId) {
-          await api.createNotification({
-            userId: slot.bookedByUserId,
-            title: "Agendamento Removido",
-            description: `Seu agendamento para o dia ${slot.date} na arena ${field?.name} foi cancelado com sucesso.`,
-            type: 'info'
-          });
-        }
-        
-        await refreshData();
-        alert("Agendamento cancelado. O horário está livre novamente!");
-      } catch (e) {
-        alert("Erro ao cancelar.");
-      } finally {
-        setIsLoading(false);
-      }
+    if (!confirm("Deseja realmente cancelar este agendamento?")) return;
+    setIsLoading(true);
+    try {
+      const res = await api.match('cancel', slotId);
+      alert(res.message || 'Agendamento cancelado.');
+      await refreshData();
+    } catch (e: any) {
+      alert(e.message || "Erro ao cancelar.");
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -357,7 +326,8 @@ const App: React.FC = () => {
     setShowNotifications(false);
     await refreshData();
     
-    if (user?.role === UserRole.FIELD_OWNER && (n.title.toLowerCase().includes('desafio') || n.title.toLowerCase().includes('mensalista'))) {
+    const t = n.title.toLowerCase();
+    if (user?.role === UserRole.FIELD_OWNER && (t.includes('desafio') || t.includes('mensalista') || t.includes('aprove') || t.includes('pagamento'))) {
       setActiveTab('ADMIN');
       setFieldDashForceTab('SOLICITACOES');
       setTimeout(() => setFieldDashForceTab(undefined), 100);
@@ -370,7 +340,16 @@ const App: React.FC = () => {
       const target = impersonatingUser || user;
       if (!target) return;
 
-      const resUser = await api.updateUser(updatedUser);
+      let resUser = await api.updateUser(updatedUser);
+      if (resUser.role === UserRole.TEAM_CAPTAIN) {
+        // Ajusta a mensalidade ao novo número de categorias
+        try {
+          await api.billing('sync');
+          resUser = await api.getUserById(resUser.id);
+        } catch (e) {
+          console.warn('Não foi possível sincronizar a mensalidade', e);
+        }
+      }
       if (impersonatingUser) {
         setImpersonatingUser(resUser);
       } else {
@@ -401,6 +380,8 @@ const App: React.FC = () => {
 
   const handleLogout = () => {
     localStorage.removeItem('jf_session_user');
+    sessionToken.set(null);
+    setActAsUser(null);
     updateAppBadge(0);
     window.location.href = '/';
   };
@@ -429,16 +410,44 @@ const App: React.FC = () => {
     );
   }
 
+  // Convite aberto (antes ou depois de entrar)
+  if (inviteToken && view !== 'AUTH' && !impersonatingUser) {
+    return (
+      <InviteLanding
+        token={inviteToken}
+        currentUser={user}
+        onAuth={(mode, category) => {
+          setAuthOptions({ mode, inviteCategory: mode === 'REGISTER' ? category : undefined });
+          setView('AUTH');
+        }}
+        onUserUpdated={saveSessionUser}
+        onDone={() => {
+          clearInvite();
+          setView('APP');
+          setActiveTab('MY_GAMES');
+          refreshData();
+        }}
+        onDismiss={() => {
+          clearInvite();
+          setView(user ? 'APP' : 'LANDING');
+        }}
+      />
+    );
+  }
+
   if (view === 'LANDING') return <Landing onStart={() => setView('AUTH')} />;
   
   if (view === 'AUTH') {
     return (
       <Auth 
+        key={`${authOptions.mode || 'LOGIN'}-${authOptions.inviteCategory || ''}`}
         categories={categories} 
+        initialMode={authOptions.mode}
+        inviteCategory={authOptions.inviteCategory}
         onLogin={(u) => { 
-          setUser(u); 
+          saveSessionUser(u);
+          setAuthOptions({});
           setView('APP'); 
-          localStorage.setItem('jf_session_user', JSON.stringify(u)); 
           if(u.role === UserRole.SUPER_ADMIN) setActiveTab('SUPER');
           else if(u.role === UserRole.FIELD_OWNER) setActiveTab('ADMIN');
           else setActiveTab('EXPLORE');
@@ -449,15 +458,28 @@ const App: React.FC = () => {
     );
   }
 
-  if (showNeedsSubscription) {
-    return <Subscription 
-      onLogout={handleLogout}
-      onBack={() => {
-        // Se a assinatura for obrigatória, não deixamos voltar para o app
-        if (user && !user.isSubscribed) return;
-        setShowNeedsSubscription(false);
-      }} 
-    />;
+  if (user && (showNeedsSubscription || showSubscriptionPage) && !impersonatingUser) {
+    return (
+      <>
+        <Subscription
+          user={user}
+          blocking={showNeedsSubscription}
+          onLogout={handleLogout}
+          onBack={() => setShowSubscriptionPage(false)}
+          onEditCategories={() => setShowProfileModal(true)}
+          onUserUpdated={saveSessionUser}
+        />
+        {showProfileModal && (
+          <EditProfileModal
+            categories={categories}
+            user={user}
+            field={undefined}
+            onUpdate={handleUpdateProfile}
+            onClose={() => setShowProfileModal(false)}
+          />
+        )}
+      </>
+    );
   }
 
   const currentUserContext = impersonatingUser || user;
@@ -712,13 +734,14 @@ const App: React.FC = () => {
                       await api.deleteSlot(id); 
                       setSlots(prev => prev.filter(s => s.id !== id));
                     }}
-                    onConfirmBooking={async id => { 
-                      const slot = slots.find(s => s.id === id);
-                      const newStatus = slot?.status === 'pending_verification' ? 'confirmed' : 'pending_payment';
-                      await api.updateSlot(id, { status: newStatus, isBooked: true }); 
-                      refreshData(); 
+                    onConfirmBooking={async id => {
+                      try { await api.match('field_decision', id, { approve: true }); } catch (e: any) { alert(e.message); }
+                      refreshData();
                     }}
-                    onRejectBooking={async id => { await api.updateSlot(id, { status: 'rejected', isBooked: false, receiptUrl: undefined }); refreshData(); }}
+                    onRejectBooking={async id => {
+                      try { await api.match('field_decision', id, { approve: false }); } catch (e: any) { alert(e.message); }
+                      refreshData();
+                    }}
                     onUpdateField={async (id, u) => { await api.updateField(id, u); refreshData(); return true; }}
                     onRateTeam={() => {}}
                     forceTab={fieldDashForceTab}
@@ -748,9 +771,10 @@ const App: React.FC = () => {
                       </span>
                    )}
                 </div>
-                {currentUserContext.role === UserRole.TEAM_CAPTAIN && !currentUserContext.isSubscribed && (
-                  <div className="mt-4 text-xs font-bold text-gray-500">
-                    Você ainda tem {60 - Math.ceil((new Date().getTime() - new Date(currentUserContext.createdAt).getTime()) / (1000 * 60 * 60 * 24))} dias do período grátis.
+                {currentUserContext.role === UserRole.TEAM_CAPTAIN && (
+                  <div className="mt-4 text-xs font-bold text-gray-500 text-center">
+                    {countBillableCategories(currentUserContext.teams)} categoria(s) •{' '}
+                    {monthlyPriceForTeams(currentUserContext.teams) > 0 ? `${formatBRL(monthlyPriceForTeams(currentUserContext.teams))}/mês` : 'Plano grátis'}
                   </div>
                 )}
                 
@@ -764,7 +788,14 @@ const App: React.FC = () => {
                     </button>
                   )}
                   
-                  {/* Botão de assinatura removido pois agora é obrigatória a partir da criação */}
+                  {currentUserContext.role === UserRole.TEAM_CAPTAIN && !impersonatingUser && (
+                    <button
+                      onClick={() => setShowSubscriptionPage(true)}
+                      className="w-full py-5 bg-yellow-400 text-pitch rounded-3xl font-black flex items-center justify-center gap-3 uppercase text-xs shadow-xl active:scale-95 transition-transform"
+                    >
+                      <Crown className="w-5 h-5" /> Minha mensalidade
+                    </button>
+                  )}
                   
                   {currentUserContext.role === UserRole.TEAM_CAPTAIN && (
                     <button 

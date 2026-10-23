@@ -2,16 +2,12 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Search, MapPin, Clock, Swords, Filter, X, Check, MessageCircle, Phone, Navigation, Trophy, ChevronDown, Smartphone, Settings, AlertTriangle, ExternalLink, Activity, History as HistoryIcon, CalendarCheck, CalendarX, Locate, MapPinOff, Calendar, RotateCcw, ArrowUpDown, SlidersHorizontal, Camera, Upload, Clipboard } from 'lucide-react';
 import { Button } from '../components/Button';
-import { Field, MatchSlot, User, CATEGORY_ORDER, SPORTS, Gender, MatchStatus, RegisteredTeam } from '../types';
-
-
-const handleCopy = (text: string) => {
-  navigator.clipboard.writeText(text);
-  alert('Chave PIX copiada!');
-};
+import { Field, MatchSlot, User, CATEGORY_ORDER, SPORTS, Gender, RegisteredTeam } from '../types';
 import { api } from '../api';
-import { calculateDistance, getCurrentPosition, formatDistance, LatLng, getNeighboringCategories, geocodeAddress, convertFileToBase64 } from '../utils';
-import { verifyPixReceipt } from '../services/aiService';
+import { calculateDistance, getCurrentPosition, formatDistance, LatLng, geocodeAddress } from '../utils';
+import { MatchActions, firstTeamNameOf } from '../components/MatchActions';
+import { hasHomeTeam, normalizeMatchKind, opponentApproverId, shareFor, MATCH_KIND_LABEL, STATUS_LABEL } from '../shared/matchRules';
+import { formatBRL } from '../shared/pricing';
 
 interface TeamDashboardProps {
   categories: string[];
@@ -58,6 +54,26 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
   
   const [myGamesSubTab, setMyGamesSubTab] = useState<'FUTUROS' | 'HISTORICO' | 'SOLICITACOES'>('FUTUROS');
   const [myRequests, setMyRequests] = useState<RegisteredTeam[]>([]);
+  // Jogos do time (inclui os passados, para placar e avaliação)
+  const [mySlots, setMySlots] = useState<MatchSlot[]>([]);
+
+  const reloadMySlots = async () => {
+    try {
+      const names = (currentUser.teams || []).map(t => t.name);
+      setMySlots(await api.getSlotsForTeam(currentUser.id, names, true));
+    } catch (e) {
+      console.error('Erro ao carregar jogos do time', e);
+    }
+  };
+
+  useEffect(() => {
+    if (viewMode === 'MY_BOOKINGS') reloadMySlots();
+  }, [viewMode, currentUser.id, slots]);
+
+  const handleChanged = () => {
+    reloadMySlots();
+    onRefresh();
+  };
 
   // Ao montar ou mudar fields, tenta calcular distâncias se já tiver userCoords
   useEffect(() => {
@@ -130,7 +146,10 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
   const myTeamsNames = currentUser.teams?.map(t => t.name.toLowerCase()) || [];
 
   const processedSlots = useMemo(() => {
-    let result = slots.filter(slot => {
+    const source = viewMode === 'MY_BOOKINGS'
+      ? Array.from(new Map([...slots, ...mySlots].map(s => [s.id, s])).values())
+      : slots;
+    let result = source.filter(slot => {
       const field = fields.find(f => f.id === slot.fieldId);
       if (!field) return false;
 
@@ -147,7 +166,7 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
           
           // If available, check if the requested gender is allowed
           if (!baseGender && slot.allowedOpponentGenders.length > 0) {
-            if (!slot.allowedOpponentGenders.includes(filterGender)) return false;
+            if (!(slot.allowedOpponentGenders || []).includes(filterGender)) return false;
           }
       }
 
@@ -181,6 +200,7 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
 
       if (viewMode === 'EXPLORE') {
         if (slot.date < todayStr) return false;
+        if (slot.homeTeamUserId === currentUser.id || slot.bookedByUserId === currentUser.id) return false;
         const hasFirstTeam = (slot.bookedByTeamName || slot.hasLocalTeam);
         const hasOpponent = !!slot.opponentTeamName;
         
@@ -201,22 +221,22 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
         const isMyTeamInSlot = (slot.bookedByTeamName && myTeamsNames.includes(slot.bookedByTeamName.toLowerCase())) ||
                                (slot.opponentTeamName && myTeamsNames.includes(slot.opponentTeamName.toLowerCase())) ||
                                (slot.localTeamName && myTeamsNames.includes(slot.localTeamName.toLowerCase()));
-        const isMyBooking = slot.bookedByUserId === currentUser.id || 
+        const isMyBooking = slot.bookedByUserId === currentUser.id ||
+                              slot.homeTeamUserId === currentUser.id ||
+                              slot.opponentUserId === currentUser.id ||
+                              
                               isMyTeamInSlot || 
                               (currentUser.teams.some(t => t.name.toLowerCase() === slot.localTeamName?.toLowerCase())) ||
                               (currentUser.teams.some(t => t.name.toLowerCase() === slot.opponentTeamName?.toLowerCase()));
         if (!isMyBooking) return false;
-        if (myGamesSubTab === 'FUTUROS' && slot.date < todayStr) return false;
-        if (myGamesSubTab === 'HISTORICO' && slot.date >= todayStr) return false;
+        const isPast = slot.status === 'finished' || slot.date < todayStr;
+        if (myGamesSubTab === 'FUTUROS' && isPast) return false;
+        if (myGamesSubTab === 'HISTORICO' && !isPast) return false;
         if (myGamesSubTab === 'SOLICITACOES') {
-           // Only show slots that need home approval
+           // Adversários aguardando a MINHA aprovação (sou o time 1)
            if (slot.status !== 'pending_home_approval') return false;
-           
-           // Check if I am the one who needs to approve
-           const isMyApprovalNeeded = (slot.homeTeamType === 'MENSALISTA' && currentUser.teams.some(t => t.name === slot.localTeamName)) ||
-                                      (slot.homeTeamType === 'OUTSIDE' && slot.bookedByUserId === currentUser.id);
-           
-           if (!isMyApprovalNeeded) return false;
+           const field = fields.find(f => f.id === slot.fieldId);
+           if (opponentApproverId(slot, field?.ownerId || '') !== currentUser.id) return false;
         }
       }
       return true;
@@ -236,7 +256,7 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
     });
 
     return result;
-  }, [slots, fields, searchQuery, filterSport, filterCategory, filterRange, filterDate, filterMaxDistance, sortBy, viewMode, myGamesSubTab, userAllCategories, currentUser, fieldDistances]);
+  }, [slots, mySlots, fields, searchQuery, filterSport, filterCategory, filterGender, filterRange, filterDate, filterMaxDistance, sortBy, viewMode, myGamesSubTab, userAllCategories, currentUser, fieldDistances]);
 
   const getStatusBadge = (slot: MatchSlot) => {
     const status = slot.status;
@@ -245,9 +265,10 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
        return { label: 'AGUARDANDO ADVERSÁRIO', color: 'bg-yellow-100 text-yellow-700 font-bold', icon: <Swords className="w-3 h-3"/> };
     }
     if (status === 'waiting_opponent') return { label: 'AGUARDANDO ADVERSÁRIO', color: 'bg-blue-100 text-blue-700 font-bold', icon: <Swords className="w-3 h-3"/> };
+    if (status === 'finished') return { label: 'ENCERRADO', color: 'bg-pitch text-white', icon: <Trophy className="w-3 h-3"/> };
     if (status === 'pending_verification') return { label: 'AGUARDANDO VALIDAÇÃO', color: 'bg-orange-100 text-orange-600', icon: <Clock className="w-3 h-3"/> };
-    if (status === 'pending_payment') return { label: 'AGUARDANDO SEU PAGAMENTO', color: 'bg-blue-100 text-blue-600', icon: <Clock className="w-3 h-3"/> };
-    if (status === 'pending_home_approval') return { label: 'AGUARDANDO SUA APROVAÇÃO', color: 'bg-orange-100 text-orange-600', icon: <Clock className="w-3 h-3"/> };
+    if (status === 'pending_payment') return { label: 'AGUARDANDO PAGAMENTO', color: 'bg-blue-100 text-blue-600', icon: <Clock className="w-3 h-3"/> };
+    if (status === 'pending_home_approval') return { label: STATUS_LABEL.pending_home_approval.toUpperCase(), color: 'bg-orange-100 text-orange-600', icon: <Clock className="w-3 h-3"/> };
     if (status === 'pending_field_approval') return { label: 'AGUARDANDO ARENA', color: 'bg-gray-100 text-gray-500', icon: <Clock className="w-3 h-3"/> };
     return { label: 'DISPONÍVEL', color: 'bg-gray-100 text-gray-500', icon: <Clock className="w-3 h-3"/> };
   };
@@ -256,209 +277,24 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
     window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(location)}`, '_blank');
   };
 
+  /** Reserva (1º time de fora) ou inscrição como adversário. Quem valida tudo é o servidor. */
   const handleBookingConfirm = async () => {
     if (!selectedSlot || !selectedCategory) return;
     const team = currentUser.teams[selectedTeamIdx];
-    const field = fields.find(f => f.id === selectedSlot.fieldId);
-    
+    if (!team) return;
+    const isFirstTeam = selectedSlot.status === 'available' && !hasHomeTeam(selectedSlot) && !selectedSlot.bookedByTeamName;
+
+    setIsLoading(true);
     try {
-      const isFirstTeam = !selectedSlot.bookedByTeamName && !selectedSlot.hasLocalTeam;
-      
-      let nextStatus: MatchStatus = 'pending_field_approval';
-      
-      // Se for desafio (já tem um mandante)
-      if (!isFirstTeam) {
-        if (selectedSlot.homeTeamType === 'MENSALISTA') {
-          nextStatus = 'pending_home_approval';
-        } else if (selectedSlot.homeTeamType === 'OUTSIDE') {
-          nextStatus = 'pending_home_approval';
-        } else {
-          // Se for LOCAL, vai direto pro dono do campo
-          nextStatus = 'pending_field_approval';
-        }
-      }
-
-      const updateData: any = {
-        status: nextStatus
-      };
-      
-      // Only update bookedByUserId if it's a new booking or a mensalista challenge
-      // For OUTSIDE challenges, we want to keep the original home captain's ID
-      if (isFirstTeam || selectedSlot.homeTeamType === 'MENSALISTA') {
-          updateData.bookedByUserId = currentUser.id;
-      }
-
-      if (isFirstTeam) {
-          updateData.bookedByTeamName = team.name;
-          updateData.bookedByTeamCategory = selectedCategory;
-          updateData.bookedByTeamGender = team.gender;
-          updateData.bookedByUserPhone = currentUser.phoneNumber;
-          updateData.bookedByTeamLogoUrl = team.logoUrl;
-          updateData.allowedOpponentCategories = [selectedCategory]; // Strict matching
-          updateData.homeTeamType = 'OUTSIDE';
-      } else {
-          // Check if category matches
-          const baseCat = selectedSlot.localTeamCategory || selectedSlot.bookedByTeamCategory;
-          if (baseCat && selectedCategory !== baseCat) {
-            alert(`Este jogo é exclusivo para a categoria ${baseCat}.`);
-            return;
-          }
-          updateData.opponentTeamName = team.name;
-          updateData.opponentTeamCategory = selectedCategory;
-          updateData.opponentTeamPhone = currentUser.phoneNumber;
-          updateData.opponentTeamLogoUrl = team.logoUrl;
-          updateData.opponentTeamGender = team.gender;
-      }
-
-      await api.updateSlot(selectedSlot.id, updateData);
-      
-      // Notificar quem precisa aprovar
-      if (nextStatus === 'pending_field_approval' && field) {
-        await api.createNotification({
-          userId: field.ownerId,
-          title: "Novo Agendamento! ⚽",
-          description: `O time ${team.name} quer jogar no dia ${selectedSlot.date.split('-').reverse().join('/')} às ${selectedSlot.time}.`,
-          type: 'info'
-        });
-      } else if (nextStatus === 'pending_home_approval') {
-        // Notificar o mandante (precisamos do ID do usuário mandante)
-        // Se for OUTSIDE, bookedByUserId é o capitão do time da casa
-        // Se for MENSALISTA, precisamos achar o dono do time mensalista (que pode não estar no slot)
-        // Mas para MENSALISTA, o bookedByUserId agora é o desafiante... 
-        // Espera, para MENSALISTA, quem aprova? O dono do time mensalista.
-        // Onde está o ID dele? No registered_team. Mas aqui só temos o slot.
-        // O slot tem localTeamName. Podemos tentar achar o usuário pelo time?
-        // Por simplificação, se for mensalista, talvez o dono do campo aprove por enquanto ou 
-        // assumimos que o mensalista não tem app.
-        // Mas o requisito diz "aprovação do time mandante".
-        
-        let targetUserId = selectedSlot.bookedByUserId;
-        
-        // Se for mensalista, o bookedByUserId acabou de ser setado para o DESAFIANTE (currentUser)
-        // Então não podemos usar bookedByUserId para notificar o mandante.
-        // Precisamos buscar o capitão do time mensalista.
-        // Como não temos acesso fácil aqui, vamos pular a notificação ou enviar para o dono do campo como fallback?
-        // O ideal seria o backend resolver isso, mas estamos no front.
-        
-        if (selectedSlot.homeTeamType === 'OUTSIDE' && targetUserId) {
-           await api.createNotification({
-            userId: targetUserId,
-            title: "Novo Desafio! ⚔️",
-            description: `O time ${team.name} desafiou seu time para o dia ${selectedSlot.date.split('-').reverse().join('/')}.`,
-            type: 'info'
-          });
-        }
-      }
-
+      const res = await api.match(isFirstTeam ? 'book' : 'apply', selectedSlot.id, { teamName: team.name, category: selectedCategory });
       setSelectedSlot(null);
+      handleChanged();
+      alert(res.message || 'Solicitação enviada!');
+    } catch (e: any) {
+      alert(e.message || 'Erro ao solicitar.');
       onRefresh();
-      alert("Solicitação enviada!");
-    } catch (e) { 
-      alert("Erro ao solicitar."); 
-    }
-  };
-
-  const handleHomeApproval = async (slot: MatchSlot, approved: boolean) => {
-    try {
-      if (approved) {
-        await api.updateSlot(slot.id, { status: 'pending_field_approval' });
-        const field = fields.find(f => f.id === slot.fieldId);
-        if (field) {
-          await api.createNotification({
-            userId: field.ownerId,
-            title: "Desafio Aprovado pelo Mandante! ⚽",
-            description: `O mandante aprovou o desafio do time ${slot.opponentTeamName}. Agora você precisa aprovar.`,
-            type: 'info'
-          });
-        }
-        alert("Desafio aprovado! Aguardando aprovação da arena.");
-      } else {
-        const updateData: any = {
-          status: 'waiting_opponent', // Always waiting_opponent because Home Team (Mensalista or Outside) is still there
-          opponentTeamName: undefined,
-          opponentTeamCategory: undefined,
-          opponentTeamPhone: undefined,
-          opponentTeamLogoUrl: undefined,
-          opponentTeamGender: undefined,
-          receiptUrl: undefined,
-          receiptUploadedAt: undefined
-        };
-
-        // Se for mensalista, limpamos o bookedByUserId (que era o desafiante)
-        // Se for OUTSIDE, MANTEMOS o bookedByUserId (que é o mandante)
-        if (slot.homeTeamType === 'MENSALISTA') {
-            updateData.bookedByUserId = undefined;
-            updateData.bookedByTeamName = undefined; // Mensalista usa localTeamName
-            updateData.bookedByTeamCategory = undefined;
-            updateData.isBooked = true; // Mantém como ocupado (pelo mensalista)
-        } else {
-            // OUTSIDE
-            // Mantemos isBooked = true pois o mandante ainda está lá
-            updateData.isBooked = true;
-        }
-
-        await api.updateSlot(slot.id, updateData);
-        
-        // Notificar o desafiante que foi recusado
-        // O desafiante NÃO é o bookedByUserId no caso OUTSIDE (é o mandante)
-        // Mas não temos o ID do desafiante fácil aqui se não salvamos.
-        // No caso MENSALISTA, o bookedByUserId ERA o desafiante antes do update.
-        
-        if (slot.bookedByUserId && slot.homeTeamType === 'MENSALISTA') {
-          await api.createNotification({
-            userId: slot.bookedByUserId,
-            title: "Desafio Recusado ❌",
-            description: `O mandante não aceitou seu desafio.`,
-            type: 'warning'
-          });
-        }
-        // Para OUTSIDE, não temos o ID do desafiante salvo no slot (apenas nome/fone).
-        // Paciência.
-        
-        alert("Desafio recusado.");
-      }
-      onRefresh();
-    } catch (e) {
-      alert("Erro ao processar.");
-    }
-  };
-
-  const handleUploadReceipt = async (slot: MatchSlot, file: File) => {
-    const field = fields.find(f => f.id === slot.fieldId);
-    if (!field) return;
-
-    try {
-      const base64 = await convertFileToBase64(file);
-      
-      // Simulação de upload (em um app real, enviaria para storage)
-      // Aqui vamos apenas salvar a URL base64 ou uma URL fake por enquanto
-      // Mas o fluxo pede verificação por IA
-      
-      const expectedAmount = (slot.homeTeamType === 'OUTSIDE' || slot.homeTeamType === 'MENSALISTA') ? slot.price / 2 : slot.price;
-      const verification = await verifyPixReceipt(file, expectedAmount, field.pixConfig.name || field.name);
-      
-      if (!verification.isValid) {
-        alert(`Comprovante inválido: ${verification.reason}`);
-        return;
-      }
-
-      await api.updateSlot(slot.id, { 
-        status: 'pending_verification', 
-        receiptUrl: base64,
-        receiptUploadedAt: new Date().toISOString()
-      });
-
-      await api.createNotification({
-        userId: field.ownerId,
-        title: "Novo Comprovante PIX! 💸",
-        description: `O time ${slot.opponentTeamName || slot.bookedByTeamName} enviou o comprovante para o jogo do dia ${slot.date}.`,
-        type: 'success'
-      });
-
-      alert("Comprovante enviado com sucesso! A arena irá validar em breve.");
-      onRefresh();
-    } catch (e) {
-      alert("Erro ao enviar comprovante.");
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -518,6 +354,7 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
         logoUrl: team.logoUrl,
         captainName: currentUser.name,
         captainPhone: currentUser.phoneNumber,
+        captainUserId: currentUser.id,
         email: currentUser.email,
         gender: team.gender,
         sport: mensalistaSport,
@@ -740,7 +577,16 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
                         <span className="text-[9px] font-black bg-pitch text-grass-500 px-2 py-1 rounded-xl uppercase">
                           {slot.sport}
                         </span>
+                        <span className={`text-[9px] font-black px-2 py-1 rounded-xl uppercase ${normalizeMatchKind(slot.matchType) === 'FESTIVAL' ? 'bg-yellow-100 text-yellow-700' : normalizeMatchKind(slot.matchType) === 'AMISTOSO' ? 'bg-blue-50 text-blue-600' : 'bg-gray-100 text-gray-500'}`}>
+                          {MATCH_KIND_LABEL[normalizeMatchKind(slot.matchType)]}
+                        </span>
+                        {(field?.ratingCount || 0) > 0 && (
+                          <span className="text-[9px] font-black bg-yellow-50 text-yellow-700 px-2 py-1 rounded-xl uppercase">★ {field?.ratingAvg?.toFixed(1)}</span>
+                        )}
                      </div>
+                     {normalizeMatchKind(slot.matchType) === 'FESTIVAL' && slot.prizeDescription && (
+                        <p className="text-[9px] font-black text-yellow-700 uppercase mt-2 flex items-center gap-1"><Trophy className="w-3 h-3" /> Prêmio: {slot.prizeDescription}</p>
+                     )}
                   </div>
                 </div>
 
@@ -757,13 +603,16 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
                         <div className="flex-1">
                            <p className="text-[8px] font-black text-gray-400 uppercase">Mandante</p>
                            <div className="flex items-center gap-2">
-                              <p className="text-sm font-black text-pitch uppercase truncate">{slot.bookedByTeamName || slot.localTeamName || 'Livre'}</p>
+                              <p className="text-sm font-black text-pitch uppercase truncate">{(slot.hasLocalTeam ? slot.localTeamName : slot.bookedByTeamName) || 'Livre'}</p>
                               {(slot.bookedByTeamCategory || slot.localTeamCategory) && (
                                 <span className="text-[9px] font-bold text-grass-600 uppercase bg-grass-100 px-2 py-1 rounded-md">
                                   {slot.bookedByTeamCategory || slot.localTeamCategory}
                                 </span>
                               )}
                            </div>
+                           {slot.opponentTeamName && (
+                             <p className="text-[9px] font-black text-gray-400 uppercase mt-1 truncate">x {slot.opponentTeamName}</p>
+                           )}
                         </div>
                      </div>
                      <Swords className="w-5 h-5 text-gray-300" />
@@ -775,7 +624,13 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
                       <span className={`px-2 py-1 rounded-lg text-[8px] font-black uppercase mb-1 ${status.color}`}>
                          {status.label}
                       </span>
-                      <span className="text-xs font-black text-pitch">R$ {(slot.homeTeamType === 'OUTSIDE' || slot.homeTeamType === 'MENSALISTA') ? (slot.price / 2).toFixed(2) : slot.price}</span>
+                      <span className="text-xs font-black text-pitch">
+                        {(() => {
+                          const isNew = slot.status === 'available' && !hasHomeTeam(slot) && !slot.bookedByTeamName;
+                          const share = shareFor(slot, isNew ? 'FIRST' : 'OPPONENT');
+                          return share > 0 ? `${formatBRL(share)} por time${hasHomeTeam(slot) ? ' (adversário paga 100%)' : ''}` : 'Sem taxa';
+                        })()}
+                      </span>
                    </div>
                    {viewMode === 'EXPLORE' && (slot.status === 'available' || slot.status === 'waiting_opponent') && field?.ownerId !== currentUser.id && !((slot.bookedByTeamName && myTeamsNames.includes(slot.bookedByTeamName.toLowerCase())) || (slot.localTeamName && myTeamsNames.includes(slot.localTeamName.toLowerCase()))) &&
                      <Button onClick={() => setSelectedSlot(slot)} className="rounded-2xl px-8 py-4 font-black uppercase text-[10px] bg-pitch shadow-lg">
@@ -786,61 +641,7 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
                 
                 {viewMode === 'MY_BOOKINGS' && (
                    <div className="px-6 pb-6 space-y-4">
-                     {slot.status === 'pending_home_approval' && (
-                       (slot.homeTeamType === 'MENSALISTA' && currentUser.teams.some(t => t.name === slot.localTeamName)) ||
-                       (slot.homeTeamType === 'OUTSIDE' && slot.bookedByUserId === currentUser.id)
-                     ) && (
-                       <div className="bg-orange-50 p-4 rounded-2xl border border-orange-100">
-                         <p className="text-[10px] font-black text-orange-600 uppercase mb-3">Você foi desafiado! Aprovar partida?</p>
-                         <div className="grid grid-cols-2 gap-2">
-                            <Button onClick={() => handleHomeApproval(slot, false)} variant="outline" className="py-3 rounded-xl text-red-500 text-[9px]">Recusar</Button>
-                            <Button onClick={() => handleHomeApproval(slot, true)} className="py-3 rounded-xl bg-pitch text-white text-[9px]">Aprovar</Button>
-                         </div>
-                       </div>
-                     )}
-
-                     {slot.status === 'pending_payment' && (
-                       <div className="bg-blue-50 p-4 rounded-2xl border border-blue-100 space-y-3">
-                         <div className="flex justify-between items-center">
-                            <p className="text-[10px] font-black text-blue-600 uppercase">Pagamento Pendente</p>
-                            <span className="text-[9px] font-bold text-blue-400 uppercase">PIX</span>
-                         </div>
-                         <div className="bg-white p-3 rounded-xl border border-blue-100">
-                            <p className="text-[8px] font-black text-gray-400 uppercase mb-1">Chave PIX da Arena:</p>
-                            <div className="flex items-center gap-2">
-                               <p className="font-black text-pitch text-xs truncate">{field?.pixConfig.key || 'Não configurada'}</p>
-                               <button onClick={() => handleCopy(field?.pixConfig.key || '')} className="p-2 bg-gray-100 rounded-lg active:scale-90 transition-transform">
-                                  <Clipboard className="w-3 h-3 text-gray-400" />
-                               </button>
-                            </div>
-                            <p className="text-[8px] font-bold text-gray-400 mt-1 uppercase">{field?.pixConfig.name}</p>
-                             <div className="mt-2 pt-2 border-t border-dashed">
-                                <p className="text-[10px] font-black text-pitch uppercase">
-                                   Valor a Pagar: <span className="text-grass-600">R$ {(slot.homeTeamType === 'OUTSIDE' || slot.homeTeamType === 'MENSALISTA') ? (slot.price / 2).toFixed(2) : slot.price.toFixed(2)}</span>
-                                </p>
-                                {(slot.homeTeamType === 'OUTSIDE' || slot.homeTeamType === 'MENSALISTA') && <p className="text-[7px] font-bold text-gray-400 uppercase italic">* Valor dividido entre os dois times (50% cada)</p>}
-                             </div>
-                         </div>
-                         <div className="flex gap-2">
-                            <label className="flex-1">
-                               <div className="w-full py-3 bg-pitch text-white rounded-xl flex items-center justify-center gap-2 cursor-pointer active:scale-95 transition-all">
-                                  <Camera className="w-4 h-4" />
-                                  <span className="text-[9px] font-black uppercase">Anexar Comprovante</span>
-                               </div>
-                               <input 
-                                 type="file" 
-                                 accept="image/*" 
-                                 className="hidden" 
-                                 onChange={(e) => {
-                                   const file = e.target.files?.[0];
-                                   if (file) handleUploadReceipt(slot, file);
-                                 }} 
-                               />
-                            </label>
-                         </div>
-                         <p className="text-[8px] text-blue-400 font-bold uppercase italic">* O comprovante deve ser enviado em até 24h antes do jogo.</p>
-                       </div>
-                     )}
+                     <MatchActions slot={slot} field={field} currentUser={currentUser} onChanged={handleChanged} />
 
                      <div className="flex gap-2">
                         <button 
@@ -865,15 +666,6 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
                                 <Smartphone className="w-4 h-4" />
                                 <span className="text-[9px] font-black uppercase">Convidar Time</span>
                              </button>
-                             {onRateTeam && (
-                               <button 
-                                 onClick={onRateTeam}
-                                 className="flex-1 py-3 bg-yellow-50 text-yellow-600 rounded-xl flex items-center justify-center gap-2 border border-yellow-100 hover:bg-yellow-100 transition-all"
-                               >
-                                  <Trophy className="w-4 h-4" />
-                                  <span className="text-[9px] font-black uppercase">Avaliar</span>
-                               </button>
-                             )}
                           </div>
                         )}
                      </div>
@@ -920,7 +712,19 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
                  </div>
                )}
 
-               <Button onClick={handleBookingConfirm} disabled={!selectedCategory} className="w-full py-6 rounded-[2.5rem] font-black uppercase shadow-xl active:scale-95">Solicitar Agora</Button>
+               {(() => {
+                 const isNew = selectedSlot.status === 'available' && !hasHomeTeam(selectedSlot) && !selectedSlot.bookedByTeamName;
+                 const share = shareFor(selectedSlot, isNew ? 'FIRST' : 'OPPONENT');
+                 return (
+                   <div className="bg-gray-50 p-4 rounded-2xl border text-[10px] font-bold text-gray-500 uppercase space-y-1">
+                     <p className="text-pitch font-black">{isNew ? 'Você será o time 1 deste horário' : `Desafiar ${firstTeamNameOf(selectedSlot)}`}</p>
+                     <p>{share > 0 ? `Sua parte da taxa: ${formatBRL(share)} (PIX, depois da aprovação)` : 'Sem taxa (amistoso)'}</p>
+                     {isNew && <p>Depois de reservar, envie o convite para um adversário. Você aprova quem se inscrever.</p>}
+                   </div>
+                 );
+               })()}
+
+               <Button onClick={handleBookingConfirm} isLoading={isLoading} disabled={!selectedCategory} className="w-full py-6 rounded-[2.5rem] font-black uppercase shadow-xl active:scale-95">Solicitar Agora</Button>
             </div>
           </div>
         </div>

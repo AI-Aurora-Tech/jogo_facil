@@ -6,8 +6,10 @@ Sistema profissional de agendamento de partidas de futebol com inteligência art
 
 *   **Busca de Partidas:** Encontre adversários ou campos disponíveis.
 *   **Gestão de Campos:** Painel para donos de quadras gerenciarem horários.
-*   **Validação via IA:** O sistema usa a Gemini API para analisar comprovantes de PIX automaticamente, evitando fraudes.
-*   **Assinaturas:** Sistema de planos (Semanal, Mensal, Anual).
+*   **Fluxo de partidas:** time 1 aprova o adversário → pagamento PIX → campo aprova → placar e avaliação.
+*   **Pagamentos (Asaas):** PIX com split automático para o dono do campo; mensalidade por categoria para donos de time.
+*   **Convites:** link de convite que cria uma conta grátis já na categoria do jogo.
+*   **Avaliações:** times avaliam o adversário e o campo (estrelas + tags).
 *   **Recorrência:** Criação automática de agenda para times mensalistas.
 
 ## 🛠️ Tecnologias
@@ -19,9 +21,14 @@ Sistema profissional de agendamento de partidas de futebol com inteligência art
 
 ## 📦 Como rodar
 
-Este projeto está configurado para rodar no **Railway**.
+Hospedado na **Vercel** (tela em Vite + funções em `/api`) com banco no **Supabase**.
 
-1.  Certifique-se de definir a variável de ambiente `API_KEY` nas configurações do projeto com sua chave da Google AI Studio.
+Passo a passo de configuração (banco, Asaas, variáveis de ambiente): [`docs/FLUXO_E_PAGAMENTOS.md`](docs/FLUXO_E_PAGAMENTOS.md).
+
+*   `npm run dev` — só a tela
+*   `npx vercel dev` — tela + funções `/api`
+*   `npm test` — testes das regras de negócio
+*   `npm run lint` — checagem de tipos (app e servidor)
 
 ## 🔒 Segurança
 

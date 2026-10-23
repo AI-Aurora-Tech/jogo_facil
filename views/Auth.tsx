@@ -5,17 +5,22 @@ import { Button } from '../components/Button';
 import { Shield, MapPin, AlertCircle, KeyRound, ChevronLeft, Camera, LayoutGrid, Loader2, Eye, EyeOff, Info } from 'lucide-react';
 import { api } from '../api';
 import { convertFileToBase64, fetchAddressByCEP } from '../utils';
+import { formatBRL, CATEGORY_MONTHLY_PRICE, monthlyPriceForCategories } from '../shared/pricing';
 
 interface AuthProps {
   categories: string[];
   onLogin: (user: any) => void;
   onCancel: () => void;
+  initialMode?: AuthMode;
+  /** Cadastro vindo de um convite: conta de time com só a categoria do jogo (grátis). */
+  inviteCategory?: string;
 }
 
-type AuthMode = 'LOGIN' | 'REGISTER' | 'FORGOT_PASSWORD';
+export type AuthMode = 'LOGIN' | 'REGISTER' | 'FORGOT_PASSWORD';
 
-export const Auth: React.FC<AuthProps> = ({ onLogin, onCancel }) => {
-  const [mode, setMode] = useState<AuthMode>('LOGIN');
+export const Auth: React.FC<AuthProps> = ({ onLogin, onCancel, initialMode, inviteCategory }) => {
+  const [mode, setMode] = useState<AuthMode>(initialMode || 'LOGIN');
+  const isInviteSignup = mode === 'REGISTER' && !!inviteCategory;
   const [role, setRole] = useState<UserRole>(UserRole.TEAM_CAPTAIN);
   const [error, setError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
@@ -48,7 +53,7 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, onCancel }) => {
 
   // Captain Specific States
   const [teamName, setTeamName] = useState('');
-  const [teamCategories, setTeamCategories] = useState<string[]>([]);
+  const [teamCategories, setTeamCategories] = useState<string[]>(inviteCategory ? [inviteCategory] : []);
   const [teamGender, setTeamGender] = useState<Gender>('MASCULINO');
   const [teamSport, setTeamSport] = useState('Futebol');
   const [teamLogo, setTeamLogo] = useState('');
@@ -163,7 +168,12 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, onCancel }) => {
           } : undefined
         };
         const newUser = await api.register(payload);
-        onLogin(newUser);
+        // Entra logo em seguida para obter a sessão do servidor (usada em partidas e pagamentos)
+        try {
+          onLogin(await api.login(payload.email, password));
+        } catch {
+          onLogin(newUser);
+        }
       } else if (mode === 'LOGIN') {
         const user = await api.login(email, password);
         onLogin(user);
@@ -204,7 +214,12 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, onCancel }) => {
 
           {mode === 'REGISTER' && (
             <>
-              <div className="grid grid-cols-2 gap-3 mb-6">
+              {isInviteSignup && (
+                <div className="bg-grass-50 border border-grass-100 p-4 rounded-2xl text-[10px] font-bold text-grass-700 uppercase">
+                  Conta grátis de time para a categoria {inviteCategory}. Depois do cadastro você já entra no jogo do convite.
+                </div>
+              )}
+              <div className={`grid grid-cols-2 gap-3 mb-6 ${isInviteSignup ? 'hidden' : ''}`}>
                 <button type="button" onClick={() => setRole(UserRole.TEAM_CAPTAIN)} className={`p-4 rounded-[1.5rem] border-2 flex flex-col items-center gap-2 transition-all ${role === UserRole.TEAM_CAPTAIN ? 'border-pitch bg-pitch text-white' : 'border-gray-100 text-gray-300'}`}>
                    <Shield className="w-6 h-6" />
                    <span className="text-[10px] font-black uppercase">Sou Capitão</span>
@@ -267,8 +282,8 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, onCancel }) => {
                         </div>
                     </div>
 
-                    <p className="text-[9px] font-bold text-gray-400 uppercase mb-2">Quais categorias seu time joga?</p>
-                    <div className="grid grid-cols-4 gap-2">
+                    <p className="text-[9px] font-bold text-gray-400 uppercase mb-2">{isInviteSignup ? 'Categoria do jogo' : 'Quais categorias seu time joga?'}</p>
+                    <div className={`grid grid-cols-4 gap-2 ${isInviteSignup ? 'hidden' : ''}`}>
                        {CATEGORY_ORDER.map(cat => (
                          <button
                            key={cat}
@@ -281,12 +296,17 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, onCancel }) => {
                        ))}
                     </div>
                     
+                    {isInviteSignup && (
+                      <span className="inline-block px-4 py-2 rounded-xl text-[10px] font-black uppercase bg-pitch text-white">{inviteCategory}</span>
+                    )}
+
                     <div className="mt-6 bg-blue-50 border border-blue-100 p-4 rounded-xl flex items-start gap-3">
                        <Info className="w-5 h-5 text-blue-500 shrink-0 mt-0.5" />
                        <div>
-                          <p className="text-xs font-bold text-blue-900">Período de Teste Gratuito</p>
+                          <p className="text-xs font-bold text-blue-900">Mensalidade por categoria</p>
                           <p className="text-[10px] text-blue-700 mt-1 leading-relaxed">
-                             Sua conta de Capitão possui um período de teste de <strong>60 dias</strong>. Após esse período, o acesso completo ao sistema requer uma assinatura mensal no valor de <strong>R$ 19,90</strong>.
+                             Com <strong>1 categoria o app é grátis</strong>. A partir de 2, são <strong>{formatBRL(CATEGORY_MONTHLY_PRICE)} por categoria</strong> por mês.
+                             {teamCategories.length > 1 && <> Seu time: <strong>{formatBRL(monthlyPriceForCategories(teamCategories.length))}/mês</strong>.</>}
                           </p>
                        </div>
                     </div>
