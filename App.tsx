@@ -750,6 +750,7 @@ const App: React.FC = () => {
                     onUpdateField={async (id, u) => { await api.updateField(id, u); refreshData(); return true; }}
                     onRateTeam={() => {}}
                     forceTab={fieldDashForceTab}
+                    isAdminView={!!impersonatingUser}
                 />
               );
             })()

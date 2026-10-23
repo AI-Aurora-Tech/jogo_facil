@@ -56,6 +56,15 @@ stateDiagram-v2
 - Recusa do campo devolve o horário para a agenda e estorna o que foi pago.
 - 2h depois do fim do jogo: o time 1 recebe aviso para lançar o placar, e os dois times avaliam o adversário e o campo (o aviso automático usa `pg_cron`, ver passo 5).
 
+## 4.1 Configuração de recebimento do dono do campo
+
+O dono do campo vê o botão **Configurar pagamento** (no topo da Arena e na agenda). Ele abre o seu WhatsApp
+(`VITE_SUPPORT_WHATSAPP`) com a mensagem: *"Olá, me chamo {nome}, e criei conta no Jogo Facil agora, pode me
+ajudar a configurar a conta para receber meus pagamentos?"*.
+
+Para concluir: ajude a pessoa a abrir a conta Asaas dela, pegue o **Wallet ID**, entre no app como admin geral,
+"Acessar Conta" do dono do campo → Arena → **Recebimentos** → cole o Wallet ID → Salvar.
+
 ## 5. Convites
 
 Dono do campo, mensalista/time da casa ou o time 1 tocam em **Enviar convite**. O app gera um link
