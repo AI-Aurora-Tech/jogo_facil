@@ -55,6 +55,7 @@ export const MensalistaSubscriptionModal: React.FC<MensalistaSubscriptionModalPr
         logoUrl: team.logoUrl,
         captainName: currentUser.name,
         captainPhone: currentUser.phoneNumber,
+        captainUserId: currentUser.id,
         email: currentUser.email,
         gender: team.gender,
         sport: sport,

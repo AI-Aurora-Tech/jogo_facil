@@ -1,5 +1,135 @@
 import { supabase } from './supabaseClient';
-import { User, Field, MatchSlot, RegisteredTeam, PendingUpdate, UserRole, InAppNotification, SubscriptionPlan, TutorialVideo } from './types';
+import { User, Field, MatchSlot, RegisteredTeam, PendingUpdate, UserRole, InAppNotification, SubscriptionPlan, TutorialVideo, MatchPaymentInfo, InvitePreview } from './types';
+
+const SESSION_TOKEN_KEY = 'jf_session_token';
+const USER_COLUMNS = 'id, email, name, phone_number, role, subscription, subscription_expiry, teams, latitude, longitude, team_rating, team_rating_count, is_subscribed, subscription_id, created_at, billing_status, billing_value, cpf_cnpj';
+
+export const sessionToken = {
+  get: (): string | null => {
+    try { return localStorage.getItem(SESSION_TOKEN_KEY); } catch { return null; }
+  },
+  set: (token: string | null) => {
+    try {
+      if (token) localStorage.setItem(SESSION_TOKEN_KEY, token);
+      else localStorage.removeItem(SESSION_TOKEN_KEY);
+    } catch { /* navegador sem storage */ }
+  },
+};
+
+/** Erro vindo das funções do servidor (/api). `code` ajuda a tela a reagir (ex.: NEED_CPF). */
+export class ServerError extends Error {
+  code?: string;
+  status: number;
+  constructor(message: string, status: number, code?: string) {
+    super(message);
+    this.status = status;
+    this.code = code;
+  }
+}
+
+/** Admin geral acessando outra conta: as ações vão em nome dela. */
+let actAsUserId: string | null = null;
+export const setActAsUser = (id: string | null) => { actAsUserId = id; };
+
+const callServer = async <T = any>(path: string, body?: Record<string, unknown>, method: 'POST' | 'GET' = 'POST'): Promise<T> => {
+  const token = sessionToken.get();
+  let res: Response;
+  try {
+    res = await fetch(path, {
+      method,
+      headers: {
+        'content-type': 'application/json',
+        ...(token ? { authorization: `Bearer ${token}` } : {}),
+      },
+      body: method === 'POST' ? JSON.stringify({ ...(body || {}), ...(actAsUserId ? { actAsUserId } : {}) }) : undefined,
+    });
+  } catch {
+    throw new ServerError('Sem conexão com o servidor. Verifique sua internet.', 0, 'NETWORK');
+  }
+  const text = await res.text();
+  let data: any = {};
+  try { data = text ? JSON.parse(text) : {}; } catch { data = {}; }
+  const isJson = (res.headers.get('content-type') || '').includes('application/json');
+  if (res.ok && !isJson) {
+    // Ex.: "npm run dev" devolve o index.html para /api/* porque as funções da Vercel não rodam
+    throw new ServerError('Servidor indisponível. (Em desenvolvimento, rode com "vercel dev".)', 404, 'NO_SERVER');
+  }
+  if (!res.ok) {
+    if (data.code === 'SESSION_EXPIRED') {
+      try { window.dispatchEvent(new Event('jf:session-expired')); } catch { /* fora do navegador */ }
+    }
+    if (res.status === 404 && !data.error) {
+      throw new ServerError('Servidor indisponível. (Em desenvolvimento, rode com "vercel dev".)', 404, 'NO_SERVER');
+    }
+    throw new ServerError(data.error || 'Erro no servidor.', res.status, data.code);
+  }
+  return data as T;
+};
+
+const mapSlotFromDb = (s: any): MatchSlot => ({
+  id: s.id,
+  fieldId: s.field_id,
+  date: s.date,
+  time: typeof s.time === 'string' ? s.time.slice(0, 5) : s.time,
+  durationMinutes: s.duration_minutes,
+  matchType: s.match_type,
+  isBooked: s.is_booked,
+  hasLocalTeam: s.has_local_team,
+  localTeamName: s.local_team_name,
+  localTeamCategory: s.local_team_category,
+  localTeamPhone: s.local_team_phone,
+  localTeamLogoUrl: s.local_team_logo_url,
+  localTeamGender: s.local_team_gender,
+  bookedByUserId: s.booked_by_user_id,
+  bookedByTeamName: s.booked_by_team_name,
+  bookedByTeamCategory: s.booked_by_category,
+  bookedByTeamLogoUrl: s.booked_by_team_logo_url,
+  bookedByTeamGender: s.booked_by_team_gender,
+  bookedByUserPhone: s.booked_by_user_phone,
+  opponentTeamName: s.opponent_team_name,
+  opponentTeamCategory: s.opponent_team_category,
+  opponentTeamPhone: s.opponent_team_phone,
+  opponentTeamLogoUrl: s.opponent_team_logo_url,
+  opponentTeamGender: s.opponent_team_gender,
+  status: s.status,
+  price: Number(s.price) || 0,
+  allowedOpponentCategories: s.allowed_opponent_categories || [],
+  allowedOpponentGenders: s.allowed_opponent_genders || [],
+  receiptUrl: s.receipt_url,
+  receiptUploadedAt: s.receipt_uploaded_at,
+  courtName: s.court_name,
+  sport: s.sport,
+  homeTeamType: s.home_team_type || 'OUTSIDE',
+  pixKey: s.pix_key,
+  prizeDescription: s.prize_description,
+  homeTeamUserId: s.home_team_user_id,
+  opponentUserId: s.opponent_user_id,
+  firstTeamPaid: !!s.first_team_paid,
+  opponentPaid: !!s.opponent_paid,
+  homeScore: s.home_score,
+  awayScore: s.away_score,
+  resultSetAt: s.result_set_at,
+  fieldDecisionReason: s.field_decision_reason,
+});
+
+const mapFieldFromDb = (f: any): Field => ({
+  id: f.id,
+  ownerId: f.owner_id,
+  name: f.name,
+  location: f.location,
+  hourlyRate: f.hourly_rate,
+  cancellationFeePercent: f.cancellation_fee_percent,
+  pixConfig: { key: f.pix_key || '', name: (f.pix_name || '').split('|')[0]?.trim() || '', bank: (f.pix_name || '').split('|')[1]?.trim() || '' },
+  imageUrl: f.image_url,
+  contactPhone: f.contact_phone,
+  latitude: Number(f.latitude) || 0,
+  longitude: Number(f.longitude) || 0,
+  courts: f.courts || ['Principal'],
+  complement: f.complement,
+  payoutStatus: f.payout_status || 'NONE',
+  ratingAvg: Number(f.rating_avg) || 0,
+  ratingCount: f.rating_count || 0,
+});
 
 function normalizeSport(sport: string): string {
   return sport.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase();
@@ -21,12 +151,27 @@ const mapUserFromDb = (u: any): User => ({
   password: u.password || undefined, // Password may be missing if using secure RPC
   createdAt: u.created_at,
   isSubscribed: u.role === UserRole.FIELD_OWNER || u.is_subscribed || u.subscription === SubscriptionPlan.PRO_TEAM || u.subscription === SubscriptionPlan.PRO_FIELD,
-  subscriptionId: u.subscription_id
+  subscriptionId: u.subscription_id,
+  billingStatus: u.billing_status || undefined,
+  billingValue: u.billing_value != null ? Number(u.billing_value) : undefined,
+  cpfCnpj: u.cpf_cnpj || undefined,
 });
+
+export type MatchAction = 'book' | 'apply' | 'team_decision' | 'payment_status' | 'field_decision' | 'cancel' | 'set_result' | 'rate' | 'my_ratings';
 
 export const api = {
   login: async (email: string, password: string): Promise<User> => {
     const normalizedEmail = email.toLowerCase().trim();
+
+    // Login pelo servidor: devolve a sessão usada nas ações de partida/pagamento
+    try {
+      const { user, token } = await callServer<{ user: any; token: string }>('/api/auth/login', { email: normalizedEmail, password });
+      sessionToken.set(token);
+      return mapUserFromDb(user);
+    } catch (err: any) {
+      if (!(err instanceof ServerError) || (err.code !== 'NO_SERVER' && err.code !== 'NETWORK' && err.status < 500)) throw err;
+      console.warn('Servidor /api indisponível, entrando sem sessão (ações de partida ficarão bloqueadas).');
+    }
     
     // Usando a função RPC segura para evitar expor a senha no front-end
     const { data: user, error } = await supabase.rpc('login_user', {
@@ -68,7 +213,7 @@ export const api = {
         teams: userFields.teams || [],
         created_at: new Date().toISOString()
       }])
-      .select('id, email, name, phone_number, role, subscription, subscription_expiry, teams, latitude, longitude, team_rating, team_rating_count, is_subscribed, subscription_id, created_at')
+      .select(USER_COLUMNS)
       .single();
 
     if (userError) throw userError;
@@ -117,24 +262,15 @@ export const api = {
       .from('user')
       .update(payload)
       .eq('id', user.id)
-      .select('id, email, name, phone_number, role, subscription, subscription_expiry, teams, latitude, longitude, team_rating, team_rating_count, is_subscribed, subscription_id, created_at')
+      .select(USER_COLUMNS)
       .single();
     if (error) throw error;
     return mapUserFromDb(data);
   },
 
-  confirmProSubscription: async (userId: string, subscriptionId: string): Promise<User> => {
-    const { data, error } = await supabase
-      .from('user')
-      .update({ 
-        is_subscribed: true,
-        subscription_id: subscriptionId,
-        subscription: SubscriptionPlan.PRO_TEAM // ou determinar dinamicamente se necessário
-      })
-      .eq('id', userId)
-      .select()
-      .single();
-
+  /** Recarrega o usuário logado (ex.: depois de pagar a mensalidade). */
+  getUserById: async (userId: string): Promise<User> => {
+    const { data, error } = await supabase.from('user').select(USER_COLUMNS).eq('id', userId).single();
     if (error) throw error;
     return mapUserFromDb(data);
   },
@@ -170,7 +306,7 @@ export const api = {
   getAllUsers: async (): Promise<User[]> => {
     const { data, error } = await supabase
       .from('user')
-      .select('id, email, name, phone_number, role, subscription, subscription_expiry, teams, latitude, longitude, team_rating, team_rating_count, is_subscribed, subscription_id, created_at')
+      .select(USER_COLUMNS)
       .order('name');
     if (error) throw error;
     return (data || []).map(mapUserFromDb);
@@ -218,21 +354,7 @@ export const api = {
   getFields: async (): Promise<Field[]> => {
     const { data, error } = await supabase.from('field').select('*');
     if (error) throw error;
-    return (data || []).map(f => ({
-        id: f.id,
-        ownerId: f.owner_id,
-        name: f.name,
-        location: f.location,
-        hourlyRate: f.hourly_rate,
-        cancellationFeePercent: f.cancellation_fee_percent,
-        pixConfig: { key: f.pix_key || '', name: (f.pix_name || '').split('|')[0]?.trim() || '', bank: (f.pix_name || '').split('|')[1]?.trim() || '' },
-        imageUrl: f.image_url,
-        contactPhone: f.contact_phone,
-        latitude: Number(f.latitude) || 0,
-        longitude: Number(f.longitude) || 0,
-        courts: f.courts || ['Principal'],
-        complement: f.complement
-    }));
+    return (data || []).map(mapFieldFromDb);
   },
 
   updateField: async (fieldId: string, updates: Partial<Field>): Promise<Field> => {
@@ -254,21 +376,7 @@ export const api = {
     }
     const { data, error } = await supabase.from('field').update(payload).eq('id', fieldId).select().single();
     if (error) throw error;
-    return {
-        id: data.id,
-        ownerId: data.owner_id,
-        name: data.name,
-        location: data.location,
-        hourlyRate: data.hourly_rate,
-        cancellationFeePercent: data.cancellation_fee_percent,
-        pixConfig: { key: data.pix_key || '', name: (data.pix_name || '').split('|')[0]?.trim() || '', bank: (data.pix_name || '').split('|')[1]?.trim() || '' },
-        imageUrl: data.image_url,
-        contactPhone: data.contact_phone,
-        latitude: Number(data.latitude) || 0,
-        longitude: Number(data.longitude) || 0,
-        courts: data.courts || ['Principal'],
-        complement: data.complement
-    };
+    return mapFieldFromDb(data);
   },
 
   getSlots: async (): Promise<MatchSlot[]> => {
@@ -280,41 +388,7 @@ export const api = {
       .order('date')
       .order('time');
     if (error) throw error;
-    return (data || []).map(s => ({
-      id: s.id,
-      fieldId: s.field_id,
-      date: s.date,
-      time: s.time,
-      durationMinutes: s.duration_minutes,
-      matchType: s.match_type,
-      isBooked: s.is_booked,
-      hasLocalTeam: s.has_local_team,
-      localTeamName: s.local_team_name,
-      localTeamCategory: s.local_team_category,
-      localTeamPhone: s.local_team_phone,
-      localTeamLogoUrl: s.local_team_logo_url,
-      localTeamGender: s.local_team_gender,
-      bookedByUserId: s.booked_by_user_id,
-      bookedByTeamName: s.booked_by_team_name,
-      bookedByTeamCategory: s.booked_by_category,
-      bookedByTeamLogoUrl: s.booked_by_team_logo_url,
-      bookedByUserPhone: s.booked_by_user_phone,
-      opponentTeamName: s.opponent_team_name,
-      opponentTeamCategory: s.opponent_team_category,
-      opponentTeamPhone: s.opponent_team_phone,
-      opponentTeamLogoUrl: s.opponent_team_logo_url,
-      opponentTeamGender: s.opponent_team_gender,
-      status: s.status,
-      price: s.price,
-      allowedOpponentCategories: s.allowed_opponent_categories || [],
-      receiptUrl: s.receipt_url,
-      receiptUploadedAt: s.receipt_uploaded_at,
-      aiVerificationResult: s.ai_verification_result,
-      courtName: s.court_name,
-      sport: s.sport,
-      homeTeamType: s.home_team_type || 'OUTSIDE',
-      pixKey: s.pix_key
-    })) as unknown as MatchSlot[];
+    return (data || []).map(mapSlotFromDb);
   },
   
   getSlotsByFieldId: async (fieldId: string, includeHistory: boolean = false): Promise<MatchSlot[]> => {
@@ -330,99 +404,32 @@ export const api = {
 
     const { data, error } = await query.order('date').order('time');
     if (error) throw error;
-    return (data || []).map(s => ({
-      id: s.id,
-      fieldId: s.field_id,
-      date: s.date,
-      time: s.time,
-      durationMinutes: s.duration_minutes,
-      matchType: s.match_type,
-      isBooked: s.is_booked,
-      hasLocalTeam: s.has_local_team,
-      localTeamName: s.local_team_name,
-      localTeamCategory: s.local_team_category,
-      localTeamPhone: s.local_team_phone,
-      localTeamLogoUrl: s.local_team_logo_url,
-      localTeamGender: s.local_team_gender,
-      bookedByUserId: s.booked_by_user_id,
-      bookedByTeamName: s.booked_by_team_name,
-      bookedByTeamCategory: s.booked_by_category,
-      bookedByTeamLogoUrl: s.booked_by_team_logo_url,
-      bookedByUserPhone: s.booked_by_user_phone,
-      opponentTeamName: s.opponent_team_name,
-      opponentTeamCategory: s.opponent_team_category,
-      opponentTeamPhone: s.opponent_team_phone,
-      opponentTeamLogoUrl: s.opponent_team_logo_url,
-      opponentTeamGender: s.opponent_team_gender,
-      status: s.status,
-      price: s.price,
-      allowedOpponentCategories: s.allowed_opponent_categories || [],
-      receiptUrl: s.receipt_url,
-      receiptUploadedAt: s.receipt_uploaded_at,
-      aiVerificationResult: s.ai_verification_result,
-      courtName: s.court_name,
-      sport: s.sport,
-      homeTeamType: s.home_team_type || 'OUTSIDE',
-      pixKey: s.pix_key
-    })) as unknown as MatchSlot[];
+    return (data || []).map(mapSlotFromDb);
   },
 
-  getSlotsForTeam: async (userId: string, teamNames: string[] = []): Promise<MatchSlot[]> => {
-    const today = new Date().toISOString().split('T')[0];
+  /** Jogos do time. Com includeHistory, traz também os últimos 90 dias (placar e avaliação). */
+  getSlotsForTeam: async (userId: string, teamNames: string[] = [], includeHistory = false): Promise<MatchSlot[]> => {
+    const from = new Date(Date.now() - (includeHistory ? 90 : 0) * 86400000).toISOString().split('T')[0];
     
     let query = supabase
       .from('match_slot')
       .select('*')
-      .gte('date', today)
+      .gte('date', from)
       .order('date')
       .order('time');
 
     if (teamNames.length > 0) {
         const namesList = teamNames.map(n => `"${n.replace(/"/g, '')}"`).join(',');
-        const orCondition = `booked_by_user_id.eq.${userId},local_team_name.in.(${namesList}),opponent_team_name.in.(${namesList}),booked_by_team_name.in.(${namesList})`;
+        const orCondition = `booked_by_user_id.eq.${userId},home_team_user_id.eq.${userId},opponent_user_id.eq.${userId},local_team_name.in.(${namesList}),opponent_team_name.in.(${namesList}),booked_by_team_name.in.(${namesList})`;
         query = query.or(orCondition);
     } else {
-        query = query.eq('booked_by_user_id', userId);
+        query = query.or(`booked_by_user_id.eq.${userId},home_team_user_id.eq.${userId},opponent_user_id.eq.${userId}`);
     }
 
     const { data, error } = await query;
 
     if (error) throw error;
-    return (data || []).map(s => ({
-      id: s.id,
-      fieldId: s.field_id,
-      date: s.date,
-      time: s.time,
-      durationMinutes: s.duration_minutes,
-      matchType: s.match_type,
-      isBooked: s.is_booked,
-      hasLocalTeam: s.has_local_team,
-      localTeamName: s.local_team_name,
-      localTeamCategory: s.local_team_category,
-      localTeamPhone: s.local_team_phone,
-      localTeamLogoUrl: s.local_team_logo_url,
-      localTeamGender: s.local_team_gender,
-      bookedByUserId: s.booked_by_user_id,
-      bookedByTeamName: s.booked_by_team_name,
-      bookedByTeamCategory: s.booked_by_category,
-      bookedByTeamLogoUrl: s.booked_by_team_logo_url,
-      bookedByUserPhone: s.booked_by_user_phone,
-      opponentTeamName: s.opponent_team_name,
-      opponentTeamCategory: s.opponent_team_category,
-      opponentTeamPhone: s.opponent_team_phone,
-      opponentTeamLogoUrl: s.opponent_team_logo_url,
-      opponentTeamGender: s.opponent_team_gender,
-      status: s.status,
-      price: s.price,
-      allowedOpponentCategories: s.allowed_opponent_categories || [],
-      receiptUrl: s.receipt_url,
-      receiptUploadedAt: s.receipt_uploaded_at,
-      aiVerificationResult: s.ai_verification_result,
-      courtName: s.court_name,
-      sport: s.sport,
-      homeTeamType: s.home_team_type || 'OUTSIDE',
-      pixKey: s.pix_key
-    })) as unknown as MatchSlot[];
+    return (data || []).map(mapSlotFromDb);
   },
 
   getSlotHistory: async (fieldId: string): Promise<MatchSlot[]> => {
@@ -436,41 +443,7 @@ export const api = {
       .order('time', { ascending: false })
       .limit(50);
     if (error) throw error;
-    return (data || []).map(s => ({
-      id: s.id,
-      fieldId: s.field_id,
-      date: s.date,
-      time: s.time,
-      durationMinutes: s.duration_minutes,
-      matchType: s.match_type,
-      isBooked: s.is_booked,
-      hasLocalTeam: s.has_local_team,
-      localTeamName: s.local_team_name,
-      localTeamCategory: s.local_team_category,
-      localTeamPhone: s.local_team_phone,
-      localTeamLogoUrl: s.local_team_logo_url,
-      localTeamGender: s.local_team_gender,
-      bookedByUserId: s.booked_by_user_id,
-      bookedByTeamName: s.booked_by_team_name,
-      bookedByTeamCategory: s.booked_by_category,
-      bookedByTeamLogoUrl: s.booked_by_team_logo_url,
-      bookedByUserPhone: s.booked_by_user_phone,
-      opponentTeamName: s.opponent_team_name,
-      opponentTeamCategory: s.opponent_team_category,
-      opponentTeamPhone: s.opponent_team_phone,
-      opponentTeamLogoUrl: s.opponent_team_logo_url,
-      opponentTeamGender: s.opponent_team_gender,
-      status: s.status,
-      price: s.price,
-      allowedOpponentCategories: s.allowed_opponent_categories || [],
-      receiptUrl: s.receipt_url,
-      receiptUploadedAt: s.receipt_uploaded_at,
-      aiVerificationResult: s.ai_verification_result,
-      courtName: s.court_name,
-      sport: s.sport,
-      homeTeamType: s.home_team_type || 'OUTSIDE',
-      pixKey: s.pix_key
-    })) as unknown as MatchSlot[];
+    return (data || []).map(mapSlotFromDb);
   },
 
   createSlots: async (slots: Partial<MatchSlot>[]): Promise<MatchSlot[]> => {
@@ -479,7 +452,9 @@ export const api = {
       date: s.date,
       time: s.time,
       duration_minutes: s.durationMinutes,
-      match_type: s.matchType || 'ALUGUEL',
+      match_type: s.matchType || 'NORMAL',
+      prize_description: s.prizeDescription || null,
+      allowed_opponent_genders: s.allowedOpponentGenders || [],
       is_booked: s.isBooked || false,
       has_local_team: s.hasLocalTeam || false,
       local_team_name: s.localTeamName || null,
@@ -507,51 +482,66 @@ export const api = {
       receipt_uploaded_at: s.receiptUploadedAt || null,
       pix_key: s.pixKey || null
     }));
-    const { data, error } = await supabase.from('match_slot').insert(payload).select('id');
+    const { data, error } = await supabase.from('match_slot').insert(payload).select('*');
     if (error) throw error;
-    return data.map((d, index) => ({
-      ...slots[index],
-      id: d.id
-    })) as unknown as MatchSlot[];
+    return (data || []).map(mapSlotFromDb);
   },
 
+  /**
+   * Edição do horário pelo dono do campo (data, hora, preço, mandante...).
+   * Status, times inscritos, pagamento e placar só mudam pelo servidor: use api.match().
+   */
   updateSlot: async (slotId: string, data: Partial<MatchSlot>): Promise<void> => {
     const payload: any = {};
-    if (data.status) payload.status = data.status;
-    if (data.isBooked !== undefined) payload.is_booked = data.isBooked;
-    if (data.receiptUrl !== undefined) payload.receipt_url = data.receiptUrl;
-    if (data.receiptUploadedAt !== undefined) payload.receipt_uploaded_at = data.receiptUploadedAt;
-    if (data.bookedByTeamName !== undefined) payload.booked_by_team_name = data.bookedByTeamName;
-    if (data.opponentTeamName !== undefined) payload.opponent_team_name = data.opponentTeamName;
-    if (data.opponentTeamCategory !== undefined) payload.opponent_team_category = data.opponentTeamCategory;
-    if (data.opponentTeamPhone !== undefined) payload.opponent_team_phone = data.opponentTeamPhone;
-    if (data.opponentTeamLogoUrl !== undefined) payload.opponent_team_logo_url = data.opponentTeamLogoUrl;
-    if (data.opponentTeamGender !== undefined) payload.opponent_team_gender = data.opponentTeamGender;
-    if (data.bookedByUserId !== undefined) payload.booked_by_user_id = data.bookedByUserId;
-    if (data.bookedByTeamCategory !== undefined) payload.booked_by_category = data.bookedByTeamCategory;
-    if (data.bookedByTeamLogoUrl !== undefined) payload.booked_by_team_logo_url = data.bookedByTeamLogoUrl;
-    if (data.bookedByUserPhone !== undefined) payload.booked_by_user_phone = data.bookedByUserPhone;
-    
-    // Missing fields from previous implementation
     if (data.date !== undefined) payload.date = data.date;
     if (data.time !== undefined) payload.time = data.time;
     if (data.durationMinutes !== undefined) payload.duration_minutes = data.durationMinutes;
     if (data.matchType !== undefined) payload.match_type = data.matchType;
+    if (data.prizeDescription !== undefined) payload.prize_description = data.prizeDescription || null;
     if (data.hasLocalTeam !== undefined) payload.has_local_team = data.hasLocalTeam;
     if (data.localTeamName !== undefined) payload.local_team_name = data.localTeamName;
     if (data.localTeamCategory !== undefined) payload.local_team_category = data.localTeamCategory;
     if (data.localTeamPhone !== undefined) payload.local_team_phone = data.localTeamPhone;
     if (data.localTeamGender !== undefined) payload.local_team_gender = data.localTeamGender;
     if (data.localTeamLogoUrl !== undefined) payload.local_team_logo_url = data.localTeamLogoUrl;
+    if (data.homeTeamType !== undefined) payload.home_team_type = data.homeTeamType;
     if (data.price !== undefined) payload.price = data.price;
     if (data.courtName !== undefined) payload.court_name = data.courtName;
     if (data.sport !== undefined) payload.sport = data.sport;
     if (data.allowedOpponentCategories !== undefined) payload.allowed_opponent_categories = data.allowedOpponentCategories;
+    if (data.allowedOpponentGenders !== undefined) payload.allowed_opponent_genders = data.allowedOpponentGenders;
     if (data.pixKey !== undefined) payload.pix_key = data.pixKey;
+    if (Object.keys(payload).length === 0) return;
 
     const { error } = await supabase.from('match_slot').update(payload).eq('id', slotId);
     if (error) throw error;
   },
+
+  // ------------------------------------------------------------------
+  // Ações no servidor (/api): fluxo da partida, pagamentos, convites
+  // ------------------------------------------------------------------
+
+  /** Executa uma etapa do fluxo da partida no servidor. */
+  match: <T = { message?: string }>(action: MatchAction, slotId: string, params: Record<string, unknown> = {}) =>
+    callServer<T>('/api/matches', { action, slotId, ...params }),
+
+  payMatch: (slotId: string, cpfCnpj?: string) =>
+    callServer<{ payment: MatchPaymentInfo }>('/api/matches', { action: 'pay', slotId, cpfCnpj }),
+
+  matchPayments: async (slotId: string) => {
+    const res = await callServer<{ slot: any; payments: MatchPaymentInfo[] }>('/api/matches', { action: 'payment_status', slotId });
+    return { slot: mapSlotFromDb(res.slot), payments: res.payments };
+  },
+
+  createInvite: (slotId: string) => callServer<{ token: string; url: string; message: string }>('/api/invites', { slotId }),
+
+  getInvite: (token: string) => callServer<InvitePreview>(`/api/invites?token=${encodeURIComponent(token)}`, undefined, 'GET'),
+
+  billing: (action: 'status' | 'subscribe' | 'sync', params: Record<string, unknown> = {}) =>
+    callServer<{ categories: number; value: number; billingStatus: string; invoiceUrl?: string | null; hasCpf?: boolean }>('/api/billing', { action, ...params }),
+
+  payouts: (action: 'status' | 'set_wallet' | 'create_account', fieldId: string, params: Record<string, unknown> = {}) =>
+    callServer<{ payoutStatus: string; hasWallet: boolean; walletIdEnd?: string | null; platformFeePercent?: number; message?: string }>('/api/payouts', { action, fieldId, ...params }),
 
   getWhatsAppLink: (phone: string, message: string) => {
     const cleanPhone = phone.replace(/\D/g, '');
@@ -605,6 +595,7 @@ export const api = {
       createdAt: t.created_at,
       captainName: t.captain_name,
       captainPhone: t.captain_phone,
+      captainUserId: t.captain_user_id,
       email: t.email,
       gender: t.gender,
       sport: t.sport,
@@ -628,6 +619,7 @@ export const api = {
       createdAt: t.created_at,
       captainName: t.captain_name,
       captainPhone: t.captain_phone,
+      captainUserId: t.captain_user_id,
       email: t.email,
       gender: t.gender,
       sport: t.sport,
@@ -648,6 +640,7 @@ export const api = {
       logo_url: team.logoUrl,
       captain_name: team.captainName,
       captain_phone: team.captainPhone,
+      captain_user_id: team.captainUserId || null,
       email: team.email,
       gender: team.gender,
       sport: team.sport ? normalizeSport(team.sport) : 'FUTEBOL',

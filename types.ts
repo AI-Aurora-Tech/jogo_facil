@@ -14,7 +14,8 @@ export enum SubscriptionPlan {
   PRO_TEAM = 'PRO_TEAM'
 }
 
-export type MatchType = 'AMISTOSO' | 'FESTIVAL' | 'ALUGUEL' | 'FIXO';
+// NORMAL / FESTIVAL / AMISTOSO. 'ALUGUEL' e 'FIXO' são valores antigos e contam como NORMAL.
+export type MatchType = 'NORMAL' | 'AMISTOSO' | 'FESTIVAL' | 'ALUGUEL' | 'FIXO';
 export type Gender = 'MASCULINO' | 'FEMININO' | 'MISTO';
 
 export interface TeamConfig {
@@ -43,6 +44,10 @@ export interface User {
   createdAt: string; // ISO 8601 date string
   isSubscribed?: boolean;
   subscriptionId?: string;
+  /** FREE | ACTIVE | PENDING | OVERDUE | CANCELED (mensalidade por categoria) */
+  billingStatus?: string;
+  billingValue?: number;
+  cpfCnpj?: string;
 }
 
 export interface InAppNotification {
@@ -76,9 +81,14 @@ export interface Field {
   longitude: number;
   courts: string[];
   complement?: string;
+  payoutStatus?: string;
+  ratingAvg?: number;
+  ratingCount?: number;
 }
 
-export type MatchStatus = 'available' | 'pending_home_approval' | 'pending_field_approval' | 'pending_payment' | 'pending_verification' | 'confirmed' | 'rejected' | 'waiting_opponent';
+// Fluxo: available -> waiting_opponent -> pending_home_approval -> pending_payment -> pending_field_approval -> confirmed -> finished
+// (ver shared/matchRules.ts). 'pending_verification' é do fluxo antigo de comprovante PIX.
+export type MatchStatus = 'available' | 'pending_home_approval' | 'pending_field_approval' | 'pending_payment' | 'pending_verification' | 'confirmed' | 'finished' | 'rejected' | 'waiting_opponent';
 
 export interface MatchSlot {
   id: string;
@@ -116,6 +126,49 @@ export interface MatchSlot {
   courtName?: string;
   sport: string;
   pixKey?: string;
+  prizeDescription?: string;
+  homeTeamUserId?: string;
+  opponentUserId?: string;
+  firstTeamPaid?: boolean;
+  opponentPaid?: boolean;
+  homeScore?: number | null;
+  awayScore?: number | null;
+  resultSetAt?: string;
+  fieldDecisionReason?: string;
+}
+
+export interface MatchPaymentInfo {
+  id: string;
+  role: 'FIRST' | 'OPPONENT';
+  teamName?: string;
+  amount: number;
+  status: 'PENDING' | 'PAID' | 'REFUNDED' | 'CANCELED' | 'OVERDUE';
+  paidAt?: string;
+  invoiceUrl?: string;
+  pixPayload?: string;
+  pixQrBase64?: string;
+  pixExpiresAt?: string;
+}
+
+export interface InvitePreview {
+  token: string;
+  open: boolean;
+  slotId: string;
+  date: string;
+  time: string;
+  durationMinutes: number;
+  sport: string;
+  courtName?: string;
+  matchKind: 'NORMAL' | 'FESTIVAL' | 'AMISTOSO';
+  matchKindLabel: string;
+  prizeDescription?: string;
+  homeTeamName: string;
+  homeTeamLogoUrl?: string;
+  category?: string;
+  allowedCategories: string[];
+  allowedGenders: string[];
+  opponentShare: number;
+  field: { id: string; name: string; location: string; imageUrl?: string; ratingAvg: number; ratingCount: number };
 }
 
 export interface RegisteredTeam {
@@ -130,6 +183,7 @@ export interface RegisteredTeam {
   createdAt: string;
   captainName?: string;
   captainPhone?: string;
+  captainUserId?: string;
   email?: string;
   gender: Gender;
   sport: string;

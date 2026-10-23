@@ -1,4 +1,3 @@
-
 {
   "name": "jogo-facil",
   "private": true,
@@ -11,7 +10,8 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit && tsc --noEmit -p tsconfig.api.json",
+    "test": "node --test shared/*.test.ts"
   },
   "dependencies": {
     "@google/genai": "^1.30.0",
@@ -21,6 +21,7 @@
     "react-dom": "^18.3.1"
   },
   "devDependencies": {
+    "@types/node": "^22.20.5",
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
     "@vitejs/plugin-react": "^4.3.1",

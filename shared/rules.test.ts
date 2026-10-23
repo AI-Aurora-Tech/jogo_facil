@@ -1,0 +1,112 @@
+// Testes das regras de negócio. Rodar com: npm test
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { countBillableCategories, monthlyPriceForCategories, monthlyPriceForTeams } from './pricing.ts';
+import {
+  computeShares,
+  opponentApproverId,
+  statusAfterTeamApproval,
+  canSetResult,
+  canRate,
+  matchStart,
+  overlaps,
+  normalizeMatchKind,
+  type SlotLike,
+} from './matchRules.ts';
+
+const baseSlot = (over: Partial<SlotLike> = {}): SlotLike => ({
+  status: 'waiting_opponent',
+  price: 200,
+  matchType: 'NORMAL',
+  homeTeamType: 'OUTSIDE',
+  hasLocalTeam: false,
+  date: '2026-11-10',
+  time: '19:00',
+  durationMinutes: 60,
+  bookedByUserId: 'first-team',
+  homeTeamUserId: null,
+  ...over,
+});
+
+test('mensalidade: 1 categoria é grátis', () => {
+  assert.equal(monthlyPriceForCategories(0), 0);
+  assert.equal(monthlyPriceForCategories(1), 0);
+});
+
+test('mensalidade: R$ 19,99 por categoria a partir de 2', () => {
+  assert.equal(monthlyPriceForCategories(2), 39.98);
+  assert.equal(monthlyPriceForCategories(3), 59.97);
+});
+
+test('mensalidade: conta categorias por time, sem duplicar', () => {
+  const teams = [
+    { name: 'Time A', categories: ['Sub-11', 'Sub-12', 'sub-11'] },
+    { name: 'Time B', categories: ['Sub-11'] },
+  ];
+  assert.equal(countBillableCategories(teams), 3);
+  assert.equal(monthlyPriceForTeams(teams), 59.97);
+});
+
+test('taxa: 2 times de fora pagam 50% cada', () => {
+  assert.deepEqual(computeShares(baseSlot({ price: 200 })), [
+    { role: 'FIRST', amount: 100 },
+    { role: 'OPPONENT', amount: 100 },
+  ]);
+});
+
+test('taxa: centavo ímpar fica com o adversário', () => {
+  assert.deepEqual(computeShares(baseSlot({ price: 99.99 })), [
+    { role: 'FIRST', amount: 49.99 },
+    { role: 'OPPONENT', amount: 50 },
+  ]);
+});
+
+test('taxa: mensalista ou time da casa -> adversário paga 100%', () => {
+  for (const homeTeamType of ['MENSALISTA', 'LOCAL']) {
+    assert.deepEqual(computeShares(baseSlot({ price: 300, homeTeamType, hasLocalTeam: true })), [
+      { role: 'OPPONENT', amount: 300 },
+    ]);
+  }
+});
+
+test('taxa: amistoso é R$ 0 e pula o pagamento', () => {
+  const slot = baseSlot({ matchType: 'AMISTOSO', price: 200 });
+  assert.deepEqual(computeShares(slot), []);
+  assert.equal(statusAfterTeamApproval(slot), 'pending_field_approval');
+  assert.equal(statusAfterTeamApproval(baseSlot()), 'pending_payment');
+});
+
+test('tipos legados viram partida normal', () => {
+  assert.equal(normalizeMatchKind('ALUGUEL'), 'NORMAL');
+  assert.equal(normalizeMatchKind('FIXO'), 'NORMAL');
+  assert.equal(normalizeMatchKind('FESTIVAL'), 'FESTIVAL');
+});
+
+test('aprovação: 2 times de fora -> o primeiro inscrito aprova', () => {
+  assert.equal(opponentApproverId(baseSlot(), 'owner'), 'first-team');
+});
+
+test('aprovação: mensalista -> dono do time; sem conta -> dono do campo', () => {
+  const withUser = baseSlot({ homeTeamType: 'MENSALISTA', hasLocalTeam: true, homeTeamUserId: 'mensalista' });
+  assert.equal(opponentApproverId(withUser, 'owner'), 'mensalista');
+  const withoutUser = baseSlot({ homeTeamType: 'MENSALISTA', hasLocalTeam: true, homeTeamUserId: null });
+  assert.equal(opponentApproverId(withoutUser, 'owner'), 'owner');
+});
+
+test('horário de Brasília', () => {
+  assert.equal(matchStart(baseSlot({ time: '19:00:00' })).toISOString(), '2026-11-10T22:00:00.000Z');
+});
+
+test('placar e avaliação liberados 2h após o fim', () => {
+  const slot = baseSlot({ status: 'confirmed' }); // fim 20:00 BRT -> libera 22:00 BRT = 01:00Z
+  assert.equal(canSetResult(slot, new Date('2026-11-11T00:59:00Z')), false);
+  assert.equal(canSetResult(slot, new Date('2026-11-11T01:00:00Z')), true);
+  assert.equal(canSetResult({ ...slot, status: 'pending_payment' }, new Date('2026-11-12T00:00:00Z')), false);
+  assert.equal(canRate({ ...slot, status: 'finished' }, new Date('2026-11-11T01:00:00Z')), true);
+});
+
+test('conflito de horário', () => {
+  assert.equal(overlaps(baseSlot({ time: '19:00' }), baseSlot({ time: '19:30' })), true);
+  assert.equal(overlaps(baseSlot({ time: '19:00' }), baseSlot({ time: '20:00' })), false);
+  assert.equal(overlaps(baseSlot(), baseSlot({ date: '2026-11-11' })), false);
+});
