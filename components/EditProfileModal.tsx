@@ -10,14 +10,22 @@ interface EditProfileModalProps {
   categories: string[];
   user: User;
   field?: Field | null;
-  onUpdate: (updatedUser: User, updatedField?: Partial<Field>) => void;
+  onUpdate: (updatedUser: User, updatedField?: Partial<Field>, passwordChange?: PasswordChange) => void;
   onClose: () => void;
+  /** false quando o admin está editando outra conta (não sabe a senha atual dela). */
+  requireCurrentPassword?: boolean;
 }
 
-export const EditProfileModal: React.FC<EditProfileModalProps> = ({ categories, user, field, onUpdate, onClose }) => {
+export interface PasswordChange {
+  currentPassword: string;
+  newPassword: string;
+}
+
+export const EditProfileModal: React.FC<EditProfileModalProps> = ({ categories, user, field, onUpdate, onClose, requireCurrentPassword = true }) => {
   const [name, setName] = useState(user.name);
   const [phone, setPhone] = useState(user.phoneNumber);
   const [newPassword, setNewPassword] = useState('');
+  const [currentPassword, setCurrentPassword] = useState('');
   const [teams, setTeams] = useState<TeamConfig[]>(user.teams || []);
   const [showPassword, setShowPassword] = useState(false);
   
@@ -142,13 +150,23 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({ categories, 
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsLoading(true);
 
-    try {
-        const updatedUser: User = { ...user, name, phoneNumber: phone, teams };
-        if (newPassword.trim()) {
-            updatedUser.password = newPassword.trim();
+    let passwordChange: PasswordChange | undefined;
+    if (newPassword.trim()) {
+        if (newPassword.trim().length < 6) {
+            setError('A nova senha precisa ter pelo menos 6 caracteres.');
+            return;
         }
+        if (requireCurrentPassword && !currentPassword) {
+            setError('Informe a senha atual para trocar a senha.');
+            return;
+        }
+        passwordChange = { currentPassword, newPassword };
+    }
+
+    setIsLoading(true);
+    try {
+        const updatedUser: User = { ...user, name, phoneNumber: phone, teams, password: undefined };
 
         let updatedField;
         if (user.role === UserRole.FIELD_OWNER && field) {
@@ -191,9 +209,9 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({ categories, 
             pixConfig: { key: pixKey, name: pixName }
           };
 
-          onUpdate(updatedUser, updatedField);
+          onUpdate(updatedUser, updatedField, passwordChange);
         } else {
-          onUpdate(updatedUser);
+          onUpdate(updatedUser, undefined, passwordChange);
         }
     } catch (e) {
         setError("Erro ao salvar dados.");
@@ -242,6 +260,22 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({ categories, 
                     </button>
                 </div>
             </div>
+            {requireCurrentPassword && newPassword.trim() && (
+              <div className="bg-orange-50 p-4 rounded-2xl border border-orange-100 flex items-center gap-2">
+                  <Lock className="w-4 h-4 text-orange-400" />
+                  <div className="flex-1">
+                      <label className="text-[8px] font-black text-orange-400 uppercase block mb-1">Senha Atual</label>
+                      <input
+                          className="w-full bg-transparent font-bold outline-none text-pitch placeholder-orange-200"
+                          placeholder="Confirme sua senha atual"
+                          type={showPassword ? "text" : "password"}
+                          autoComplete="current-password"
+                          value={currentPassword}
+                          onChange={e => setCurrentPassword(e.target.value)}
+                      />
+                  </div>
+              </div>
+            )}
           </section>
 
           {user.role === UserRole.FIELD_OWNER && (

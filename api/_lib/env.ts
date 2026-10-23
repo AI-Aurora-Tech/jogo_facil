@@ -19,6 +19,10 @@ export const env = {
     return Number.isFinite(n) && n >= 0 && n < 100 ? n : 0;
   },
   appUrl: () => (read('APP_URL') || '').replace(/\/$/, ''),
+  /** Envio de e-mail (código de recuperação de senha) pelo Resend. */
+  resendApiKey: () => read('RESEND_API_KEY'),
+  /** Remetente verificado no Resend, ex.: "Jogo Fácil <nao-responda@seudominio.com>". */
+  emailFrom: () => read('EMAIL_FROM'),
 };
 
 export const requireEnv = (name: string, value: string | undefined): string => {

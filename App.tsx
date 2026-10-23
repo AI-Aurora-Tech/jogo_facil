@@ -6,7 +6,7 @@ import { InviteLanding } from './views/InviteLanding';
 import { FieldDashboard } from './views/FieldDashboard';
 import { TeamDashboard } from './views/TeamDashboard';
 import { Subscription } from './views/Subscription';
-import { EditProfileModal } from './components/EditProfileModal';
+import { EditProfileModal, PasswordChange } from './components/EditProfileModal';
 import { HelpModal } from './views/HelpModal';
 import { MensalistaSubscriptionModal } from './components/MensalistaSubscriptionModal';
 import { api, sessionToken, setActAsUser } from './api';
@@ -334,11 +334,20 @@ const App: React.FC = () => {
     }
   };
 
-  const handleUpdateProfile = async (updatedUser: User, updatedField?: Partial<Field>) => {
+  const handleUpdateProfile = async (updatedUser: User, updatedField?: Partial<Field>, passwordChange?: PasswordChange) => {
     setIsLoading(true);
     try {
       const target = impersonatingUser || user;
       if (!target) return;
+
+      // Senha primeiro: se a senha atual estiver errada, nada é salvo
+      if (passwordChange) {
+        if (impersonatingUser) {
+          await api.adminUpdatePassword(impersonatingUser.id, passwordChange.newPassword);
+        } else {
+          await api.changePassword(passwordChange.currentPassword, passwordChange.newPassword);
+        }
+      }
 
       let resUser = await api.updateUser(updatedUser);
       if (resUser.role === UserRole.TEAM_CAPTAIN) {
@@ -881,6 +890,7 @@ const App: React.FC = () => {
           field={fields.find(f => f.ownerId === currentUserContext.id)} 
           onUpdate={handleUpdateProfile} 
           onClose={() => setShowProfileModal(false)} 
+          requireCurrentPassword={!impersonatingUser}
         />
       )}
 
