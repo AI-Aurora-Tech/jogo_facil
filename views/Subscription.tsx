@@ -135,7 +135,7 @@ export const Subscription: React.FC<SubscriptionProps> = ({ user, blocking, onBa
                   <ExternalLink className="w-4 h-4" /> Abrir fatura (PIX, boleto ou cartão)
                 </a>
               )}
-              <button onClick={refresh} disabled={loading} className="w-full text-[10px] font-black uppercase text-grass-400">Já paguei, atualizar</button>
+              <button onClick={refresh} disabled={loading} className="w-full text-[10px] font-black uppercase text-grass-500">Já paguei, atualizar</button>
             </>
           )}
 

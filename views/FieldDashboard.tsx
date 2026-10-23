@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { Plus, Trash2, Calendar, Clock, RefreshCcw, X, Swords, Edit3, MessageCircle, UserCheck, Phone, Edit, Building2, MapPin, LayoutGrid, Flag, Trophy, CheckCircle, XCircle, AlertCircle, CalendarPlus, Mail, Camera, UserPlus, Smartphone, CalendarDays, History as HistoryIcon, BadgeCheck, Ban, Lock, Search, Filter, Sparkles, ChevronDown, CalendarRange, Check, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
+import { Plus, Trash2, Calendar, Clock, RefreshCcw, X, Swords, Edit3, MessageCircle, UserCheck, Phone, Edit, Building2, MapPin, LayoutGrid, Flag, Trophy, CheckCircle, XCircle, AlertCircle, CalendarPlus, Mail, Camera, UserPlus, Smartphone, CalendarDays, History as HistoryIcon, BadgeCheck, Ban, Lock, Search, Filter, Sparkles, ChevronDown, CalendarRange, Check, ChevronLeft, ChevronRight, Loader2, Wallet } from 'lucide-react';
 import { Button } from '../components/Button';
 import { Field, MatchSlot, MatchType, User, CATEGORY_ORDER, RegisteredTeam, SPORTS, Gender, MatchStatus } from '../types';
 import { api } from '../api';
@@ -8,7 +8,7 @@ import { getNeighboringCategories } from '../utils';
 import { MatchActions } from '../components/MatchActions';
 import { PayoutModal } from '../components/PayoutModal';
 import { shareInvite } from '../components/shareInvite';
-import { computeShares, firstTeamUserId, hasHomeTeam, normalizeMatchKind, opponentApproverId, MATCH_KIND_LABEL } from '../shared/matchRules';
+import { computeShares, effectivePrice, firstTeamUserId, hasHomeTeam, normalizeMatchKind, opponentApproverId, MATCH_KIND_LABEL } from '../shared/matchRules';
 import { formatBRL } from '../shared/pricing';
 
 interface FieldDashboardProps {
@@ -883,7 +883,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
           </div>
           <div className="flex gap-2">
             <button onClick={() => setShowPayout(true)} className={`p-3 rounded-xl active:scale-95 shadow-md flex items-center gap-2 ${field.payoutStatus === 'ACTIVE' ? 'bg-grass-50 text-grass-700' : 'bg-yellow-400 text-pitch animate-pulse'}`}>
-               <Lock className="w-4 h-4"/>
+               <Wallet className="w-4 h-4"/>
                <span className="text-[10px] font-black uppercase">Recebimentos</span>
             </button>
             <button onClick={() => { setEditingSlotId(null); setSlotDate(todayStr); setSlotMatchType('NORMAL'); setSlotPrize(''); setIsLocalTeamSlot(false); setSelectedRegisteredTeamId(''); setShowAddSlotModal(true); }} className="p-3 bg-pitch text-white rounded-xl active:scale-95 shadow-md flex items-center gap-2">
@@ -1002,7 +1002,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                             </div>
                          </div>
                          <div className="text-right">
-                            <span className="block font-black text-pitch text-sm">R$ {slot.price}</span>
+                            <span className="block font-black text-pitch text-sm">{effectivePrice(slot) > 0 ? formatBRL(effectivePrice(slot)) : 'Grátis'}</span>
                             <span className="text-[8px] font-bold text-gray-300 uppercase">{slot.durationMinutes} min</span>
                          </div>
                       </div>

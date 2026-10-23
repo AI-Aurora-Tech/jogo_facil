@@ -121,6 +121,7 @@ const apply = async ({ user, slot, field, body }: Ctx) => {
     opponent_team_logo_url: team.logoUrl || null,
     opponent_team_gender: team.gender || null,
     opponent_applied_at: new Date().toISOString(),
+    field_decision_reason: null,
   });
   if (inviteId) await markInviteUsed(inviteId, user.id);
 

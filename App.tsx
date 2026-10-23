@@ -483,6 +483,11 @@ const App: React.FC = () => {
   }
 
   const currentUserContext = impersonatingUser || user;
+  // Selo PRO: dono de time com mensalidade ativa (ou assinante do plano antigo)
+  const isPro = !!currentUserContext && currentUserContext.role === UserRole.TEAM_CAPTAIN && (
+    currentUserContext.billingStatus === 'ACTIVE' ||
+    (!!currentUserContext.isSubscribed && (!currentUserContext.billingStatus || currentUserContext.billingStatus === 'FREE'))
+  );
   const unreadNotifs = notifications.filter(n => !n.read).length;
 
   return (
@@ -530,7 +535,7 @@ const App: React.FC = () => {
                 {user && (
                     <div className="flex items-center gap-2 mt-1">
                         <span className="text-[8px] font-bold text-gray-400 uppercase tracking-widest">Olá, {currentUserContext?.name.split(' ')[0]}</span>
-                        {currentUserContext?.subscription && currentUserContext.subscription !== 'FREE' && (
+                        {isPro && (
                            <span className="bg-yellow-400 text-pitch px-2 py-0.5 rounded-full text-[8px] font-black uppercase flex items-center gap-1">
                               <Crown className="w-2 h-2" /> PRO
                            </span>
@@ -765,7 +770,7 @@ const App: React.FC = () => {
                 <h2 className="text-2xl font-black text-pitch italic uppercase tracking-tighter leading-none">{currentUserContext.name}</h2>
                 <div className="flex items-center gap-2 mt-2">
                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{currentUserContext.role}</p>
-                   {currentUserContext.subscription !== SubscriptionPlan.FREE && (
+                   {isPro && (
                       <span className="bg-yellow-400 text-pitch px-2 py-0.5 rounded-full text-[8px] font-black uppercase flex items-center gap-1">
                           <Crown className="w-2 h-2" /> PRO
                       </span>

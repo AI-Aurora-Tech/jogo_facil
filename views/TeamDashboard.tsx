@@ -204,8 +204,8 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
         const hasFirstTeam = (slot.bookedByTeamName || slot.hasLocalTeam);
         const hasOpponent = !!slot.opponentTeamName;
         
-        // Allow waiting_opponent slots
-        if (slot.status === 'waiting_opponent') return true;
+        // Só aparecem horários livres ou jogos aguardando adversário (da categoria do time)
+        if (slot.status !== 'available' && slot.status !== 'waiting_opponent') return false;
 
         if (hasFirstTeam && hasOpponent) return false;
         const isAwaitingAdversary = hasFirstTeam && !hasOpponent;
@@ -628,7 +628,8 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
                         {(() => {
                           const isNew = slot.status === 'available' && !hasHomeTeam(slot) && !slot.bookedByTeamName;
                           const share = shareFor(slot, isNew ? 'FIRST' : 'OPPONENT');
-                          return share > 0 ? `${formatBRL(share)} por time${hasHomeTeam(slot) ? ' (adversário paga 100%)' : ''}` : 'Sem taxa';
+                          if (share <= 0) return 'Sem taxa';
+                          return hasHomeTeam(slot) ? `${formatBRL(share)} (adversário paga tudo)` : `${formatBRL(share)} por time (50%)`;
                         })()}
                       </span>
                    </div>
