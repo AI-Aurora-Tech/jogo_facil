@@ -10,6 +10,7 @@ import { PayoutModal } from '../components/PayoutModal';
 import { shareInvite } from '../components/shareInvite';
 import { computeShares, effectivePrice, firstTeamUserId, hasHomeTeam, normalizeMatchKind, opponentApproverId, MATCH_KIND_LABEL } from '../shared/matchRules';
 import { formatBRL } from '../shared/pricing';
+import { openPaymentSetupWhatsApp } from '../support';
 
 interface FieldDashboardProps {
   categories: string[];
@@ -25,10 +26,12 @@ interface FieldDashboardProps {
   onUpdateField: (fieldId: string, updates: Partial<Field>) => Promise<boolean>;
   onRateTeam: () => void;
   forceTab?: 'AGENDA' | 'SOLICITACOES' | 'MENSALISTAS' | 'HISTORICO';
+  /** Admin geral acessando esta conta (pode salvar o Wallet ID). */
+  isAdminView?: boolean;
 }
 
 export const FieldDashboard: React.FC<FieldDashboardProps> = ({ 
-  field, slots, onAddSlot, onUpdateSlot, onRefreshData, onDeleteSlot, onConfirmBooking, onRejectBooking, currentUser, categories, onUpdateField, onRateTeam, forceTab
+  field, slots, onAddSlot, onUpdateSlot, onRefreshData, onDeleteSlot, onConfirmBooking, onRejectBooking, currentUser, categories, onUpdateField, onRateTeam, forceTab, isAdminView
 }) => {
   const [activeTab, setActiveTab] = useState<'AGENDA' | 'SOLICITACOES' | 'MENSALISTAS' | 'HISTORICO'>('AGENDA');
   const [isLoading, setIsLoading] = useState(false);
@@ -882,10 +885,17 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
              </div>
           </div>
           <div className="flex gap-2">
-            <button onClick={() => setShowPayout(true)} className={`p-3 rounded-xl active:scale-95 shadow-md flex items-center gap-2 ${field.payoutStatus === 'ACTIVE' ? 'bg-grass-50 text-grass-700' : 'bg-yellow-400 text-pitch animate-pulse'}`}>
-               <Wallet className="w-4 h-4"/>
-               <span className="text-[10px] font-black uppercase">Recebimentos</span>
-            </button>
+            {field.payoutStatus === 'ACTIVE' || isAdminView ? (
+              <button onClick={() => setShowPayout(true)} className={`p-3 rounded-xl active:scale-95 shadow-md flex items-center gap-2 ${field.payoutStatus === 'ACTIVE' ? 'bg-grass-50 text-grass-700' : 'bg-yellow-400 text-pitch'}`}>
+                 <Wallet className="w-4 h-4"/>
+                 <span className="text-[10px] font-black uppercase">Recebimentos</span>
+              </button>
+            ) : (
+              <button onClick={() => openPaymentSetupWhatsApp(currentUser.name)} className="p-3 rounded-xl active:scale-95 shadow-md flex items-center gap-2 bg-yellow-400 text-pitch animate-pulse">
+                 <MessageCircle className="w-4 h-4"/>
+                 <span className="text-[10px] font-black uppercase">Configurar pagamento</span>
+              </button>
+            )}
             <button onClick={() => { setEditingSlotId(null); setSlotDate(todayStr); setSlotMatchType('NORMAL'); setSlotPrize(''); setIsLocalTeamSlot(false); setSelectedRegisteredTeamId(''); setShowAddSlotModal(true); }} className="p-3 bg-pitch text-white rounded-xl active:scale-95 shadow-md flex items-center gap-2">
                <Plus className="w-5 h-5"/>
                <span className="text-[10px] font-black uppercase">Novo Horário</span>
@@ -911,6 +921,15 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
 
         {activeTab === 'AGENDA' && (
           <div className="p-6">
+            {field.payoutStatus !== 'ACTIVE' && field.id && (
+              <div className="bg-yellow-50 border border-yellow-200 rounded-[2rem] p-5 mb-4 space-y-3">
+                <h4 className="font-black text-yellow-800 text-xs uppercase">Configure sua conta para receber pagamentos</h4>
+                <p className="text-[10px] font-bold text-yellow-700">Os times pagam a taxa por PIX no app e o valor cai direto na sua conta. A gente te ajuda pelo WhatsApp.</p>
+                <Button onClick={() => openPaymentSetupWhatsApp(currentUser.name)} className="w-full py-3 rounded-2xl font-black uppercase text-[10px]">
+                  <MessageCircle className="w-4 h-4" /> Configurar pagamento
+                </Button>
+              </div>
+            )}
             <div className="flex items-center justify-between mb-4">
               <button onClick={() => setShowAutoGenerateModal(true)} className="bg-pitch text-white text-xs font-black uppercase px-4 py-2 rounded-full flex items-center gap-2">
                 <Sparkles className="w-4 h-4" />
@@ -1436,9 +1455,9 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                  </p>
 
                  {field.payoutStatus !== 'ACTIVE' && (
-                   <button type="button" onClick={() => setShowPayout(true)} className="w-full bg-yellow-50 p-4 rounded-2xl border border-yellow-200 text-left">
-                      <h4 className="font-black text-yellow-800 text-xs uppercase">Configure seus recebimentos</h4>
-                      <p className="text-[9px] font-bold text-yellow-700">Os times pagam por PIX no app e o valor cai direto na sua conta. Toque para configurar.</p>
+                   <button type="button" onClick={() => openPaymentSetupWhatsApp(currentUser.name)} className="w-full bg-yellow-50 p-4 rounded-2xl border border-yellow-200 text-left">
+                      <h4 className="font-black text-yellow-800 text-xs uppercase">Configurar pagamento</h4>
+                      <p className="text-[9px] font-bold text-yellow-700">Os times pagam por PIX no app e o valor cai direto na sua conta. Toque para falar com a gente no WhatsApp.</p>
                    </button>
                  )}
 
@@ -1674,6 +1693,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
         <PayoutModal
           field={field}
           currentUser={currentUser}
+          isAdminView={isAdminView}
           onClose={() => setShowPayout(false)}
           onSaved={() => { setShowPayout(false); onRefreshData(); }}
         />
