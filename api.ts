@@ -548,7 +548,7 @@ export const api = {
 
   getInvite: (token: string) => callServer<InvitePreview>(`/api/invites?token=${encodeURIComponent(token)}`, undefined, 'GET'),
 
-  billing: (action: 'status' | 'subscribe' | 'sync', params: Record<string, unknown> = {}) =>
+  billing: (action: 'status' | 'subscribe' | 'sync' | 'set_document', params: Record<string, unknown> = {}) =>
     callServer<{ categories: number; value: number; billingStatus: string; invoiceUrl?: string | null; hasCpf?: boolean }>('/api/billing', { action, ...params }),
 
   payouts: (action: 'status' | 'set_wallet' | 'create_account', fieldId: string, params: Record<string, unknown> = {}) =>

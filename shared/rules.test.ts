@@ -110,3 +110,20 @@ test('conflito de horário', () => {
   assert.equal(overlaps(baseSlot({ time: '19:00' }), baseSlot({ time: '20:00' })), false);
   assert.equal(overlaps(baseSlot(), baseSlot({ date: '2026-11-11' })), false);
 });
+
+import { isValidCpf, isValidCnpj, isValidCpfCnpj, formatCpfCnpj } from './document.ts';
+
+test('CPF e CNPJ: dígitos verificadores', () => {
+  assert.equal(isValidCpf('529.982.247-25'), true);
+  assert.equal(isValidCpf('529.982.247-24'), false);
+  assert.equal(isValidCpf('111.111.111-11'), false);
+  assert.equal(isValidCnpj('11.222.333/0001-81'), true);
+  assert.equal(isValidCnpj('11.222.333/0001-82'), false);
+  assert.equal(isValidCpfCnpj('52998224725'), true);
+  assert.equal(isValidCpfCnpj('123'), false);
+});
+
+test('CPF e CNPJ: formatação', () => {
+  assert.equal(formatCpfCnpj('52998224725'), '529.982.247-25');
+  assert.equal(formatCpfCnpj('11222333000181'), '11.222.333/0001-81');
+});
