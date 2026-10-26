@@ -169,7 +169,8 @@ export const api = {
       sessionToken.set(token);
       return mapUserFromDb(user);
     } catch (err: any) {
-      if (!(err instanceof ServerError) || (err.code !== 'NO_SERVER' && err.code !== 'NETWORK' && err.status < 500)) throw err;
+      // Entrar sem sessão só no desenvolvimento local (sem as funções /api). Em produção, mostra o erro real.
+      if (!(err instanceof ServerError) || err.code !== 'NO_SERVER') throw err;
       console.warn('Servidor /api indisponível, entrando sem sessão (ações de partida ficarão bloqueadas).');
     }
     

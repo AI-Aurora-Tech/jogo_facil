@@ -94,7 +94,12 @@ const App: React.FC = () => {
 
   // Sessão expirada no servidor: volta para o login
   useEffect(() => {
+    let handling = false;
     const onExpired = () => {
+      // Várias chamadas podem falhar juntas: avisa uma vez só
+      if (handling) return;
+      handling = true;
+      setTimeout(() => { handling = false; }, 3000);
       alert('Sua sessão expirou. Entre novamente.');
       localStorage.removeItem('jf_session_user');
       sessionToken.set(null);
