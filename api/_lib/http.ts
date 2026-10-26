@@ -33,6 +33,11 @@ export const handle = (fn: (request: Request) => Promise<Response>) => async (re
     if (err instanceof HttpError) {
       return json({ error: err.message, code: err.code }, err.status);
     }
+    // Variável de ambiente faltando na Vercel: mostra qual é (não expõe valores)
+    if (typeof err?.message === 'string' && err.message.startsWith('Variável de ambiente')) {
+      console.error('[api] configuração', err.message);
+      return json({ error: `Servidor não configurado: ${err.message} Veja /api/health.`, code: 'CONFIG' }, 500);
+    }
     console.error('[api] erro inesperado', err);
     return json({ error: 'Erro interno. Tente novamente em instantes.' }, 500);
   }

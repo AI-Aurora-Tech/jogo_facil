@@ -174,12 +174,13 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, onCancel, initialMode, invi
             courts: courts
           } : undefined
         };
-        const newUser = await api.register(payload);
+        await api.register(payload);
         // Entra logo em seguida para obter a sessão do servidor (usada em partidas e pagamentos)
         try {
           onLogin(await api.login(payload.email, password));
-        } catch {
-          onLogin(newUser);
+        } catch (loginErr: any) {
+          setMode('LOGIN');
+          setError(`Sua conta foi criada, mas não conseguimos entrar agora: ${loginErr?.message || 'erro no servidor'}`);
         }
       } else if (mode === 'LOGIN') {
         const user = await api.login(email, password);
