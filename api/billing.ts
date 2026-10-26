@@ -4,6 +4,7 @@ import { db } from './_lib/supabaseAdmin.js';
 import { asaas, dueDate } from './_lib/asaas.js';
 import { ensureCustomer } from './_lib/payments.js';
 import { countBillableCategories, monthlyPriceForCategories, CATEGORY_MONTHLY_PRICE } from '../shared/pricing.js';
+import { isValidCpfCnpj, onlyDigits } from '../shared/document.js';
 
 /**
  * Mensalidade dos donos de time (por categoria), via assinatura recorrente do Asaas.
@@ -12,6 +13,7 @@ import { countBillableCategories, monthlyPriceForCategories, CATEGORY_MONTHLY_PR
  *  - status:    valor calculado + situação da assinatura
  *  - subscribe: cria/atualiza a assinatura e devolve o link da fatura (PIX, boleto ou cartão)
  *  - sync:      chamado quando o time muda as categorias; ajusta o valor (ou cancela se ficou grátis)
+ *  - set_document: salva o CPF/CNPJ informado no cadastro (usado nas cobranças)
  */
 
 const describe = (count: number) => `Jogo Fácil - ${count} categoria(s) x R$ ${CATEGORY_MONTHLY_PRICE.toFixed(2).replace('.', ',')}`;
@@ -26,6 +28,13 @@ const pendingInvoiceUrl = async (subscriptionId: string | null) => {
   const { data } = await asaas.listSubscriptionPayments(subscriptionId);
   const open = (data || []).find(p => ['PENDING', 'OVERDUE'].includes(p.status));
   return open?.invoiceUrl || null;
+};
+
+/** Conta nova nasce com billing_status 'FREE' no banco: com valor a pagar, a situação real é 'PENDING'. */
+const effectiveStatus = (user: DbUser, value: number) => {
+  if (value === 0) return 'FREE';
+  const s = user.billing_status || 'PENDING';
+  return s === 'FREE' ? 'PENDING' : s;
 };
 
 const summary = (user: DbUser) => {
@@ -55,7 +64,7 @@ const sync = async (user: DbUser) => {
       await asaas.updateSubscriptionValue(user.asaas_subscription_id, value, describe(categories));
     }
     await saveBilling(user, { billed_categories: categories, billing_value: value });
-    return { categories, value, billingStatus: user.billing_status || 'PENDING' };
+    return { categories, value, billingStatus: effectiveStatus(user, value) };
   }
 
   // Passou de 1 categoria e ainda não assinou
@@ -73,11 +82,22 @@ export const POST = handle(async request => {
     case 'status': {
       const { categories, value } = summary(user);
       const invoiceUrl = user.asaas_subscription_id && user.billing_status !== 'ACTIVE' ? await pendingInvoiceUrl(user.asaas_subscription_id).catch(() => null) : null;
-      return json({ categories, value, billingStatus: value === 0 ? 'FREE' : user.billing_status || 'PENDING', invoiceUrl, hasCpf: !!user.cpf_cnpj });
+      return json({ categories, value, billingStatus: effectiveStatus(user, value), invoiceUrl, hasCpf: !!user.cpf_cnpj });
     }
 
     case 'sync':
       return json(await sync(user));
+
+    case 'set_document': {
+      const doc = onlyDigits(body.cpfCnpj);
+      assert(isValidCpfCnpj(doc), 400, 'CPF ou CNPJ inválido.', 'NEED_CPF');
+      const { error } = await db().from('user').update({ cpf_cnpj: doc }).eq('id', user.id);
+      if (error) throw error;
+      if (user.asaas_customer_id && onlyDigits(user.cpf_cnpj) !== doc) {
+        await asaas.updateCustomer(user.asaas_customer_id, { cpfCnpj: doc });
+      }
+      return json({ ok: true });
+    }
 
     case 'subscribe': {
       const { categories, value } = summary(user);

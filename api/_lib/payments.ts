@@ -5,6 +5,7 @@ import { HttpError } from './http.js';
 import type { DbUser } from './auth.js';
 import { dateBR, firstTeamName, loadField, loadSlot, toRuleSlot, type FieldRow, type SlotRow } from './slots.js';
 import { computeShares, firstTeamUserId, type PayerRole } from '../../shared/matchRules.js';
+import { isValidCpfCnpj } from '../../shared/document.js';
 
 export interface PaymentRow {
   id: string;
@@ -45,7 +46,7 @@ export const listPayments = async (slotId: string): Promise<PaymentRow[]> => {
 /** Garante que o pagador tem um cliente no Asaas (exige CPF/CNPJ). */
 export const ensureCustomer = async (user: DbUser, cpfCnpj?: string): Promise<string> => {
   const doc = (cpfCnpj || user.cpf_cnpj || '').replace(/\D/g, '');
-  if (cpfCnpj && doc.length !== 11 && doc.length !== 14) {
+  if (cpfCnpj && !isValidCpfCnpj(doc)) {
     throw new HttpError(400, 'CPF ou CNPJ inválido.', 'NEED_CPF');
   }
   if (user.asaas_customer_id) {

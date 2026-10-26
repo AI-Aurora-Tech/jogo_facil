@@ -21,7 +21,9 @@ interface SubscriptionProps {
 export const Subscription: React.FC<SubscriptionProps> = ({ user, blocking, onBack, onLogout, onEditCategories, onUserUpdated }) => {
   const categories = countBillableCategories(user.teams);
   const value = monthlyPriceForCategories(categories);
-  const [status, setStatus] = useState<string>(user.billingStatus || (value === 0 ? 'FREE' : 'PENDING'));
+  // Conta nova nasce como 'FREE' no banco: com valor a pagar, a situação é "aguardando pagamento"
+  const initialStatus = value === 0 ? 'FREE' : !user.billingStatus || user.billingStatus === 'FREE' ? 'PENDING' : user.billingStatus;
+  const [status, setStatus] = useState<string>(initialStatus);
   const [invoiceUrl, setInvoiceUrl] = useState<string | null>(null);
   const [needsCpf, setNeedsCpf] = useState(false);
   const [cpf, setCpf] = useState('');
@@ -69,14 +71,6 @@ export const Subscription: React.FC<SubscriptionProps> = ({ user, blocking, onBa
     }
   };
 
-  const statusLabel: Record<string, string> = {
-    FREE: 'Grátis',
-    ACTIVE: 'Ativa',
-    PENDING: 'Aguardando pagamento',
-    OVERDUE: 'Em atraso',
-    CANCELED: 'Cancelada',
-  };
-
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4 font-sans">
       {!blocking && onBack && (
@@ -106,9 +100,6 @@ export const Subscription: React.FC<SubscriptionProps> = ({ user, blocking, onBa
           </div>
           {value > 0 && <p className="text-[10px] text-gray-400 uppercase text-right -mt-4">por mês</p>}
 
-          <div className="bg-white/10 rounded-xl px-4 py-2 text-[10px] font-black uppercase text-center">
-            Situação: {statusLabel[value === 0 ? 'FREE' : status] || status}
-          </div>
 
           {value > 0 && status !== 'ACTIVE' && (
             <>
