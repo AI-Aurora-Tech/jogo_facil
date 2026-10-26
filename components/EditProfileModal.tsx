@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { User, UserRole, Field, TeamConfig, Gender } from '../types';
 import { Button } from './Button';
+import { WalletSetup } from './WalletSetup';
 import { X, User as UserIcon, Shield, Check, Plus, AlertCircle, Building2, MapPin, Smartphone, Camera, Trash2, LayoutGrid, Tag, Lock, PlusCircle, Globe, Search, Eye, EyeOff } from 'lucide-react';
 import { formatCategory, convertFileToBase64, geocodeAddress, fetchAddressByCEP } from '../utils';
 import { countBillableCategories, monthlyPriceForTeams, formatBRL, CATEGORY_MONTHLY_PRICE } from '../shared/pricing';
@@ -303,21 +304,14 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({ categories, 
                 </div>
               </div>
 
-              <div className="bg-pitch/5 p-6 rounded-[2rem] border border-pitch/10 space-y-4">
-                 <h5 className="text-[10px] font-black text-pitch uppercase tracking-widest flex items-center gap-2">
-                   <Check className="w-3 h-3 text-grass-500" /> Configuração PIX
-                 </h5>
-                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="bg-white p-4 rounded-2xl border">
-                       <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Chave PIX</label>
-                       <input className="w-full bg-transparent font-bold text-pitch outline-none" value={pixKey} onChange={e => setPixKey(e.target.value)} />
-                    </div>
-                    <div className="bg-white p-4 rounded-2xl border">
-                       <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Nome do Titular</label>
-                       <input className="w-full bg-transparent font-bold text-pitch outline-none" value={pixName} onChange={e => setPixName(e.target.value)} />
-                    </div>
-                 </div>
-              </div>
+              {field?.id && (
+                <div className="bg-pitch/5 p-6 rounded-[2rem] border border-pitch/10 space-y-4">
+                   <h5 className="text-[10px] font-black text-pitch uppercase tracking-widest flex items-center gap-2">
+                     <Check className="w-3 h-3 text-grass-500" /> Recebimento das taxas (conta Asaas)
+                   </h5>
+                   <WalletSetup fieldId={field.id} ownerName={user.name} />
+                </div>
+              )}
               
               {/* ADDRESS SECTION WITH CEP */}
               <div className="bg-gray-50 p-6 rounded-[2rem] border space-y-4">
