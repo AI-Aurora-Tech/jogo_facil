@@ -12,6 +12,8 @@ export default defineConfig(({ mode }) => {
     define: {
       // Injeta a API Key no código client-side de forma segura durante o build
       'process.env.API_KEY': JSON.stringify(env.API_KEY),
+      // WhatsApp de suporte: aceita SUPPORT_WHATSAPP ou VITE_SUPPORT_WHATSAPP na Vercel
+      __SUPPORT_WHATSAPP__: JSON.stringify(env.VITE_SUPPORT_WHATSAPP || env.SUPPORT_WHATSAPP || ''),
       // Evita crash se alguma lib tentar acessar process.env diretamente
       'process.env': {} 
     },

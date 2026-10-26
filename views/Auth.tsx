@@ -3,7 +3,8 @@ import React, { useState } from 'react';
 import { UserRole, SubscriptionPlan, CATEGORY_ORDER, Gender } from '../types';
 import { Button } from '../components/Button';
 import { Shield, MapPin, AlertCircle, KeyRound, ChevronLeft, Camera, LayoutGrid, Loader2, Eye, EyeOff, Info } from 'lucide-react';
-import { api } from '../api';
+import { api, ServerError } from '../api';
+import { openPasswordHelpWhatsApp } from '../support';
 import { convertFileToBase64, fetchAddressByCEP } from '../utils';
 import { formatBRL, CATEGORY_MONTHLY_PRICE, monthlyPriceForCategories } from '../shared/pricing';
 
@@ -28,6 +29,8 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, onCancel, initialMode, invi
   const [showPassword, setShowPassword] = useState(false);
   // Recuperação de senha: 1) pede o código por e-mail  2) informa código + nova senha
   const [resetCodeSent, setResetCodeSent] = useState(false);
+  // Sem envio de e-mail configurado: recuperação de senha pelo WhatsApp do suporte
+  const [resetViaSupport, setResetViaSupport] = useState(false);
   const [resetCode, setResetCode] = useState('');
 
   // Common Form States
@@ -199,7 +202,12 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, onCancel, initialMode, invi
         }
       }
     } catch (err: any) {
-      setError(err.message || 'Erro na operação.');
+      if (mode === 'FORGOT_PASSWORD' && err instanceof ServerError && err.code === 'EMAIL_NOT_CONFIGURED') {
+        setResetViaSupport(true);
+        setError('');
+      } else {
+        setError(err.message || 'Erro na operação.');
+      }
     } finally {
       setIsLoading(false);
     }
@@ -442,7 +450,18 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, onCancel, initialMode, invi
             </div>
           )}
 
-          {mode === 'FORGOT_PASSWORD' && (
+          {mode === 'FORGOT_PASSWORD' && resetViaSupport && (
+            <div className="space-y-4 animate-in fade-in">
+              <div className="bg-blue-50 p-4 rounded-2xl border border-blue-100 text-blue-700 text-[10px] font-bold">
+                Para criar uma nova senha, fale com o nosso suporte pelo WhatsApp. A gente redefine para você rapidinho.
+              </div>
+              <Button type="button" onClick={() => openPasswordHelpWhatsApp(email)} className="w-full py-5 rounded-[2rem] font-black uppercase text-xs">
+                Pedir nova senha pelo WhatsApp
+              </Button>
+            </div>
+          )}
+
+          {mode === 'FORGOT_PASSWORD' && !resetViaSupport && (
             <div className="space-y-4 animate-in fade-in slide-in-from-right-4">
               <div className="bg-orange-50 p-4 rounded-2xl border border-orange-100 text-orange-600 text-[10px] font-bold">
                  {resetCodeSent
@@ -467,7 +486,7 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, onCancel, initialMode, invi
             </div>
           )}
 
-          <Button type="submit" isLoading={isLoading} className="w-full py-6 rounded-[2rem] font-black uppercase tracking-widest mt-6 text-sm shadow-xl active:scale-95">
+          <Button type="submit" isLoading={isLoading} hidden={mode === 'FORGOT_PASSWORD' && resetViaSupport} className="w-full py-6 rounded-[2rem] font-black uppercase tracking-widest mt-6 text-sm shadow-xl active:scale-95">
             {mode === 'REGISTER' ? 'Finalizar Cadastro' : mode === 'FORGOT_PASSWORD' ? (resetCodeSent ? 'Redefinir Senha' : 'Enviar Código') : 'Entrar na Conta'}
           </Button>
 
