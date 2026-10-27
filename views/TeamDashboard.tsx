@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Search, MapPin, Clock, Swords, Filter, X, Check, MessageCircle, Phone, Navigation, Trophy, ChevronDown, Smartphone, Settings, AlertTriangle, ExternalLink, Activity, History as HistoryIcon, CalendarCheck, CalendarX, Locate, MapPinOff, Calendar, RotateCcw, ArrowUpDown, SlidersHorizontal, Camera, Upload, Clipboard } from 'lucide-react';
 import { Button } from '../components/Button';
 import { Field, MatchSlot, User, CATEGORY_ORDER, SPORTS, Gender, RegisteredTeam } from '../types';
@@ -121,7 +121,11 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
     }
   };
 
+  const calculatingRef = useRef(false);
   const calculateAllDistances = async (origin: LatLng) => {
+    // Evita duas buscas ao mesmo tempo (cada refresh da tela chamaria de novo)
+    if (calculatingRef.current) return;
+    calculatingRef.current = true;
     setIsCalculatingDistances(true);
     const newDistances: Record<string, number> = {};
     const approx: Record<string, boolean> = {};
@@ -132,7 +136,8 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
       if (field.latitude && field.longitude && Math.abs(field.latitude) > 0.0001) {
         const dist = calculateDistance(origin.lat, origin.lng, field.latitude, field.longitude);
         if (dist >= 0) newDistances[field.id] = dist;
-      } else if (field.location && field.location.length > 5) {
+      } else if (field.location && field.location.length > 5 && slots.some(s => s.fieldId === field.id)) {
+        // Só arenas com horários na lista (as outras não aparecem para o time)
         missing.push(field);
       }
     }
@@ -157,6 +162,7 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
 
     setApproxFields(approx);
     setIsCalculatingDistances(false);
+    calculatingRef.current = false;
   };
 
   const todayStr = new Date().toISOString().split('T')[0];

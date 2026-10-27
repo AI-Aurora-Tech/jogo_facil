@@ -43,7 +43,9 @@ export const ArenaLocation: React.FC<ArenaLocationProps> = ({ value, onChange, o
     setBusy('address');
     try {
       const r = await onSearchAddress();
-      if (r) onChange(r);
+      if (r && r.precision === 'city') {
+        if (confirm('Só encontramos a cidade, não o endereço. A distância para os times vai ficar aproximada. Usar mesmo assim? (O melhor é tocar em "Estou na arena" quando estiver lá.)')) onChange(r);
+      } else if (r) onChange(r);
       else alert('Não encontramos esse endereço no mapa. Confira o CEP e o número, ou marque estando na arena.');
     } finally {
       setBusy(null);

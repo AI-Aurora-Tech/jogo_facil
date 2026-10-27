@@ -584,6 +584,9 @@ export const api = {
   claimTeamInvite: (token: string, params: { teamName?: string; category?: string; categories?: string[] }) =>
     callServer<{ message: string; kind: string; teamName: string; category?: string }>('/api/teams', { action: 'claim', token, ...params }),
 
+  /** Dono do campo aprova o pedido de mensalista de um time (feito pelo servidor). */
+  approveTeam: (teamId: string) => callServer<{ message: string }>('/api/teams', { action: 'approve', teamId }),
+
   /** Dono do campo tira o responsável de um time (para convidar outra pessoa). */
   releaseTeam: (teamId: string) => callServer<{ message: string }>('/api/teams', { action: 'release', teamId }),
 

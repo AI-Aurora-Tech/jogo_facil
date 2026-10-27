@@ -155,6 +155,8 @@ App (React/Vite)  ──>  Supabase (leitura e cadastros simples)
    Ele impede que o navegador altere status, pagamento, placar e assinatura (só o servidor muda).
    Rode também `supabase/migrations/20261027_01_times_da_casa_e_convites.sql` (times da casa, convites de time e
    mandante no horário). Esta pode rodar antes do deploy.
+   Depois do deploy, rode `supabase/migrations/20261027_02_protege_times_do_campo.sql`: o navegador deixa de poder
+   definir o responsável de um time ou aprovar pedidos de mensalista (agora feitos pelo servidor).
    Em seguida rode `supabase/migrations/20261023_01_senha_pelo_servidor.sql`: cria a tabela dos códigos de
    recuperação e tira do navegador a permissão de alterar a senha.
 6. Troque `ASAAS_ENV` para `production` e a chave de API de produção.
