@@ -1,22 +1,20 @@
 import React, { useState } from 'react';
-import { Check, X, Send, CreditCard, Trophy, Star, Clock, LogOut, CheckCircle2, Circle } from 'lucide-react';
+import { Check, X, Send, Trophy, Star, Clock, LogOut } from 'lucide-react';
 import { Button } from './Button';
 import { Field, MatchSlot, User } from '../types';
 import { api } from '../api';
-import { PaymentModal } from './PaymentModal';
 import { ResultModal } from './ResultModal';
 import { RatingModal } from './RatingModal';
 import { shareInvite } from './shareInvite';
 import {
   canRate,
   canSetResult,
-  computeShares,
   firstTeamUserId,
   hasHomeTeam,
   resultOpensAt,
+  FIELD_APPROVAL_STATUSES,
   STATUS_LABEL,
 } from '../shared/matchRules';
-import { formatBRL } from '../shared/pricing';
 
 interface MatchActionsProps {
   slot: MatchSlot;
@@ -29,11 +27,10 @@ export const firstTeamNameOf = (slot: MatchSlot) => (slot.hasLocalTeam ? slot.lo
 
 /**
  * Painel de ações da partida para os TIMES (time 1 e adversário):
- * aprovar adversário, convidar, pagar, desistir, lançar placar e avaliar.
+ * aprovar adversário, convidar, desistir, lançar placar e avaliar.
  */
 export const MatchActions: React.FC<MatchActionsProps> = ({ slot, field, currentUser, onChanged }) => {
   const [busy, setBusy] = useState(false);
-  const [showPay, setShowPay] = useState(false);
   const [showResult, setShowResult] = useState(false);
   const [showRating, setShowRating] = useState(false);
 
@@ -44,11 +41,8 @@ export const MatchActions: React.FC<MatchActionsProps> = ({ slot, field, current
 
   const firstName = firstTeamNameOf(slot);
   const opponentName = slot.opponentTeamName || 'Adversário';
-  const shares = computeShares(slot);
-  const myRole = isOpponent ? 'OPPONENT' : !hasHomeTeam(slot) && slot.bookedByUserId === currentUser.id ? 'FIRST' : null;
-  const myShare = shares.find(s => s.role === myRole);
-  const myPaid = myRole === 'FIRST' ? slot.firstTeamPaid : myRole === 'OPPONENT' ? slot.opponentPaid : true;
-  const anyPaid = !!(slot.firstTeamPaid || slot.opponentPaid);
+  // Até o campo confirmar, o adversário pode desistir e o time de fora pode cancelar a reserva
+  const canLeave = isOpponent || (!hasHomeTeam(slot) && slot.bookedByUserId === currentUser.id);
 
   const run = async (action: Parameters<typeof api.match>[0], params: Record<string, unknown> = {}, confirmMsg?: string) => {
     if (confirmMsg && !confirm(confirmMsg)) return;
@@ -109,42 +103,14 @@ export const MatchActions: React.FC<MatchActionsProps> = ({ slot, field, current
         </div>
       )}
 
-      {/* Pagamento */}
-      {slot.status === 'pending_payment' && (
-        <div className={`${box} bg-blue-50 border-blue-100`}>
-          <p className="text-[10px] font-black text-blue-700 uppercase">Pagamento da taxa (PIX)</p>
-          <div className="space-y-1">
-            {shares.map(s => {
-              const paid = s.role === 'FIRST' ? slot.firstTeamPaid : slot.opponentPaid;
-              const name = s.role === 'FIRST' ? firstName : opponentName;
-              return (
-                <div key={s.role} className="flex items-center justify-between text-[10px] font-bold text-pitch">
-                  <span className="flex items-center gap-2">
-                    {paid ? <CheckCircle2 className="w-4 h-4 text-grass-600" /> : <Circle className="w-4 h-4 text-gray-300" />}
-                    {name}
-                  </span>
-                  <span>{formatBRL(s.amount)}</span>
-                </div>
-              );
-            })}
-          </div>
-          {myShare && !myPaid && (
-            <Button onClick={() => setShowPay(true)} className={`${small} w-full bg-grass-600`}>
-              <CreditCard className="w-4 h-4" /> Pagar {formatBRL(myShare.amount)}
-            </Button>
-          )}
-          {myShare && myPaid && <p className="text-[9px] font-bold text-grass-700 uppercase">Sua parte está paga. Aguardando o adversário.</p>}
-          {!anyPaid && (isOpponent || !hasHomeTeam(slot)) && (
+      {FIELD_APPROVAL_STATUSES.includes(slot.status) && (
+        <div className={`${box} bg-gray-50`}>
+          <p className="text-[10px] font-black text-gray-500 uppercase flex items-center gap-2"><Clock className="w-4 h-4" /> {STATUS_LABEL.pending_field_approval}</p>
+          {canLeave && (
             <button onClick={() => run('cancel', {}, isOpponent ? 'Desistir desta partida?' : 'Cancelar sua reserva?')} className="text-[9px] font-black text-red-400 uppercase w-full text-center">
               {isOpponent ? 'Desistir da partida' : 'Cancelar reserva'}
             </button>
           )}
-        </div>
-      )}
-
-      {slot.status === 'pending_field_approval' && (
-        <div className={`${box} bg-gray-50`}>
-          <p className="text-[10px] font-black text-gray-500 uppercase flex items-center gap-2"><Clock className="w-4 h-4" /> {STATUS_LABEL.pending_field_approval}</p>
         </div>
       )}
 
@@ -170,14 +136,6 @@ export const MatchActions: React.FC<MatchActionsProps> = ({ slot, field, current
         </Button>
       )}
 
-      {showPay && (
-        <PaymentModal
-          slot={slot}
-          fieldName={field?.name}
-          onClose={() => { setShowPay(false); onChanged(); }}
-          onPaid={() => { setShowPay(false); onChanged(); }}
-        />
-      )}
       {showResult && (
         <ResultModal slot={slot} homeName={firstName} awayName={opponentName} onClose={() => setShowResult(false)} onDone={() => { setShowResult(false); onChanged(); }} />
       )}

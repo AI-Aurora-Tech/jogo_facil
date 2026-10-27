@@ -20,11 +20,5 @@ export const POST = handle(async request => {
   }
   if (!user) throw new HttpError(401, 'E-mail ou senha incorretos.');
 
-  const { data: extra } = await db()
-    .from('user')
-    .select('billing_status, billed_categories, billing_value, cpf_cnpj')
-    .eq('id', user.id)
-    .maybeSingle();
-
-  return json({ user: { ...user, ...(extra || {}) }, token: createSessionToken(user.id) });
+  return json({ user, token: createSessionToken(user.id) });
 });

@@ -1,14 +1,13 @@
 # ⚽ Jogo Fácil
 
-Sistema profissional de agendamento de partidas de futebol com inteligência artificial.
+Sistema de agendamento de partidas de futebol. **100% gratuito.**
 
 ## 🚀 Funcionalidades
 
 *   **Busca de Partidas:** Encontre adversários ou campos disponíveis.
 *   **Gestão de Campos:** Painel para donos de quadras gerenciarem horários.
-*   **Fluxo de partidas:** time 1 aprova o adversário → pagamento PIX → campo aprova → placar e avaliação.
-*   **Pagamentos (Asaas):** PIX com split automático para o dono do campo; mensalidade por categoria para donos de time.
-*   **Convites:** link de convite que cria uma conta grátis já na categoria do jogo.
+*   **Fluxo de partidas:** time 1 aprova o adversário → campo aprova → placar e avaliação.
+*   **Convites:** link de convite que cria uma conta já na categoria do jogo.
 *   **Avaliações:** times avaliam o adversário e o campo (estrelas + tags).
 *   **Recorrência:** Criação automática de agenda para times mensalistas.
 
@@ -16,14 +15,14 @@ Sistema profissional de agendamento de partidas de futebol com inteligência art
 
 *   React + TypeScript
 *   Tailwind CSS
-*   Google Gemini API (Verificação de Pagamentos)
+*   Resend (e-mail do código de recuperação de senha)
 *   Lucide React (Ícones)
 
 ## 📦 Como rodar
 
 Hospedado na **Vercel** (tela em Vite + funções em `/api`) com banco no **Supabase**.
 
-Passo a passo de configuração (banco, Asaas, variáveis de ambiente): [`docs/FLUXO_E_PAGAMENTOS.md`](docs/FLUXO_E_PAGAMENTOS.md).
+Passo a passo de configuração (banco, e-mail, variáveis de ambiente): [`docs/FLUXO_DO_APP.md`](docs/FLUXO_DO_APP.md).
 
 *   `npm run dev` — só a tela
 *   `npx vercel dev` — tela + funções `/api`
@@ -35,4 +34,4 @@ Passo a passo de configuração (banco, Asaas, variáveis de ambiente): [`docs/F
 O sistema possui níveis de acesso:
 *   **Admin:** Acesso total.
 *   **Dono de Campo:** Gerencia sua grade de horários.
-*   **Capitão:** Busca jogos e envia pagamentos.
+*   **Capitão:** Busca jogos, convida adversários e avalia partidas.

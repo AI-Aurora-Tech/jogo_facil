@@ -2,10 +2,8 @@
 import React, { useState, useEffect } from 'react';
 import { User, UserRole, Field, TeamConfig, Gender } from '../types';
 import { Button } from './Button';
-import { WalletSetup } from './WalletSetup';
-import { X, User as UserIcon, Shield, Check, Plus, AlertCircle, Building2, MapPin, Smartphone, Camera, Trash2, LayoutGrid, Tag, Lock, PlusCircle, Globe, Search, Eye, EyeOff } from 'lucide-react';
+import { X, User as UserIcon, Shield, Plus, AlertCircle, Building2, MapPin, Smartphone, Camera, Trash2, LayoutGrid, Tag, Lock, PlusCircle, Globe, Search, Eye, EyeOff } from 'lucide-react';
 import { formatCategory, convertFileToBase64, geocodeAddress, fetchAddressByCEP } from '../utils';
-import { countBillableCategories, monthlyPriceForTeams, formatBRL, CATEGORY_MONTHLY_PRICE } from '../shared/pricing';
 
 interface EditProfileModalProps {
   categories: string[];
@@ -32,10 +30,7 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({ categories, 
   
   // Arena State
   const [arenaName, setArenaName] = useState(field?.name || '');
-  const [arenaPrice, setArenaPrice] = useState(field?.hourlyRate || 0);
   const [arenaPhoto, setArenaPhoto] = useState(field?.imageUrl || '');
-  const [pixKey, setPixKey] = useState(field?.pixConfig?.key || '');
-  const [pixName, setPixName] = useState(field?.pixConfig?.name || '');
   const [courts, setCourts] = useState<string[]>(field?.courts || ['Principal']);
   const [newCourtName, setNewCourtName] = useState('');
   
@@ -202,12 +197,10 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({ categories, 
           updatedField = { 
             name: arenaName, 
             location: fullAddress, 
-            hourlyRate: arenaPrice, 
             courts, 
             imageUrl: arenaPhoto,
             latitude: finalLat,
             longitude: finalLng,
-            pixConfig: { key: pixKey, name: pixName }
           };
 
           onUpdate(updatedUser, updatedField, passwordChange);
@@ -293,25 +286,10 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({ categories, 
                  <span className="text-[8px] font-black text-gray-400 uppercase">Foto da Arena</span>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div className="bg-gray-50 p-4 rounded-2xl border">
-                   <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Nome da Arena</label>
-                   <input className="w-full bg-transparent font-bold text-pitch outline-none" value={arenaName} onChange={e => setArenaName(e.target.value)} />
-                </div>
-                <div className="bg-gray-50 p-4 rounded-2xl border">
-                   <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Preço Base (R$)</label>
-                   <input className="w-full bg-transparent font-bold text-pitch outline-none" type="number" value={arenaPrice} onChange={e => setArenaPrice(Number(e.target.value))} />
-                </div>
+              <div className="bg-gray-50 p-4 rounded-2xl border">
+                 <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Nome da Arena</label>
+                 <input className="w-full bg-transparent font-bold text-pitch outline-none" value={arenaName} onChange={e => setArenaName(e.target.value)} />
               </div>
-
-              {field?.id && (
-                <div className="bg-pitch/5 p-6 rounded-[2rem] border border-pitch/10 space-y-4">
-                   <h5 className="text-[10px] font-black text-pitch uppercase tracking-widest flex items-center gap-2">
-                     <Check className="w-3 h-3 text-grass-500" /> Recebimento das taxas (conta Asaas)
-                   </h5>
-                   <WalletSetup fieldId={field.id} ownerName={user.name} />
-                </div>
-              )}
               
               {/* ADDRESS SECTION WITH CEP */}
               <div className="bg-gray-50 p-6 rounded-[2rem] border space-y-4">
@@ -470,23 +448,6 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({ categories, 
               ))}
             </div>
           </section>
-
-          {user.role === UserRole.TEAM_CAPTAIN && (
-            <div className="bg-pitch text-white rounded-[2rem] p-5 space-y-2">
-              <p className="text-[10px] font-black uppercase text-grass-500">Sua mensalidade</p>
-              {teams.map((t, i) => (
-                <div key={i} className="flex justify-between text-[10px] font-bold uppercase">
-                  <span className="truncate mr-2">{t.name || 'Time'}</span>
-                  <span>{t.categories.length} categoria(s)</span>
-                </div>
-              ))}
-              <div className="flex justify-between items-end border-t border-white/10 pt-2">
-                <span className="text-[10px] font-bold uppercase text-gray-300">{countBillableCategories(teams)} categoria(s) no total</span>
-                <span className="text-xl font-black">{monthlyPriceForTeams(teams) > 0 ? `${formatBRL(monthlyPriceForTeams(teams))}/mês` : 'Grátis'}</span>
-              </div>
-              <p className="text-[9px] font-bold text-gray-400 uppercase">{formatBRL(CATEGORY_MONTHLY_PRICE)} por categoria • 1 categoria é grátis • o valor da assinatura é atualizado ao salvar</p>
-            </div>
-          )}
 
           <Button type="submit" isLoading={isLoading} className="w-full py-5 rounded-[2rem] font-black uppercase text-xs shadow-xl active:scale-95">{isLoading ? 'Salvando...' : 'Salvar Todas as Configurações'}</Button>
         </form>

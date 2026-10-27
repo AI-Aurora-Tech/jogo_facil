@@ -11,7 +11,6 @@ export interface SlotRow {
   duration_minutes: number | null;
   match_type: string | null;
   status: string;
-  price: number | null;
   has_local_team: boolean | null;
   home_team_type: string | null;
   local_team_name: string | null;
@@ -26,8 +25,6 @@ export interface SlotRow {
   opponent_team_category: string | null;
   allowed_opponent_categories: string[] | null;
   allowed_opponent_genders: string[] | null;
-  first_team_paid: boolean | null;
-  opponent_paid: boolean | null;
   [key: string]: any;
 }
 
@@ -36,14 +33,11 @@ export interface FieldRow {
   owner_id: string;
   name: string;
   location: string | null;
-  asaas_wallet_id: string | null;
-  payout_status: string | null;
   [key: string]: any;
 }
 
 export const toRuleSlot = (s: SlotRow): SlotLike => ({
   status: s.status,
-  price: s.price,
   matchType: s.match_type,
   homeTeamType: s.home_team_type,
   hasLocalTeam: s.has_local_team,
@@ -146,11 +140,6 @@ export const CLEAR_OPPONENT = {
   opponent_team_gender: null,
   opponent_applied_at: null,
   team_approved_at: null,
-  paid_at: null,
-  first_team_paid: false,
-  opponent_paid: false,
-  receipt_url: null,
-  receipt_uploaded_at: null,
 };
 
 /** Campos do primeiro time de fora zerados (horário volta a ficar livre). */

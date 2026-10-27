@@ -16,25 +16,16 @@ import {
   type SlotRow,
   type FieldRow,
 } from './_lib/slots.js';
-import {
-  getOrCreateMatchPayment,
-  listPayments,
-  payerRoleFor,
-  publicPayment,
-  refundAndCancelPayments,
-  syncPendingPayments,
-} from './_lib/payments.js';
 import { findValidInvite, markInviteUsed } from './_lib/invites.js';
 import {
   canRate,
   canSetResult,
-  computeShares,
   firstTeamUserId,
   hasHomeTeam,
   matchStart,
   opponentApproverId,
-  opponentShare,
   statusAfterTeamApproval,
+  FIELD_APPROVAL_STATUSES,
   FIELD_RATING_TAGS,
   TEAM_RATING_TAGS,
 } from '../shared/matchRules.js';
@@ -43,13 +34,12 @@ import {
  * POST /api/matches  { action, slotId, ... }
  *
  * Todas as mudanças de status da partida passam por aqui, para que o servidor
- * valide quem pode fazer o quê e para que o dinheiro nunca dependa do navegador.
+ * valide quem pode fazer o quê.
  */
 
 type Ctx = { user: DbUser; actor: DbUser; slot: SlotRow; field: FieldRow; body: any };
 
 const isFieldOwner = (c: Ctx) => c.field.owner_id === c.user.id || isAdmin(c.actor);
-const money = (n: number) => `R$ ${n.toFixed(2).replace('.', ',')}`;
 
 const requireFuture = (slot: SlotRow) => {
   assert(matchStart(toRuleSlot(slot)).getTime() > Date.now(), 400, 'Este horário já passou.');
@@ -142,18 +132,10 @@ const teamDecision = async ({ user, actor, slot, field, body }: Ctx) => {
   assert(user.id === approver || isAdmin(actor), 403, 'Somente o time 1 deste jogo pode aprovar o adversário.');
 
   if (body.approve) {
-    const next = statusAfterTeamApproval(toRuleSlot(slot));
-    const updated = await updateSlotIfStatus(slot.id, 'pending_home_approval', { status: next, team_approved_at: new Date().toISOString() });
-    if (next === 'pending_payment') {
-      for (const share of computeShares(toRuleSlot(slot))) {
-        const payerId = share.role === 'FIRST' ? slot.booked_by_user_id : slot.opponent_user_id;
-        await notify(payerId, 'Partida aprovada: faça o pagamento 💸', `Jogo de ${dateBR(slot)} aprovado. Sua parte é ${money(share.amount)} via PIX.`, 'success');
-      }
-    } else {
-      await notify(slot.opponent_user_id, 'Partida aprovada ✅', `${firstTeamName(slot)} aceitou o jogo de ${dateBR(slot)}. Falta a aprovação do campo.`, 'success');
-      await notify(field.owner_id, 'Amistoso aguardando sua aprovação', `${firstTeamName(slot)} x ${slot.opponent_team_name} em ${dateBR(slot)}.`, 'info');
-    }
-    return { slot: updated, message: next === 'pending_payment' ? 'Partida aprovada! Pagamento liberado.' : 'Partida aprovada! Aguardando o campo.' };
+    const updated = await updateSlotIfStatus(slot.id, 'pending_home_approval', { status: statusAfterTeamApproval(), team_approved_at: new Date().toISOString() });
+    await notify(slot.opponent_user_id, 'Partida aprovada ✅', `${firstTeamName(slot)} aceitou o jogo de ${dateBR(slot)}. Falta a aprovação do campo.`, 'success');
+    await notify(field.owner_id, 'Partida aguardando sua aprovação ⚽', `${firstTeamName(slot)} x ${slot.opponent_team_name} em ${dateBR(slot)}.`, 'info');
+    return { slot: updated, message: 'Partida aprovada! Aguardando o campo.' };
   }
 
   const updated = await updateSlotIfStatus(slot.id, 'pending_home_approval', { ...CLEAR_OPPONENT, status: 'waiting_opponent' });
@@ -161,42 +143,21 @@ const teamDecision = async ({ user, actor, slot, field, body }: Ctx) => {
   return { slot: updated, message: 'Adversário recusado. O jogo voltou a ficar aberto.' };
 };
 
-// ---------------------------------------------------------- pagamento ---
-const pay = async ({ user, slot, field, body }: Ctx) => {
-  assert(slot.status === 'pending_payment', 409, 'Esta partida não está aguardando pagamento.', 'STALE');
-  const role = payerRoleFor(slot, user.id);
-  assert(role, 403, 'Seu time não tem pagamento pendente nesta partida.');
-  const payment = await getOrCreateMatchPayment(slot, field, user, role, body.cpfCnpj);
-  return { payment: publicPayment(payment) };
-};
-
-const paymentStatus = async (c: Ctx) => {
-  const { slot, user } = c;
-  const participant = [slot.booked_by_user_id, slot.home_team_user_id, slot.opponent_user_id].includes(user.id);
-  assert(participant || isFieldOwner(c), 403, 'Você não participa desta partida.');
-  if (slot.status === 'pending_payment') await syncPendingPayments(slot.id);
-  const fresh = await loadSlot(slot.id);
-  const payments = (await listPayments(slot.id)).filter(p => p.status !== 'CANCELED').map(p => ({ ...publicPayment(p), pixPayload: undefined, pixQrBase64: undefined }));
-  return { slot: fresh, payments };
-};
-
 // ------------------------------------------------ aprovação do campo ---
-/** Devolve o horário para a agenda (com estorno) quando o campo recusa ou cancela. */
+/** Devolve o horário para a agenda quando o campo recusa ou cancela. */
 const releaseSlot = async (slot: SlotRow, reason: string) => {
-  const refunded = await refundAndCancelPayments(slot.id, reason);
   const patch = hasHomeTeam(toRuleSlot(slot))
     ? { ...CLEAR_OPPONENT, status: 'waiting_opponent', field_decision_reason: reason }
     : { ...CLEAR_OPPONENT, ...CLEAR_FIRST_TEAM, status: 'available', field_decision_reason: reason };
   const { data, error } = await db().from('match_slot').update(patch).eq('id', slot.id).select('*').single();
   if (error) throw error;
-  return { slot: data as SlotRow, refunded };
+  return data as SlotRow;
 };
 
 const fieldDecision = async (c: Ctx) => {
   const { slot, field, body } = c;
   assert(isFieldOwner(c), 403, 'Somente o dono do campo pode aprovar a partida.');
-  // 'pending_verification' = partidas antigas do fluxo de comprovante PIX
-  const fieldStatuses = ['pending_field_approval', 'pending_verification'];
+  const fieldStatuses: string[] = FIELD_APPROVAL_STATUSES;
   assert(fieldStatuses.includes(slot.status), 409, 'Esta partida não está aguardando aprovação do campo.', 'STALE');
   const teams = [firstTeamUserId(toRuleSlot(slot), field.owner_id), slot.opponent_user_id].filter(id => id && id !== field.owner_id);
 
@@ -209,43 +170,45 @@ const fieldDecision = async (c: Ctx) => {
   }
 
   const reason = String(body.reason || 'Recusada pelo campo').slice(0, 300);
-  const { slot: updated, refunded } = await releaseSlot(slot, reason);
+  const updated = await releaseSlot(slot, reason);
   for (const id of teams) {
-    await notify(id, 'Partida recusada pelo campo', `O jogo de ${dateBR(slot)} foi recusado: ${reason}.${refunded ? ' O valor pago será estornado.' : ''}`, 'warning');
+    await notify(id, 'Partida recusada pelo campo', `O jogo de ${dateBR(slot)} foi recusado: ${reason}.`, 'warning');
   }
-  return { slot: updated, message: refunded ? 'Partida recusada. Os pagamentos foram estornados.' : 'Partida recusada.' };
+  return { slot: updated, message: 'Partida recusada.' };
 };
 
 // ---------------------------------------------------------- cancelar ---
 const cancel = async (c: Ctx) => {
   const { user, slot, field } = c;
-  const anyPaid = (await listPayments(slot.id)).some(p => p.status === 'PAID');
 
-  // Dono do campo / admin: libera o horário em qualquer etapa, com estorno
+  // Dono do campo / admin: libera o horário em qualquer etapa
   if (isFieldOwner(c)) {
     assert(!['available', 'finished'].includes(slot.status), 400, 'Não há nada para cancelar neste horário.');
     const reason = String(c.body.reason || 'Cancelado pelo campo').slice(0, 300);
     const others = [slot.booked_by_user_id, slot.home_team_user_id, slot.opponent_user_id].filter(id => id && id !== field.owner_id);
-    const { slot: updated } = await releaseSlot(slot, reason);
+    const updated = await releaseSlot(slot, reason);
     for (const id of new Set(others)) await notify(id, 'Jogo cancelado pelo campo', `O jogo de ${dateBR(slot)} foi cancelado: ${reason}.`, 'warning');
     return { slot: updated, message: 'Jogo cancelado.' };
   }
 
-  const cancellable = ['waiting_opponent', 'pending_home_approval', 'pending_payment'];
-  assert(cancellable.includes(slot.status), 400, 'Depois do pagamento, fale com o campo para cancelar.');
-  assert(!anyPaid, 400, 'Já existe pagamento feito. Fale com o campo para cancelar e receber o estorno.');
+  // Até o campo confirmar, o time pode desistir sozinho
+  const cancellable = ['waiting_opponent', 'pending_home_approval', ...FIELD_APPROVAL_STATUSES];
+  assert(cancellable.includes(slot.status), 400, 'Com o jogo confirmado, fale com o campo para cancelar.');
 
   // Adversário desiste
   if (slot.opponent_user_id === user.id) {
-    await refundAndCancelPayments(slot.id, 'Adversário desistiu');
     const updated = await updateSlotIfStatus(slot.id, cancellable, { ...CLEAR_OPPONENT, status: 'waiting_opponent' });
-    await notify(firstTeamUserId(toRuleSlot(slot), field.owner_id), 'Adversário desistiu', `${slot.opponent_team_name} saiu do jogo de ${dateBR(slot)}. O jogo voltou a ficar aberto.`, 'warning');
+    const first = firstTeamUserId(toRuleSlot(slot), field.owner_id);
+    await notify(first, 'Adversário desistiu', `${slot.opponent_team_name} saiu do jogo de ${dateBR(slot)}. O jogo voltou a ficar aberto.`, 'warning');
+    // O campo já estava com a partida para aprovar: avisa que ela saiu da lista
+    if ((FIELD_APPROVAL_STATUSES as string[]).includes(slot.status) && first !== field.owner_id) {
+      await notify(field.owner_id, 'Adversário desistiu', `${slot.opponent_team_name} saiu do jogo de ${dateBR(slot)}. Não precisa mais aprovar.`, 'info');
+    }
     return { slot: updated, message: 'Você saiu da partida.' };
   }
 
   // Primeiro time de fora desiste: horário volta a ficar livre
   if (!hasHomeTeam(toRuleSlot(slot)) && slot.booked_by_user_id === user.id) {
-    await refundAndCancelPayments(slot.id, 'Time 1 desistiu');
     const updated = await updateSlotIfStatus(slot.id, cancellable, { ...CLEAR_OPPONENT, ...CLEAR_FIRST_TEAM, status: 'available' });
     await notify(slot.opponent_user_id, 'Jogo cancelado', `${slot.booked_by_team_name} cancelou o jogo de ${dateBR(slot)}.`, 'warning');
     await notify(field.owner_id, 'Reserva cancelada', `${slot.booked_by_team_name} cancelou ${dateBR(slot)}. O horário voltou a ficar livre.`, 'info');
@@ -319,21 +282,15 @@ const myRatings = async ({ user, slot }: Ctx) => {
   return { ratings: data || [] };
 };
 
-/** Pré-visualização de valores para a tela (o que cada lado paga). */
-const quote = async ({ slot }: Ctx) => ({ opponentShare: opponentShare(toRuleSlot(slot)), shares: computeShares(toRuleSlot(slot)) });
-
 const ACTIONS: Record<string, (c: Ctx) => Promise<any>> = {
   book,
   apply,
   team_decision: teamDecision,
-  pay,
-  payment_status: paymentStatus,
   field_decision: fieldDecision,
   cancel,
   set_result: setResult,
   rate,
   my_ratings: myRatings,
-  quote,
 };
 
 export const POST = handle(async request => {
