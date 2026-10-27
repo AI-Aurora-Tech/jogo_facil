@@ -1,7 +1,7 @@
 import { handle, json, readJson, assert, HttpError } from './_lib/http.js';
 import { requireSession, isAdmin, type DbUser } from './_lib/auth.js';
 import { db, notify } from './_lib/supabaseAdmin.js';
-import { loadField } from './_lib/slots.js';
+import { loadField, CLEAR_HOME_TEAM } from './_lib/slots.js';
 import { env } from './_lib/env.js';
 import {
   createMensalistaSlots,
@@ -24,6 +24,7 @@ import {
  *        mensalista:   { teamName, category }             (escolhe o time e a categoria daquele horário)
  *        time da casa: { categories: [...] }              (vira dono do time e cria as categorias)
  * POST /api/teams { action: 'release', teamId }           -> dono do campo tira o responsável do time
+ * POST /api/teams { action: 'approve', teamId }           -> dono do campo aprova o pedido de mensalista de um time
  */
 
 const cleanCategory = (c: unknown) => String(c || '').trim().slice(0, 30);
@@ -39,9 +40,17 @@ const scheduleText = (team: HomeTeamRow) => {
     .join(' • ');
 };
 
-/** Atualiza os jogos futuros em que o time é mandante (ex.: depois que alguém aceitou o convite). */
+/** Status em que o mandante ainda pode ser trocado (jogo não foi para pagamento/confirmação). */
+const OPEN_HOME_STATUSES = ['waiting_opponent', 'pending_home_approval'];
+
+/** Atualiza os jogos futuros ainda abertos em que o time é mandante (ex.: depois que alguém aceitou o convite). */
 const syncFutureHomeSlots = async (team: HomeTeamRow, patch: Record<string, unknown>) => {
-  const { error } = await db().from('match_slot').update(patch).eq('home_team_id', team.id).gte('date', todayBR());
+  const { error } = await db()
+    .from('match_slot')
+    .update(patch)
+    .eq('home_team_id', team.id)
+    .gte('date', todayBR())
+    .in('status', OPEN_HOME_STATUSES);
   if (error) throw error;
 };
 
@@ -143,6 +152,16 @@ const claim = async (request: Request, body: any) => {
       local_team_phone: user.phone_number,
       local_team_logo_url: myTeam.logoUrl || team.logo_url || null,
     });
+    // Jogos já criados para este horário e ainda sem adversário passam a ser da categoria escolhida
+    const gender = myTeam.gender || team.gender || 'MASCULINO';
+    const { error: catErr } = await db()
+      .from('match_slot')
+      .update({ local_team_category: category, allowed_opponent_categories: [category], local_team_gender: gender, allowed_opponent_genders: [gender] })
+      .eq('home_team_id', team.id)
+      .gte('date', todayBR())
+      .eq('status', 'waiting_opponent')
+      .is('opponent_user_id', null);
+    if (catErr) throw catErr;
     const created = await createMensalistaSlots(team, user, category);
     message = created > 0
       ? `Pronto! ${myTeam.name} (${category}) é mensalista da arena ${field.name}. Criamos ${created} jogo(s) na sua agenda.`
@@ -196,10 +215,41 @@ const release = async (request: Request, body: any) => {
     .update({ captain_user_id: null, captain_name: null, captain_phone: null, email: null })
     .eq('id', team.id);
   if (error) throw error;
-  // Time da casa sem responsável volta a ser aprovado pelo dono do campo
-  await syncFutureHomeSlots(team, { home_team_user_id: team.kind === 'LOCAL' ? field.owner_id : null });
+  if (team.kind === 'MENSALISTA') {
+    // Os jogos futuros do mensalista ainda sem adversário voltam a ficar livres na agenda
+    const { error: freeErr } = await db()
+      .from('match_slot')
+      .update({ ...CLEAR_HOME_TEAM, home_team_type: 'OUTSIDE', is_booked: false, allowed_opponent_categories: [], status: 'available' })
+      .eq('home_team_id', team.id)
+      .gte('date', todayBR())
+      .eq('status', 'waiting_opponent')
+      .is('opponent_user_id', null);
+    if (freeErr) throw freeErr;
+    // Os que já têm adversário passam a ser aprovados pelo dono do campo
+    await syncFutureHomeSlots(team, { home_team_user_id: null });
+    await db().from('registered_team').update({ categories: [] }).eq('id', team.id);
+  } else {
+    // Time da casa sem responsável volta a ser aprovado pelo dono do campo
+    await syncFutureHomeSlots(team, { home_team_user_id: field.owner_id });
+  }
   if (previous) await notify(previous, 'Você saiu do time do campo', `A arena ${field.name} tirou você como responsável pelo ${team.name}.`, 'warning');
   return json({ message: 'Responsável removido. Envie um novo convite quando quiser.' });
+};
+
+// ------------------------------------------------- aprovar pedido de time ---
+/** Pedido de mensalista feito pelo time ("Seja mensalista"): só o dono do campo aprova. */
+const approve = async (request: Request, body: any) => {
+  const { user, actor } = await requireSession(request, body.actAsUserId);
+  const team = await loadHomeTeam(body.teamId);
+  const field = await loadField(team.field_id);
+  assert(field.owner_id === user.id || isAdmin(actor), 403, 'Somente o dono do campo pode aprovar.');
+  assert(team.status === 'pending', 409, 'Este pedido já foi respondido.');
+  const { error } = await db().from('registered_team').update({ status: 'approved', processed_by: user.id }).eq('id', team.id);
+  if (error) throw error;
+  if (team.captain_user_id) {
+    await notify(team.captain_user_id, 'Mensalista aprovado ✅', `A arena ${field.name} aprovou o ${team.name}: ${scheduleText(team)}.`, 'success');
+  }
+  return json({ message: 'Mensalista aprovado!' });
 };
 
 export const GET = handle(async request => {
@@ -216,6 +266,8 @@ export const POST = handle(async request => {
       return claim(request, body);
     case 'release':
       return release(request, body);
+    case 'approve':
+      return approve(request, body);
     default:
       throw new HttpError(400, 'Ação inválida.');
   }

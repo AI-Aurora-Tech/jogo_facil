@@ -198,9 +198,14 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({ categories, 
               finalLng = arenaGeo.lng;
           } else if (fullAddress !== field.location || !finalLat || !finalLng) {
               const coords = await geocodeAddressParts({ street, number, neighborhood, city, state, cep });
-              if (coords) {
+              // Só a cidade (ou nada): não usa (a distância ficaria errada); o dono marca pelo GPS no aviso da agenda
+              if (coords && coords.precision !== 'city') {
                   finalLat = coords.lat;
                   finalLng = coords.lng;
+              } else if (fullAddress !== field.location) {
+                  // Endereço mudou e a posição antiga não vale mais
+                  finalLat = 0;
+                  finalLng = 0;
               }
           }
 

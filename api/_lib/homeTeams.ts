@@ -114,7 +114,7 @@ export const createMensalistaSlots = async (team: HomeTeamRow, captain: DbUser, 
   const { data: field } = await db().from('field').select('id, hourly_rate').eq('id', team.field_id).maybeSingle();
   const { data: existing, error } = await db()
     .from('match_slot')
-    .select('date, time, duration_minutes, court_name')
+    .select('id, date, time, duration_minutes, court_name, status, booked_by_user_id, has_local_team')
     .eq('field_id', team.field_id)
     .in('date', validDates);
   if (error) throw error;
@@ -122,25 +122,31 @@ export const createMensalistaSlots = async (team: HomeTeamRow, captain: DbUser, 
   const start = toMinutes(time);
   const end = start + duration;
   const court = team.court_name || null;
-  const free = validDates.filter(date =>
-    !(existing || []).some(s => {
+  const free: string[] = [];
+  // Horário livre que a arena já criou no mesmo dia/hora/quadra: vira o jogo do mensalista
+  const reuse: string[] = [];
+  for (const date of validDates) {
+    const overlapping = (existing || []).filter(s => {
       if (s.date !== date) return false;
       if ((s.court_name || null) !== court) return false;
       const sStart = toMinutes(s.time);
       const sEnd = sStart + (s.duration_minutes || 60);
       return start < sEnd && sStart < end;
-    })
-  );
-  if (free.length === 0) return 0;
+    });
+    if (overlapping.length === 0) free.push(date);
+    else if (
+      overlapping.length === 1 &&
+      overlapping[0].status === 'available' &&
+      !overlapping[0].booked_by_user_id &&
+      !overlapping[0].has_local_team &&
+      toMinutes(overlapping[0].time) === start
+    ) reuse.push(overlapping[0].id);
+  }
+  if (free.length === 0 && reuse.length === 0) return 0;
 
   const captainTeam = (captain.teams || []).find(t => (t.name || '').trim().toLowerCase() === (team.name || '').trim().toLowerCase());
   const gender = team.gender || captainTeam?.gender || 'MASCULINO';
-  const rows = free.map(date => ({
-    field_id: team.field_id,
-    date,
-    time,
-    duration_minutes: duration,
-    match_type: 'NORMAL',
+  const homeFields = {
     is_booked: true,
     has_local_team: true,
     home_team_type: 'MENSALISTA',
@@ -154,11 +160,26 @@ export const createMensalistaSlots = async (team: HomeTeamRow, captain: DbUser, 
     allowed_opponent_categories: [category],
     allowed_opponent_genders: [gender],
     status: 'waiting_opponent',
+  };
+
+  if (reuse.length > 0) {
+    const { error: upErr } = await db().from('match_slot').update(homeFields).in('id', reuse).eq('status', 'available');
+    if (upErr) throw upErr;
+  }
+  const rows = free.map(date => ({
+    ...homeFields,
+    field_id: team.field_id,
+    date,
+    time,
+    duration_minutes: duration,
+    match_type: 'NORMAL',
     price: Number(field?.hourly_rate) || 0,
     sport: sportLabel(team.sport || captainTeam?.sport),
     court_name: court,
   }));
-  const { error: insErr } = await db().from('match_slot').insert(rows);
-  if (insErr) throw insErr;
-  return rows.length;
+  if (rows.length > 0) {
+    const { error: insErr } = await db().from('match_slot').insert(rows);
+    if (insErr) throw insErr;
+  }
+  return rows.length + reuse.length;
 };

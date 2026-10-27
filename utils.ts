@@ -223,6 +223,20 @@ export const geocodeAddressParts = async (parts: AddressParts): Promise<GeoResul
  */
 export const geocodeAddress = async (address: string): Promise<GeoResult | null> => {
   if (!address) return null;
+  // Cache da sessão (inclui endereços não encontrados, para não consultar de novo)
+  const cacheKey = `jf_geo:${address}`;
+  try {
+    const cached = sessionStorage.getItem(cacheKey);
+    if (cached) return cached === 'null' ? null : JSON.parse(cached);
+  } catch { /* sem storage */ }
+  const result = await geocodeAddressUncached(address);
+  try {
+    sessionStorage.setItem(cacheKey, result ? JSON.stringify(result) : 'null');
+  } catch { /* sem storage */ }
+  return result;
+};
+
+const geocodeAddressUncached = async (address: string): Promise<GeoResult | null> => {
   const cepMatch = address.match(/(\d{5})[-.]?(\d{3})/);
   const cep = cepMatch ? `${cepMatch[1]}${cepMatch[2]}` : '';
   const withoutCep = address.replace(/(\d{5}[-.]?\d{3})/g, '').replace(/[,\s-]+$/, '');

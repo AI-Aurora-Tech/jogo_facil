@@ -169,6 +169,8 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, onCancel, initialMode, invi
             fullAddress += ` - ${city} - ${state}, ${cep}`;
             // Salva a posição da arena no cadastro (antes a distância era adivinhada a cada busca)
             geo = arenaGeo || await geocodeAddressParts({ street, number, neighborhood, city, state, cep });
+            // Só a cidade: não salva (a arena marca depois pelo aviso na agenda)
+            if (geo && geo.precision === 'city' && !arenaGeo) geo = null;
         }
 
         const payload = {

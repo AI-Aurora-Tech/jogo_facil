@@ -159,12 +159,8 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
     }
 
     try {
-      await api.updateRegisteredTeam(teamId, { 
-        status: 'approved',
-        updatedAt: new Date().toISOString(),
-        processedBy: currentUser.id
-      });
-      alert('Mensalista aprovado com sucesso!');
+      const res = await api.approveTeam(teamId);
+      alert(res.message || 'Mensalista aprovado com sucesso!');
       loadMensalistas();
     } catch (error: any) {
       console.error("Erro ao aprovar mensalista:", error);
@@ -276,7 +272,9 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
       } else {
         setLocalTeamCategory('');
       }
-      if (team.gender) setLocalTeamGender(team.gender);
+      const editingSameTeam = editing && editing.hasLocalTeam && (editing.homeTeamId === selectedRegisteredTeamId || (editing.localTeamName || '').trim().toLowerCase() === (team.name || '').trim().toLowerCase());
+      if (editingSameTeam && editing!.localTeamGender) setLocalTeamGender(editing!.localTeamGender);
+      else if (team.gender) setLocalTeamGender(team.gender);
       if (team.sport) setSlotSport(sportLabel(team.sport));
     }
   }, [selectedRegisteredTeamId, currentUser.teams, registeredTeams]);
@@ -346,8 +344,12 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
       const ownerIdx = (currentUser.teams || []).findIndex(t => sameName(t.name, slot.localTeamName));
       setHomeKind(reg ? reg.kind : slot.homeTeamType === 'MENSALISTA' ? 'MENSALISTA' : 'LOCAL');
       setSelectedRegisteredTeamId(reg ? reg.id : ownerIdx >= 0 ? `OWNER_TEAM_${ownerIdx}` : '');
+      // Categoria e gênero salvos no horário (o efeito de troca de time não roda se o time for o mesmo)
+      setLocalTeamCategory(slot.localTeamCategory || '');
+      if (slot.localTeamGender) setLocalTeamGender(slot.localTeamGender);
     } else {
       setSelectedRegisteredTeamId('');
+      setLocalTeamCategory('');
     }
     setShowAddSlotModal(true);
   };
@@ -1280,19 +1282,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                                   <div 
                                     key={slot.id}
                                     onClick={() => {
-                                      if (slot.fieldId === field.id) {
-                                        setEditingSlotId(slot.id);
-                                        setSlotDate(slot.date);
-                                        setSlotTime(slot.time);
-                                        setSlotDuration(slot.durationMinutes);
-                                        setSlotMatchType(normalizeMatchKind(slot.matchType));
-                                        setSlotPrize(slot.prizeDescription || '');
-                                        setSlotSport(slot.sport);
-                                        setSlotCourt(slot.courtName || '');
-                                        setSlotPrice(slot.price);
-                                        setSelectedRegisteredTeamId(slot.localTeamName ? (registeredTeams.find(t => t.name === slot.localTeamName)?.id || '') : '');
-                                        setShowAddSlotModal(true);
-                                      }
+                                      if (slot.fieldId === field.id) handleEditSlot(slot);
                                     }}
                                     className={`mb-1 p-2 rounded-xl text-[8px] font-black uppercase leading-tight cursor-pointer transition-all hover:scale-[1.02] shadow-sm ${getSlotColor(slot)}`}
                                   >
