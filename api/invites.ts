@@ -4,7 +4,7 @@ import { db } from './_lib/supabaseAdmin.js';
 import { findValidInvite, newInviteToken } from './_lib/invites.js';
 import { loadField, loadSlot, toRuleSlot, firstTeamName, firstTeamCategory } from './_lib/slots.js';
 import { env } from './_lib/env.js';
-import { firstTeamUserId, matchStart, normalizeMatchKind, MATCH_KIND_LABEL } from '../shared/matchRules.js';
+import { firstTeamUserId, matchStart, normalizeMatchKind, opponentShare, MATCH_KIND_LABEL } from '../shared/matchRules.js';
 
 /**
  * Convites de partida.
@@ -49,10 +49,12 @@ export const POST = handle(async request => {
 
   const origin = env.appUrl() || new URL(request.url).origin;
   const url = `${origin}/?convite=${token}`;
+  const share = opponentShare(toRuleSlot(slot));
   const category = firstTeamCategory(slot);
   const message =
     `⚽ Convite Jogo Fácil!\n${firstTeamName(slot)}${category ? ` (${category})` : ''} procura adversário.\n` +
     `📍 ${field.name}\n📅 ${slot.date.split('-').reverse().join('/')} às ${String(slot.time).slice(0, 5)}\n` +
+    `💰 ${share > 0 ? `Taxa do adversário: R$ ${share.toFixed(2).replace('.', ',')}` : 'Sem taxa'}\n` +
     `Crie sua conta grátis e confirme: ${url}`;
 
   return json({ token, url, message });
@@ -88,6 +90,7 @@ export const GET = handle(async request => {
     category: invite.category || firstTeamCategory(slot),
     allowedCategories: slot.allowed_opponent_categories || [],
     allowedGenders: slot.allowed_opponent_genders || [],
+    opponentShare: opponentShare(toRuleSlot(slot)),
     field: { id: field.id, name: field.name, location: field.location, imageUrl: field.image_url, ratingAvg: Number(field.rating_avg) || 0, ratingCount: field.rating_count || 0 },
   });
 });

@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { UserRole, CATEGORY_ORDER, Gender } from '../types';
+import { UserRole, SubscriptionPlan, CATEGORY_ORDER, Gender } from '../types';
 import { Button } from '../components/Button';
 import { Shield, MapPin, AlertCircle, KeyRound, ChevronLeft, Camera, LayoutGrid, Loader2, Eye, EyeOff } from 'lucide-react';
 import { api, ServerError } from '../api';
@@ -155,6 +155,7 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, onCancel, initialMode, invi
           role,
           name,
           phoneNumber: phone,
+          subscription: role === UserRole.FIELD_OWNER ? SubscriptionPlan.PRO_FIELD : SubscriptionPlan.NONE,
           teams: role === UserRole.TEAM_CAPTAIN ? [{ 
               name: teamName, 
               categories: teamCategories, 
@@ -168,12 +169,14 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, onCancel, initialMode, invi
             location: fullAddress,
             contactPhone: phone,
             imageUrl: arenaPhoto,
+            pixKey: undefined,
+            pixName: undefined,
             complement,
             courts: courts
           } : undefined
         };
         await api.register(payload);
-        // Entra logo em seguida para obter a sessão do servidor (usada nas partidas)
+        // Entra logo em seguida para obter a sessão do servidor (usada em partidas e pagamentos)
         try {
           onLogin(await api.login(payload.email, password));
         } catch (loginErr: any) {

@@ -11,8 +11,11 @@ export const GET = async (): Promise<Response> => {
     SUPABASE_URL: !!env.supabaseUrl(),
     SUPABASE_SERVICE_ROLE_KEY: !!env.supabaseServiceKey(),
     SESSION_SECRET: !!env.sessionSecret(),
-    RESEND_API_KEY: !!env.resendApiKey(),
+    ASAAS_API_KEY: !!env.asaasApiKey(),
+    ASAAS_WEBHOOK_TOKEN: !!env.asaasWebhookToken(),
+    ASAAS_ENV: env.asaasEnv(),
     APP_URL: !!env.appUrl(),
+    RESEND_API_KEY: !!env.resendApiKey(),
   };
 
   const checks: Record<string, string> = {};
@@ -20,8 +23,10 @@ export const GET = async (): Promise<Response> => {
     try {
       const { error } = await db().from('user').select('id').limit(1);
       checks.banco = error ? `ERRO: ${error.message}` : 'OK';
-      const { error: tblErr } = await db().from('match_invite').select('id').limit(1);
-      checks.migracao_partidas = tblErr ? `FALTA rodar 20261022_01_fluxo_partidas_pagamentos.sql (${tblErr.message})` : 'OK';
+      const { error: colErr } = await db().from('user').select('billing_status').limit(1);
+      checks.migracao_pagamentos = colErr ? `FALTA rodar 20261022_01_fluxo_partidas_pagamentos.sql (${colErr.message})` : 'OK';
+      const { error: tblErr } = await db().from('match_payment').select('id').limit(1);
+      checks.tabelas_novas = tblErr ? `ERRO: ${tblErr.message}` : 'OK';
       const { error: resetErr } = await db().from('password_reset').select('id').limit(1);
       checks.migracao_senha = resetErr ? `FALTA rodar 20261023_01_senha_pelo_servidor.sql (${resetErr.message})` : 'OK';
     } catch (e: any) {

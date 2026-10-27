@@ -315,7 +315,7 @@ const App: React.FC = () => {
     await refreshData();
     
     const t = n.title.toLowerCase();
-    if (user?.role === UserRole.FIELD_OWNER && (t.includes('desafio') || t.includes('mensalista') || t.includes('aprove') || t.includes('partida'))) {
+    if (user?.role === UserRole.FIELD_OWNER && (t.includes('desafio') || t.includes('mensalista') || t.includes('aprove') || t.includes('pagamento'))) {
       setActiveTab('ADMIN');
       setFieldDashForceTab('SOLICITACOES');
       setTimeout(() => setFieldDashForceTab(undefined), 100);
@@ -664,7 +664,7 @@ const App: React.FC = () => {
               return (
                 <FieldDashboard 
                     categories={categories} 
-                    field={userField || { id: '', name: 'Carregando...', ownerId: '', location: '', imageUrl: '', contactPhone: '', latitude: 0, longitude: 0, courts: [] }} 
+                    field={userField || { id: '', name: 'Carregando...', ownerId: '', location: '', hourlyRate: 0, cancellationFeePercent: 0, pixConfig: { key: '', name: '' }, imageUrl: '', contactPhone: '', latitude: 0, longitude: 0, courts: [] }} 
                     slots={userField ? slots.filter(s => s.fieldId === userField.id) : []} 
                     currentUser={currentUserContext}
                     onAddSlot={async (newSlots) => { 
@@ -701,6 +701,7 @@ const App: React.FC = () => {
                     onUpdateField={async (id, u) => { await api.updateField(id, u); refreshData(); return true; }}
                     onRateTeam={() => {}}
                     forceTab={fieldDashForceTab}
+                    isAdminView={!!impersonatingUser}
                 />
               );
             })()

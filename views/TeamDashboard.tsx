@@ -6,7 +6,8 @@ import { Field, MatchSlot, User, CATEGORY_ORDER, SPORTS, Gender, RegisteredTeam 
 import { api } from '../api';
 import { calculateDistance, getCurrentPosition, formatDistance, LatLng, geocodeAddress } from '../utils';
 import { MatchActions, firstTeamNameOf } from '../components/MatchActions';
-import { hasHomeTeam, normalizeMatchKind, opponentApproverId, MATCH_KIND_LABEL, STATUS_LABEL } from '../shared/matchRules';
+import { hasHomeTeam, normalizeMatchKind, opponentApproverId, shareFor, MATCH_KIND_LABEL, STATUS_LABEL } from '../shared/matchRules';
+import { formatBRL } from '../shared/money';
 
 interface TeamDashboardProps {
   categories: string[];
@@ -19,7 +20,7 @@ interface TeamDashboardProps {
   onRateTeam?: () => void;
 }
 
-type SortOption = 'DISTANCE_ASC' | 'DISTANCE_DESC' | 'NAME_ASC' | 'NAME_DESC';
+type SortOption = 'DISTANCE_ASC' | 'DISTANCE_DESC' | 'PRICE_ASC' | 'PRICE_DESC' | 'NAME_ASC' | 'NAME_DESC';
 
 export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, fields, slots, viewMode, onRefresh, onCancelBooking, onRateTeam }) => {
   const [selectedSlot, setSelectedSlot] = useState<MatchSlot | null>(null);
@@ -246,6 +247,8 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
       const distB = fieldDistances[b.fieldId] ?? 99999999;
 
       switch (sortBy) {
+        case 'PRICE_ASC': return a.price - b.price;
+        case 'PRICE_DESC': return b.price - a.price;
         case 'DISTANCE_ASC': return distA - distB;
         case 'DISTANCE_DESC': return distB - distA;
         default: return new Date(`${a.date}T${a.time}`).getTime() - new Date(`${b.date}T${b.time}`).getTime();
@@ -263,8 +266,10 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
     }
     if (status === 'waiting_opponent') return { label: 'AGUARDANDO ADVERSÁRIO', color: 'bg-blue-100 text-blue-700 font-bold', icon: <Swords className="w-3 h-3"/> };
     if (status === 'finished') return { label: 'ENCERRADO', color: 'bg-pitch text-white', icon: <Trophy className="w-3 h-3"/> };
+    if (status === 'pending_verification') return { label: 'AGUARDANDO VALIDAÇÃO', color: 'bg-orange-100 text-orange-600', icon: <Clock className="w-3 h-3"/> };
+    if (status === 'pending_payment') return { label: 'AGUARDANDO PAGAMENTO', color: 'bg-blue-100 text-blue-600', icon: <Clock className="w-3 h-3"/> };
     if (status === 'pending_home_approval') return { label: STATUS_LABEL.pending_home_approval.toUpperCase(), color: 'bg-orange-100 text-orange-600', icon: <Clock className="w-3 h-3"/> };
-    if (status === 'pending_field_approval' || status === 'pending_payment' || status === 'pending_verification') return { label: 'AGUARDANDO ARENA', color: 'bg-gray-100 text-gray-500', icon: <Clock className="w-3 h-3"/> };
+    if (status === 'pending_field_approval') return { label: 'AGUARDANDO ARENA', color: 'bg-gray-100 text-gray-500', icon: <Clock className="w-3 h-3"/> };
     return { label: 'DISPONÍVEL', color: 'bg-gray-100 text-gray-500', icon: <Clock className="w-3 h-3"/> };
   };
 
@@ -415,6 +420,7 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
                       <ArrowUpDown className="w-4 h-4 text-gray-400" />
                       <select value={sortBy} onChange={e => setSortBy(e.target.value as SortOption)} className="bg-transparent w-full font-bold text-[10px] uppercase outline-none">
                          <option value="DISTANCE_ASC">Mais Próximos</option>
+                         <option value="PRICE_ASC">Menor Preço</option>
                          <option value="NAME_ASC">A - Z</option>
                       </select>
                    </div>
@@ -618,6 +624,14 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
                       <span className={`px-2 py-1 rounded-lg text-[8px] font-black uppercase mb-1 ${status.color}`}>
                          {status.label}
                       </span>
+                      <span className="text-xs font-black text-pitch">
+                        {(() => {
+                          const isNew = slot.status === 'available' && !hasHomeTeam(slot) && !slot.bookedByTeamName;
+                          const share = shareFor(slot, isNew ? 'FIRST' : 'OPPONENT');
+                          if (share <= 0) return 'Sem taxa';
+                          return hasHomeTeam(slot) ? `${formatBRL(share)} (adversário paga tudo)` : `${formatBRL(share)} por time (50%)`;
+                        })()}
+                      </span>
                    </div>
                    {viewMode === 'EXPLORE' && (slot.status === 'available' || slot.status === 'waiting_opponent') && field?.ownerId !== currentUser.id && !((slot.bookedByTeamName && myTeamsNames.includes(slot.bookedByTeamName.toLowerCase())) || (slot.localTeamName && myTeamsNames.includes(slot.localTeamName.toLowerCase()))) &&
                      <Button onClick={() => setSelectedSlot(slot)} className="rounded-2xl px-8 py-4 font-black uppercase text-[10px] bg-pitch shadow-lg">
@@ -701,9 +715,11 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
 
                {(() => {
                  const isNew = selectedSlot.status === 'available' && !hasHomeTeam(selectedSlot) && !selectedSlot.bookedByTeamName;
+                 const share = shareFor(selectedSlot, isNew ? 'FIRST' : 'OPPONENT');
                  return (
                    <div className="bg-gray-50 p-4 rounded-2xl border text-[10px] font-bold text-gray-500 uppercase space-y-1">
                      <p className="text-pitch font-black">{isNew ? 'Você será o time 1 deste horário' : `Desafiar ${firstTeamNameOf(selectedSlot)}`}</p>
+                     <p>{share > 0 ? `Sua parte da taxa: ${formatBRL(share)} (PIX, depois da aprovação)` : 'Sem taxa (amistoso)'}</p>
                      {isNew && <p>Depois de reservar, envie o convite para um adversário. Você aprova quem se inscrever.</p>}
                    </div>
                  );

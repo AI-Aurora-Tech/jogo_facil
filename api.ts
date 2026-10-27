@@ -1,8 +1,8 @@
 import { supabase } from './supabaseClient';
-import { User, Field, MatchSlot, RegisteredTeam, PendingUpdate, UserRole, InAppNotification, TutorialVideo, InvitePreview } from './types';
+import { User, Field, MatchSlot, RegisteredTeam, PendingUpdate, UserRole, InAppNotification, SubscriptionPlan, TutorialVideo, MatchPaymentInfo, InvitePreview } from './types';
 
 const SESSION_TOKEN_KEY = 'jf_session_token';
-const USER_COLUMNS = 'id, email, name, phone_number, role, teams, latitude, longitude, team_rating, team_rating_count, created_at';
+const USER_COLUMNS = 'id, email, name, phone_number, role, subscription, subscription_expiry, teams, latitude, longitude, team_rating, team_rating_count, is_subscribed, subscription_id, created_at, cpf_cnpj';
 
 export const sessionToken = {
   get: (): string | null => {
@@ -16,7 +16,7 @@ export const sessionToken = {
   },
 };
 
-/** Erro vindo das funções do servidor (/api). `code` ajuda a tela a reagir (ex.: SESSION_EXPIRED). */
+/** Erro vindo das funções do servidor (/api). `code` ajuda a tela a reagir (ex.: NEED_CPF). */
 export class ServerError extends Error {
   code?: string;
   status: number;
@@ -92,14 +92,20 @@ const mapSlotFromDb = (s: any): MatchSlot => ({
   opponentTeamLogoUrl: s.opponent_team_logo_url,
   opponentTeamGender: s.opponent_team_gender,
   status: s.status,
+  price: Number(s.price) || 0,
   allowedOpponentCategories: s.allowed_opponent_categories || [],
   allowedOpponentGenders: s.allowed_opponent_genders || [],
+  receiptUrl: s.receipt_url,
+  receiptUploadedAt: s.receipt_uploaded_at,
   courtName: s.court_name,
   sport: s.sport,
   homeTeamType: s.home_team_type || 'OUTSIDE',
+  pixKey: s.pix_key,
   prizeDescription: s.prize_description,
   homeTeamUserId: s.home_team_user_id,
   opponentUserId: s.opponent_user_id,
+  firstTeamPaid: !!s.first_team_paid,
+  opponentPaid: !!s.opponent_paid,
   homeScore: s.home_score,
   awayScore: s.away_score,
   resultSetAt: s.result_set_at,
@@ -111,12 +117,16 @@ const mapFieldFromDb = (f: any): Field => ({
   ownerId: f.owner_id,
   name: f.name,
   location: f.location,
+  hourlyRate: f.hourly_rate,
+  cancellationFeePercent: f.cancellation_fee_percent,
+  pixConfig: { key: f.pix_key || '', name: (f.pix_name || '').split('|')[0]?.trim() || '', bank: (f.pix_name || '').split('|')[1]?.trim() || '' },
   imageUrl: f.image_url,
   contactPhone: f.contact_phone,
   latitude: Number(f.latitude) || 0,
   longitude: Number(f.longitude) || 0,
   courts: f.courts || ['Principal'],
   complement: f.complement,
+  payoutStatus: f.payout_status || 'NONE',
   ratingAvg: Number(f.rating_avg) || 0,
   ratingCount: f.rating_count || 0,
 });
@@ -131,6 +141,8 @@ const mapUserFromDb = (u: any): User => ({
   email: u.email,
   phoneNumber: u.phone_number,
   role: u.role,
+  subscription: u.subscription,
+  subscriptionExpiry: u.subscription_expiry,
   teams: u.teams || [], 
   latitude: u.latitude,
   longitude: u.longitude,
@@ -138,15 +150,18 @@ const mapUserFromDb = (u: any): User => ({
   teamRatingCount: u.team_rating_count,
   password: u.password || undefined, // Password may be missing if using secure RPC
   createdAt: u.created_at,
+  isSubscribed: u.role === UserRole.FIELD_OWNER || u.is_subscribed || u.subscription === SubscriptionPlan.PRO_TEAM || u.subscription === SubscriptionPlan.PRO_FIELD,
+  subscriptionId: u.subscription_id,
+  cpfCnpj: u.cpf_cnpj || undefined,
 });
 
-export type MatchAction = 'book' | 'apply' | 'team_decision' | 'field_decision' | 'cancel' | 'set_result' | 'rate' | 'my_ratings';
+export type MatchAction = 'book' | 'apply' | 'team_decision' | 'payment_status' | 'field_decision' | 'cancel' | 'set_result' | 'rate' | 'my_ratings';
 
 export const api = {
   login: async (email: string, password: string): Promise<User> => {
     const normalizedEmail = email.toLowerCase().trim();
 
-    // Login pelo servidor: devolve a sessão usada nas ações de partida
+    // Login pelo servidor: devolve a sessão usada nas ações de partida/pagamento
     try {
       const { user, token } = await callServer<{ user: any; token: string }>('/api/auth/login', { email: normalizedEmail, password });
       sessionToken.set(token);
@@ -190,6 +205,7 @@ export const api = {
         name: userFields.name,
         phone_number: userFields.phoneNumber,
         role: finalRole,
+        subscription: userFields.subscription,
         team_name: userFields.teamName,
         team_categories: userFields.teamCategories,
         team_logo_url: userFields.teamLogoUrl,
@@ -206,9 +222,12 @@ export const api = {
         owner_id: newUser.id,
         name: fieldData.name,
         location: fieldData.location,
+        hourly_rate: fieldData.hourlyRate || 0,
         contact_phone: fieldData.contactPhone,
         image_url: fieldData.imageUrl || 'https://images.unsplash.com/photo-1529900748604-07564a03e7a6?auto=format&fit=crop&q=80&w=1000',
         complement: fieldData.complement || null,
+        pix_key: fieldData.pixKey || null,
+        pix_name: fieldData.pixName || null,
         courts: fieldData.courts || ['Principal']
       }]);
     }
@@ -351,12 +370,19 @@ export const api = {
     const payload: any = {};
     if (updates.name !== undefined) payload.name = updates.name;
     if (updates.location !== undefined) payload.location = updates.location;
+    if (updates.hourlyRate !== undefined) payload.hourly_rate = updates.hourlyRate;
     if (updates.imageUrl !== undefined) payload.image_url = updates.imageUrl;
     if (updates.contactPhone !== undefined) payload.contact_phone = updates.contactPhone;
     if (updates.courts !== undefined) payload.courts = updates.courts;
     if (updates.latitude !== undefined) payload.latitude = updates.latitude;
     if (updates.longitude !== undefined) payload.longitude = updates.longitude;
     if (updates.complement !== undefined) payload.complement = updates.complement;
+    if (updates.cancellationFeePercent !== undefined) payload.cancellation_fee_percent = updates.cancellationFeePercent;
+
+    if (updates.pixConfig) {
+      payload.pix_key = updates.pixConfig.key;
+      payload.pix_name = `${updates.pixConfig.name} | ${updates.pixConfig.bank || ''}`;
+    }
     const { data, error } = await supabase.from('field').update(payload).eq('id', fieldId).select().single();
     if (error) throw error;
     return mapFieldFromDb(data);
@@ -455,11 +481,15 @@ export const api = {
       opponent_team_phone: s.opponentTeamPhone || null,
       opponent_team_logo_url: s.opponentTeamLogoUrl || null,
       opponent_team_gender: s.opponentTeamGender || null,
+      price: s.price || 0,
       status: s.status || 'available',
       allowed_opponent_categories: s.allowedOpponentCategories || [],
       court_name: s.courtName,
       sport: s.sport,
       home_team_type: s.homeTeamType || 'OUTSIDE',
+      receipt_url: s.receiptUrl || null,
+      receipt_uploaded_at: s.receiptUploadedAt || null,
+      pix_key: s.pixKey || null
     }));
     const { data, error } = await supabase.from('match_slot').insert(payload).select('*');
     if (error) throw error;
@@ -467,8 +497,8 @@ export const api = {
   },
 
   /**
-   * Edição do horário pelo dono do campo (data, hora, mandante...).
-   * Status, times inscritos e placar só mudam pelo servidor: use api.match().
+   * Edição do horário pelo dono do campo (data, hora, preço, mandante...).
+   * Status, times inscritos, pagamento e placar só mudam pelo servidor: use api.match().
    */
   updateSlot: async (slotId: string, data: Partial<MatchSlot>): Promise<void> => {
     const payload: any = {};
@@ -484,10 +514,12 @@ export const api = {
     if (data.localTeamGender !== undefined) payload.local_team_gender = data.localTeamGender;
     if (data.localTeamLogoUrl !== undefined) payload.local_team_logo_url = data.localTeamLogoUrl;
     if (data.homeTeamType !== undefined) payload.home_team_type = data.homeTeamType;
+    if (data.price !== undefined) payload.price = data.price;
     if (data.courtName !== undefined) payload.court_name = data.courtName;
     if (data.sport !== undefined) payload.sport = data.sport;
     if (data.allowedOpponentCategories !== undefined) payload.allowed_opponent_categories = data.allowedOpponentCategories;
     if (data.allowedOpponentGenders !== undefined) payload.allowed_opponent_genders = data.allowedOpponentGenders;
+    if (data.pixKey !== undefined) payload.pix_key = data.pixKey;
     if (Object.keys(payload).length === 0) return;
 
     const { error } = await supabase.from('match_slot').update(payload).eq('id', slotId);
@@ -495,16 +527,27 @@ export const api = {
   },
 
   // ------------------------------------------------------------------
-  // Ações no servidor (/api): fluxo da partida, convites
+  // Ações no servidor (/api): fluxo da partida, pagamentos, convites
   // ------------------------------------------------------------------
 
   /** Executa uma etapa do fluxo da partida no servidor. */
   match: <T = { message?: string }>(action: MatchAction, slotId: string, params: Record<string, unknown> = {}) =>
     callServer<T>('/api/matches', { action, slotId, ...params }),
 
+  payMatch: (slotId: string, cpfCnpj?: string) =>
+    callServer<{ payment: MatchPaymentInfo }>('/api/matches', { action: 'pay', slotId, cpfCnpj }),
+
+  matchPayments: async (slotId: string) => {
+    const res = await callServer<{ slot: any; payments: MatchPaymentInfo[] }>('/api/matches', { action: 'payment_status', slotId });
+    return { slot: mapSlotFromDb(res.slot), payments: res.payments };
+  },
+
   createInvite: (slotId: string) => callServer<{ token: string; url: string; message: string }>('/api/invites', { slotId }),
 
   getInvite: (token: string) => callServer<InvitePreview>(`/api/invites?token=${encodeURIComponent(token)}`, undefined, 'GET'),
+
+  payouts: (action: 'status' | 'set_wallet' | 'create_account', fieldId: string, params: Record<string, unknown> = {}) =>
+    callServer<{ payoutStatus: string; hasWallet: boolean; walletIdEnd?: string | null; platformFeePercent?: number; message?: string }>('/api/payouts', { action, fieldId, ...params }),
 
   getWhatsAppLink: (phone: string, message: string) => {
     const cleanPhone = phone.replace(/\D/g, '');

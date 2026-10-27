@@ -1,13 +1,15 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { Plus, Trash2, Calendar, Clock, RefreshCcw, X, Swords, Edit3, MessageCircle, UserCheck, Phone, Edit, Building2, MapPin, LayoutGrid, Flag, Trophy, CheckCircle, XCircle, AlertCircle, CalendarPlus, Mail, Camera, UserPlus, Smartphone, CalendarDays, History as HistoryIcon, BadgeCheck, Ban, Lock, Search, Filter, Sparkles, ChevronDown, CalendarRange, Check, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
+import { Plus, Trash2, Calendar, Clock, RefreshCcw, X, Swords, Edit3, MessageCircle, UserCheck, Phone, Edit, Building2, MapPin, LayoutGrid, Flag, Trophy, CheckCircle, XCircle, AlertCircle, CalendarPlus, Mail, Camera, UserPlus, Smartphone, CalendarDays, History as HistoryIcon, BadgeCheck, Ban, Lock, Search, Filter, Sparkles, ChevronDown, CalendarRange, Check, ChevronLeft, ChevronRight, Loader2, Wallet } from 'lucide-react';
 import { Button } from '../components/Button';
 import { Field, MatchSlot, MatchType, User, CATEGORY_ORDER, RegisteredTeam, SPORTS, Gender, MatchStatus } from '../types';
 import { api } from '../api';
 import { getNeighboringCategories } from '../utils';
 import { MatchActions } from '../components/MatchActions';
+import { PayoutModal } from '../components/PayoutModal';
 import { shareInvite } from '../components/shareInvite';
-import { firstTeamUserId, hasHomeTeam, normalizeMatchKind, opponentApproverId, FIELD_APPROVAL_STATUSES, MATCH_KIND_LABEL } from '../shared/matchRules';
+import { computeShares, effectivePrice, firstTeamUserId, hasHomeTeam, normalizeMatchKind, opponentApproverId, MATCH_KIND_LABEL } from '../shared/matchRules';
+import { formatBRL } from '../shared/money';
 
 interface FieldDashboardProps {
   categories: string[];
@@ -23,10 +25,12 @@ interface FieldDashboardProps {
   onUpdateField: (fieldId: string, updates: Partial<Field>) => Promise<boolean>;
   onRateTeam: () => void;
   forceTab?: 'AGENDA' | 'SOLICITACOES' | 'MENSALISTAS' | 'HISTORICO';
+  /** Admin geral acessando esta conta (pode salvar o Wallet ID). */
+  isAdminView?: boolean;
 }
 
 export const FieldDashboard: React.FC<FieldDashboardProps> = ({ 
-  field, slots, onAddSlot, onUpdateSlot, onRefreshData, onDeleteSlot, onConfirmBooking, onRejectBooking, currentUser, categories, onUpdateField, onRateTeam, forceTab
+  field, slots, onAddSlot, onUpdateSlot, onRefreshData, onDeleteSlot, onConfirmBooking, onRejectBooking, currentUser, categories, onUpdateField, onRateTeam, forceTab, isAdminView
 }) => {
   const [activeTab, setActiveTab] = useState<'AGENDA' | 'SOLICITACOES' | 'MENSALISTAS' | 'HISTORICO'>('AGENDA');
   const [isLoading, setIsLoading] = useState(false);
@@ -44,8 +48,13 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
   const [slotDuration, setSlotDuration] = useState(60);
   const [slotMatchType, setSlotMatchType] = useState<MatchType>('NORMAL');
   const [slotPrize, setSlotPrize] = useState('');
+  const [showPayout, setShowPayout] = useState(false);
   const [autoGenMatchType, setAutoGenMatchType] = useState<MatchType>('NORMAL');
   const [slotCourt, setSlotCourt] = useState(field.courts?.[0] || 'Principal');
+  const [slotPrice, setSlotPrice] = useState(field.hourlyRate);
+  const [pixKey, setPixKey] = useState(field.pixConfig?.key || '');
+  const [pixName, setPixName] = useState(field.pixConfig?.name || '');
+  const [bank, setBank] = useState(field.pixConfig?.bank || '');
   const [slotSport, setSlotSport] = useState('Futebol');
   
   const [isLocalTeamSlot, setIsLocalTeamSlot] = useState(false);
@@ -71,6 +80,8 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
   const [autoGenStartTime, setAutoGenStartTime] = useState('08:00');
   const [autoGenEndTime, setAutoGenEndTime] = useState('22:00');
   const [autoGenDuration, setAutoGenDuration] = useState(60);
+  const [autoGenPrice, setAutoGenPrice] = useState(field.hourlyRate);
+  const [autoGenPixKey, setAutoGenPixKey] = useState(field.pixConfig?.key || '');
   const [autoGenSport, setAutoGenSport] = useState('Futebol');
   const [autoGenCourt, setAutoGenCourt] = useState(field.courts[0] || 'Principal');
 
@@ -205,6 +216,14 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
   }, [field.name]);
 
   useEffect(() => {
+    if (field.pixConfig) {
+      setPixKey(field.pixConfig.key);
+      setPixName(field.pixConfig.name);
+      setBank(field.pixConfig.bank || '');
+    }
+  }, [field.pixConfig]);
+
+  useEffect(() => {
     if (field.courts && field.courts.length > 0) {
       if (!field.courts.includes(slotCourt)) setSlotCourt(field.courts[0]);
       if (!field.courts.includes(mensalistaCourt)) setMensalistaCourt(field.courts[0]);
@@ -279,6 +298,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
     setSlotDuration(slot.durationMinutes || 60);
     setSlotMatchType(normalizeMatchKind(slot.matchType));
     setSlotPrize(slot.prizeDescription || '');
+    setSlotPrice(slot.price);
     setSlotCourt(slot.courtName || field.courts[0]);
     setSlotSport(slot.sport);
     setIsLocalTeamSlot(slot.hasLocalTeam);
@@ -320,7 +340,8 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
 
   /** Solicitações que dependem do dono do campo. */
   const pendingForOwner = (s: MatchSlot) =>
-    FIELD_APPROVAL_STATUSES.includes(s.status) ||
+    s.status === 'pending_field_approval' ||
+    s.status === 'pending_verification' ||
     (s.status === 'pending_home_approval' && opponentApproverId(s, field.ownerId) === currentUser.id);
 
   const checkConflict = (date: string, time: string, duration: number, court: string, excludeSlotId?: string): boolean => {
@@ -382,7 +403,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
       if (editingSlotId) {
         const original = slots.find(s => s.id === editingSlotId);
         if (original && !['available', 'waiting_opponent'].includes(original.status)) {
-          alert('Este jogo já tem adversário. Para mudar, cancele o jogo primeiro.');
+          alert('Este jogo já tem adversário/pagamento em andamento. Para mudar, cancele o jogo primeiro.');
           setIsLoading(false);
           return;
         }
@@ -465,11 +486,13 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
         localTeamGender: teamGender,
         localTeamLogoUrl: teamLogo,
         homeTeamType: homeTeamType,
+        price: slotMatchType === 'AMISTOSO' ? 0 : slotPrice,
         status: isLocalTeamSlot ? 'waiting_opponent' : 'available',
         courtName: slotCourt,
         sport: slotSport,
         allowedOpponentCategories: isLocalTeamSlot ? allowedCats : [],
         allowedOpponentGenders: allowedGenders.filter(Boolean),
+        pixKey: pixKey
       } as any;
 
       if (editingSlotId) {
@@ -479,6 +502,13 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
         delete updateData.isBooked;
         delete updateData.status;
         await onUpdateSlot(editingSlotId, updateData);
+        
+        // Update Field PIX Config if changed
+        if (pixKey !== field.pixConfig?.key || pixName !== field.pixConfig?.name || bank !== field.pixConfig?.bank) {
+            await onUpdateField(field.id, {
+                pixConfig: { key: pixKey, name: pixName, bank: bank }
+            });
+        }
 
         alert("Horário atualizado com sucesso!");
 
@@ -513,6 +543,13 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
         }
         
         await onAddSlot(slotsToCreate);
+        
+        // Update Field PIX Config if changed
+        if (pixKey !== field.pixConfig?.key || pixName !== field.pixConfig?.name || bank !== field.pixConfig?.bank) {
+            await onUpdateField(field.id, {
+                pixConfig: { key: pixKey, name: pixName, bank: bank }
+            });
+        }
 
         alert(isRecurring ? `${slotsToCreate.length} horários criados com sucesso!` : "Horário criado com sucesso!");
       }
@@ -614,12 +651,14 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
             matchType: autoGenMatchType,
             isBooked: false,
             hasLocalTeam: false,
+            price: autoGenMatchType === 'AMISTOSO' ? 0 : autoGenPrice,
             status: 'available',
             courtName: autoGenCourt,
             sport: autoGenSport,
             homeTeamType: 'OUTSIDE',
             allowedOpponentCategories: [],
             allowedOpponentGenders: ['MASCULINO', 'FEMININO', 'MISTO'],
+            pixKey: autoGenPixKey
           });
         }
         currentTime.setMinutes(currentTime.getMinutes() + autoGenDuration);
@@ -644,7 +683,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
     const onlyHomeTeam = slot.status === 'waiting_opponent' && hasHomeTeam(slot);
     const hasTeams = slot.status !== 'available' && slot.status !== 'finished' && !onlyHomeTeam;
     if (!confirm(hasTeams
-      ? 'Este horário tem time inscrito. Cancelar o jogo e remover o horário?'
+      ? 'Este horário tem time inscrito. Cancelar o jogo (com estorno do que foi pago) e remover o horário?'
       : 'Remover este horário?')) return;
     try {
       if (hasTeams) await api.match('cancel', slot.id, { reason: 'Horário removido pela arena' });
@@ -705,9 +744,11 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
               allowedOpponentCategories: team.categories || [], 
               allowedOpponentGenders: [team.gender],
               status: 'waiting_opponent', 
+              price: field.hourlyRate, 
               sport: team.sport, 
               courtName: team.courtName, 
               homeTeamType: 'MENSALISTA',
+              pixKey: field.pixConfig?.key || ''
             });
             count++;
           }
@@ -798,7 +839,11 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
       badges.push({ label: slot.homeScore != null ? `ENCERRADO ${slot.homeScore} x ${slot.awayScore}` : 'ENCERRADO', color: 'bg-pitch text-white', icon: <Trophy className="w-3 h-3"/> });
     } else if (slot.status === 'confirmed') {
       badges.push({ label: 'JOGO CONFIRMADO', color: 'bg-grass-500 text-white', icon: <CheckCircle className="w-3 h-3"/> });
-    } else if (FIELD_APPROVAL_STATUSES.includes(slot.status)) {
+    } else if (slot.status === 'pending_verification') {
+      badges.push({ label: 'AGUARDANDO VALIDAÇÃO PIX', color: 'bg-orange-500 text-white', icon: <AlertCircle className="w-3 h-3"/> });
+    } else if (slot.status === 'pending_payment') {
+      badges.push({ label: 'AGUARDANDO PAGAMENTO', color: 'bg-blue-500 text-white', icon: <Clock className="w-3 h-3"/> });
+    } else if (slot.status === 'pending_field_approval') {
       if (isAwayGame) {
          badges.push({ label: 'AGUARDANDO APROVAÇÃO DA ARENA', color: 'bg-orange-400 text-white', icon: <UserCheck className="w-3 h-3"/> });
       } else {
@@ -839,6 +884,10 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
              </div>
           </div>
           <div className="flex gap-2">
+            <button onClick={() => setShowPayout(true)} className={`p-3 rounded-xl active:scale-95 shadow-md flex items-center gap-2 ${field.payoutStatus === 'ACTIVE' ? 'bg-grass-50 text-grass-700' : 'bg-yellow-400 text-pitch animate-pulse'}`}>
+               <Wallet className="w-4 h-4"/>
+               <span className="text-[10px] font-black uppercase">{field.payoutStatus === 'ACTIVE' ? 'Recebimentos' : 'Configurar pagamento'}</span>
+            </button>
             <button onClick={() => { setEditingSlotId(null); setSlotDate(todayStr); setSlotMatchType('NORMAL'); setSlotPrize(''); setIsLocalTeamSlot(false); setSelectedRegisteredTeamId(''); setShowAddSlotModal(true); }} className="p-3 bg-pitch text-white rounded-xl active:scale-95 shadow-md flex items-center gap-2">
                <Plus className="w-5 h-5"/>
                <span className="text-[10px] font-black uppercase">Novo Horário</span>
@@ -864,6 +913,15 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
 
         {activeTab === 'AGENDA' && (
           <div className="p-6">
+            {field.payoutStatus !== 'ACTIVE' && field.id && (
+              <div className="bg-yellow-50 border border-yellow-200 rounded-[2rem] p-5 mb-4 space-y-3">
+                <h4 className="font-black text-yellow-800 text-xs uppercase">Configure sua conta para receber pagamentos</h4>
+                <p className="text-[10px] font-bold text-yellow-700">Os times pagam a taxa por PIX no app e o valor cai direto na sua conta Asaas. Informe seu Wallet ID ou fale com a gente.</p>
+                <Button onClick={() => setShowPayout(true)} className="w-full py-3 rounded-2xl font-black uppercase text-[10px]">
+                  <MessageCircle className="w-4 h-4" /> Configurar pagamento
+                </Button>
+              </div>
+            )}
             <div className="flex items-center justify-between mb-4">
               <button onClick={() => setShowAutoGenerateModal(true)} className="bg-pitch text-white text-xs font-black uppercase px-4 py-2 rounded-full flex items-center gap-2">
                 <Sparkles className="w-4 h-4" />
@@ -955,6 +1013,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                             </div>
                          </div>
                          <div className="text-right">
+                            <span className="block font-black text-pitch text-sm">{effectivePrice(slot) > 0 ? formatBRL(effectivePrice(slot)) : 'Grátis'}</span>
                             <span className="text-[8px] font-bold text-gray-300 uppercase">{slot.durationMinutes} min</span>
                          </div>
                       </div>
@@ -986,6 +1045,19 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                            >
                              <MessageCircle className="w-4 h-4"/>
                              <span className="text-[8px] font-black uppercase">Notificar WhatsApp</span>
+                           </button>
+                        )}
+                        {slot.status === 'pending_payment' && !isAwayGame && (
+                           <button 
+                             onClick={() => {
+                               const msg = `Olá! O jogo na arena ${field.name} dia ${slot.date.split('-').reverse().join('/')} às ${slot.time} está aguardando pagamento.`;
+                               const phone = slot.opponentTeamPhone || slot.bookedByUserPhone || slot.localTeamPhone;
+                               if (phone) window.open(api.getWhatsAppLink(phone, msg), '_blank');
+                             }} 
+                             className="p-3 bg-blue-50 text-blue-600 rounded-xl hover:bg-blue-500 hover:text-white transition-all flex items-center gap-2"
+                           >
+                             <MessageCircle className="w-4 h-4"/>
+                             <span className="text-[8px] font-black uppercase">Notificar Pagamento</span>
                            </button>
                         )}
                         {slot.status === 'waiting_opponent' && !isAwayGame && (
@@ -1082,6 +1154,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                                         setSlotPrize(slot.prizeDescription || '');
                                         setSlotSport(slot.sport);
                                         setSlotCourt(slot.courtName || '');
+                                        setSlotPrice(slot.price);
                                         setSelectedRegisteredTeamId(slot.localTeamName ? (registeredTeams.find(t => t.name === slot.localTeamName)?.id || '') : '');
                                         setShowAddSlotModal(true);
                                       }
@@ -1129,6 +1202,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
         {activeTab === 'SOLICITACOES' && (
            <div className="space-y-4">
               {slots.filter(pendingForOwner).map(slot => {
+                 const shares = computeShares(slot);
                  const isTeamApproval = slot.status === 'pending_home_approval';
                  const firstName = (slot.hasLocalTeam ? slot.localTeamName : slot.bookedByTeamName) || 'Time 1';
                  return (
@@ -1136,7 +1210,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                     <div className="flex justify-between items-start">
                        <div>
                           <span className="bg-orange-100 text-orange-600 px-3 py-1 rounded-full text-[8px] font-black uppercase">
-                            {isTeamApproval ? 'Aprovar adversário do seu time' : 'Aprovar partida'}
+                            {isTeamApproval ? 'Aprovar adversário do seu time' : slot.status === 'pending_verification' ? 'Comprovante PIX (fluxo antigo)' : shares.length > 0 ? 'Pago: aprovar partida' : 'Amistoso: aprovar partida'}
                           </span>
                           <h4 className="text-lg font-black text-pitch uppercase mt-2">{slot.date.split('-').reverse().join('/')} às {slot.time}</h4>
                           <p className="text-[9px] font-bold text-gray-400 uppercase">{MATCH_KIND_LABEL[normalizeMatchKind(slot.matchType)]} • {slot.courtName}</p>
@@ -1144,12 +1218,26 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                        <div className="p-3 bg-gray-50 rounded-xl text-pitch"><Swords className="w-5 h-5" /></div>
                     </div>
 
+                    {slot.status === 'pending_verification' && slot.receiptUrl && (
+                      <a href={slot.receiptUrl} target="_blank" rel="noreferrer" className="block w-full h-40 bg-gray-100 rounded-2xl overflow-hidden border">
+                        <img src={slot.receiptUrl} className="w-full h-full object-contain" />
+                      </a>
+                    )}
+
                     <div className="bg-gray-50 rounded-2xl p-4 space-y-2">
                        <div className="flex items-center justify-between text-xs font-black text-pitch uppercase">
                           <span>{firstName} <span className="text-grass-600">{slot.localTeamCategory || slot.bookedByTeamCategory}</span></span>
                           <span className="text-gray-300">x</span>
                           <span className="text-right">{slot.opponentTeamName} <span className="text-grass-600">{slot.opponentTeamCategory}</span></span>
                        </div>
+                       {!isTeamApproval && shares.map(sh => (
+                         <div key={sh.role} className="flex justify-between text-[10px] font-bold text-gray-500">
+                           <span>{sh.role === 'FIRST' ? firstName : slot.opponentTeamName}</span>
+                           <span className={(sh.role === 'FIRST' ? slot.firstTeamPaid : slot.opponentPaid) ? 'text-grass-600' : 'text-red-400'}>
+                             {formatBRL(sh.amount)} {(sh.role === 'FIRST' ? slot.firstTeamPaid : slot.opponentPaid) ? '✓ pago' : 'pendente'}
+                           </span>
+                         </div>
+                       ))}
                     </div>
                     <div className="grid grid-cols-2 gap-3">
                        <Button onClick={() => handleAction(slot, 'reject')} isLoading={isLoading} variant="outline" className="py-4 rounded-2xl text-red-500 font-black uppercase text-[10px]">Recusar</Button>
@@ -1157,6 +1245,9 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                          {isTeamApproval ? 'Aprovar adversário' : 'Aprovar jogo'}
                        </Button>
                     </div>
+                    {!isTeamApproval && shares.length > 0 && (
+                      <p className="text-[8px] font-bold text-gray-400 uppercase text-center">Se recusar, o valor pago é estornado automaticamente.</p>
+                    )}
                  </div>
                  );
               })}
@@ -1314,7 +1405,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                        <select className="w-full bg-transparent font-black outline-none text-xs" value={slotMatchType} onChange={e => setSlotMatchType(e.target.value as MatchType)}>
                           <option value="NORMAL">Partida Normal</option>
                           <option value="FESTIVAL">Festival (com premiação)</option>
-                          <option value="AMISTOSO">Amistoso</option>
+                          <option value="AMISTOSO">Amistoso (taxa R$ 0)</option>
                        </select>
                     </div>
                     <div className="bg-gray-50 p-4 rounded-2xl border">
@@ -1329,11 +1420,17 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                        </select>
                     </div>
                  </div>
-                 <div className="bg-gray-50 p-4 rounded-2xl border">
-                    <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Local (Quadra)</label>
-                    <select className="w-full bg-transparent font-black outline-none text-xs" value={slotCourt} onChange={e => setSlotCourt(e.target.value)}>
-                       {field.courts.map(c => <option key={c} value={c}>{c}</option>)}
-                    </select>
+                 <div className="grid grid-cols-2 gap-4">
+                    <div className="bg-gray-50 p-4 rounded-2xl border">
+                       <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Local (Quadra)</label>
+                       <select className="w-full bg-transparent font-black outline-none text-xs" value={slotCourt} onChange={e => setSlotCourt(e.target.value)}>
+                          {field.courts.map(c => <option key={c} value={c}>{c}</option>)}
+                       </select>
+                    </div>
+                    <div className="bg-gray-50 p-4 rounded-2xl border">
+                       <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Taxa do horário (R$)</label>
+                       <input type="number" min={0} disabled={slotMatchType === 'AMISTOSO'} className="w-full bg-transparent font-black outline-none disabled:opacity-40" value={slotMatchType === 'AMISTOSO' ? 0 : slotPrice} onChange={e => setSlotPrice(Number(e.target.value))} />
+                    </div>
                  </div>
                  {slotMatchType === 'FESTIVAL' && (
                    <div className="bg-yellow-50 p-4 rounded-2xl border border-yellow-100">
@@ -1341,6 +1438,21 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                       <input className="w-full bg-transparent font-black outline-none text-xs" placeholder="Ex.: Troféu + medalhas" value={slotPrize} onChange={e => setSlotPrize(e.target.value)} />
                    </div>
                  )}
+                 <p className="text-[9px] font-bold text-gray-400 uppercase px-2">
+                   {slotMatchType === 'AMISTOSO'
+                     ? 'Amistoso: ninguém paga taxa.'
+                     : isLocalTeamSlot
+                       ? `Com mensalista/time da casa, o adversário paga 100% (${formatBRL(slotPrice || 0)}).`
+                       : `Dois times de fora: cada um paga 50% (${formatBRL((slotPrice || 0) / 2)}).`}
+                 </p>
+
+                 {field.payoutStatus !== 'ACTIVE' && (
+                   <button type="button" onClick={() => setShowPayout(true)} className="w-full bg-yellow-50 p-4 rounded-2xl border border-yellow-200 text-left">
+                      <h4 className="font-black text-yellow-800 text-xs uppercase">Configurar pagamento</h4>
+                      <p className="text-[9px] font-bold text-yellow-700">Os times pagam por PIX no app e o valor cai direto na sua conta Asaas. Toque para configurar.</p>
+                   </button>
+                 )}
+
                  <div className="bg-gray-50 p-4 rounded-2xl border flex items-center justify-between cursor-pointer" onClick={() => setIsLocalTeamSlot(!isLocalTeamSlot)}>
                     <div>
                         <h4 className="font-black text-pitch text-xs uppercase">Tem mensalista ou time da casa neste horário?</h4>
@@ -1479,7 +1591,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                 <select className="w-full bg-gray-50 p-3 rounded-xl border font-bold text-sm uppercase" value={autoGenMatchType} onChange={e => setAutoGenMatchType(e.target.value as MatchType)}>
                    <option value="NORMAL">Partida Normal</option>
                    <option value="FESTIVAL">Festival</option>
-                   <option value="AMISTOSO">Amistoso</option>
+                   <option value="AMISTOSO">Amistoso (R$ 0)</option>
                 </select>
               </div>
               <div>
@@ -1493,6 +1605,13 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                 <select className="w-full bg-gray-50 p-3 rounded-xl border font-bold text-sm uppercase" value={autoGenCourt} onChange={e => setAutoGenCourt(e.target.value)}>
                    {field.courts.map(c => <option key={c} value={c}>{c}</option>)}
                 </select>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                 <div>
+                    <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Valor (R$)</label>
+                    <input type="number" value={autoGenPrice} onChange={e => setAutoGenPrice(Number(e.target.value))} className="w-full bg-gray-50 p-3 rounded-xl border font-bold text-sm uppercase" />
+                 </div>
+
               </div>
             </div>
             <div className="flex gap-2 mt-6">
@@ -1560,6 +1679,15 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
               </div>
            </div>
         </div>
+      )}
+
+      {showPayout && (
+        <PayoutModal
+          field={field}
+          currentUser={currentUser}
+          onClose={() => setShowPayout(false)}
+          onSaved={() => { setShowPayout(false); onRefreshData(); }}
+        />
       )}
 
       {rejectingTeamId && (

@@ -7,6 +7,13 @@ export enum UserRole {
   TEAM_CAPTAIN = 'TEAM_CAPTAIN'
 }
 
+export enum SubscriptionPlan {
+  NONE = 'NONE',
+  FREE = 'FREE',
+  PRO_FIELD = 'PRO_FIELD',
+  PRO_TEAM = 'PRO_TEAM'
+}
+
 // NORMAL / FESTIVAL / AMISTOSO. 'ALUGUEL' e 'FIXO' são valores antigos e contam como NORMAL.
 export type MatchType = 'NORMAL' | 'AMISTOSO' | 'FESTIVAL' | 'ALUGUEL' | 'FIXO';
 export type Gender = 'MASCULINO' | 'FEMININO' | 'MISTO';
@@ -26,6 +33,8 @@ export interface User {
   password?: string;
   phoneNumber: string;
   role: UserRole;
+  subscription: SubscriptionPlan;
+  subscriptionExpiry: string | null;
   teams: TeamConfig[];
   latitude?: number;
   longitude?: number;
@@ -33,6 +42,9 @@ export interface User {
   teamRatingCount?: number;
   fieldId?: string;
   createdAt: string; // ISO 8601 date string
+  isSubscribed?: boolean;
+  subscriptionId?: string;
+  cpfCnpj?: string;
 }
 
 export interface InAppNotification {
@@ -57,19 +69,22 @@ export interface Field {
   ownerId: string;
   name: string;
   location: string;
+  hourlyRate: number;
+  cancellationFeePercent: number;
+  pixConfig: { key: string; name: string; bank?: string };
   imageUrl: string;
   contactPhone: string;
   latitude: number;
   longitude: number;
   courts: string[];
   complement?: string;
+  payoutStatus?: string;
   ratingAvg?: number;
   ratingCount?: number;
 }
 
-// Fluxo: available -> waiting_opponent -> pending_home_approval -> pending_field_approval -> confirmed -> finished
-// (ver shared/matchRules.ts). 'pending_payment' e 'pending_verification' são legados (o app é gratuito)
-// e contam como "aguardando aprovação do campo".
+// Fluxo: available -> waiting_opponent -> pending_home_approval -> pending_payment -> pending_field_approval -> confirmed -> finished
+// (ver shared/matchRules.ts). 'pending_verification' é do fluxo antigo de comprovante PIX.
 export type MatchStatus = 'available' | 'pending_home_approval' | 'pending_field_approval' | 'pending_payment' | 'pending_verification' | 'confirmed' | 'finished' | 'rejected' | 'waiting_opponent';
 
 export interface MatchSlot {
@@ -101,16 +116,35 @@ export interface MatchSlot {
   allowedOpponentCategories: string[];
   allowedOpponentGenders: Gender[];
   status: MatchStatus;
+  price: number;
+  receiptUrl?: string;
+  receiptUploadedAt?: string;
   fieldRating?: number;
   courtName?: string;
   sport: string;
+  pixKey?: string;
   prizeDescription?: string;
   homeTeamUserId?: string;
   opponentUserId?: string;
+  firstTeamPaid?: boolean;
+  opponentPaid?: boolean;
   homeScore?: number | null;
   awayScore?: number | null;
   resultSetAt?: string;
   fieldDecisionReason?: string;
+}
+
+export interface MatchPaymentInfo {
+  id: string;
+  role: 'FIRST' | 'OPPONENT';
+  teamName?: string;
+  amount: number;
+  status: 'PENDING' | 'PAID' | 'REFUNDED' | 'CANCELED' | 'OVERDUE';
+  paidAt?: string;
+  invoiceUrl?: string;
+  pixPayload?: string;
+  pixQrBase64?: string;
+  pixExpiresAt?: string;
 }
 
 export interface InvitePreview {
@@ -130,6 +164,7 @@ export interface InvitePreview {
   category?: string;
   allowedCategories: string[];
   allowedGenders: string[];
+  opponentShare: number;
   field: { id: string; name: string; location: string; imageUrl?: string; ratingAvg: number; ratingCount: number };
 }
 
@@ -162,6 +197,16 @@ export const CATEGORY_ORDER = [
 ];
 
 export const SPORTS = ["Futebol", "Society", "Vôlei", "Beach Tennis", "Tênis", "Basquete", "Handball"];
+
+/**
+ * Interface representing the result of a PIX receipt verification processed by AI.
+ */
+export interface VerificationResult {
+  isValid: boolean;
+  amountFound: number | null;
+  dateFound: string | null;
+  reason: string;
+}
 
 /**
  * Interface representing a pending update request for users or field entities.

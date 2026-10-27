@@ -3,11 +3,12 @@ import { MapPin, Calendar, Trophy, Loader2, Swords, Star, X } from 'lucide-react
 import { Button } from '../components/Button';
 import { InvitePreview, User } from '../types';
 import { api } from '../api';
+import { formatBRL } from '../shared/money';
 
 interface InviteLandingProps {
   token: string;
   currentUser: User | null;
-  /** Abre login/cadastro. No cadastro, a conta já nasce com a categoria do jogo. */
+  /** Abre login/cadastro. No cadastro, a conta já nasce com a categoria do jogo (grátis). */
   onAuth: (mode: 'LOGIN' | 'REGISTER', category?: string) => void;
   onUserUpdated: (u: User) => void;
   onDone: () => void;
@@ -114,6 +115,12 @@ export const InviteLanding: React.FC<InviteLandingProps> = ({ token, currentUser
                 )}
               </div>
 
+              <div className="bg-gray-50 rounded-2xl p-4 text-center">
+                <p className="text-[10px] font-black text-gray-400 uppercase">Taxa do seu time</p>
+                <p className="text-2xl font-black text-pitch">{invite.opponentShare > 0 ? formatBRL(invite.opponentShare) : 'Grátis'}</p>
+                {invite.opponentShare > 0 && <p className="text-[9px] font-bold text-gray-400 uppercase">PIX, só depois que o jogo for aprovado</p>}
+              </div>
+
               {!invite.open && <p className="text-center text-xs font-black text-red-500 uppercase">Este jogo já tem adversário.</p>}
 
               {invite.open && !currentUser && (
@@ -121,7 +128,7 @@ export const InviteLanding: React.FC<InviteLandingProps> = ({ token, currentUser
                   <Button onClick={() => onAuth('REGISTER', invite.category)} className="w-full py-4 rounded-2xl font-black uppercase text-xs">
                     <Swords className="w-4 h-4" /> Criar conta grátis e jogar
                   </Button>
-                  <p className="text-[9px] text-center text-gray-400 font-bold uppercase">O Jogo Fácil é gratuito</p>
+                  <p className="text-[9px] text-center text-gray-400 font-bold uppercase">Criar conta é grátis, sem mensalidade</p>
                   <button onClick={() => onAuth('LOGIN')} className="w-full text-[10px] font-black uppercase text-pitch">Já tenho conta</button>
                 </div>
               )}
