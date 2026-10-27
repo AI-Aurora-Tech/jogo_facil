@@ -1,13 +1,15 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { Plus, Trash2, Calendar, Clock, RefreshCcw, X, Swords, Edit3, MessageCircle, UserCheck, Phone, Edit, Building2, MapPin, LayoutGrid, Flag, Trophy, CheckCircle, XCircle, AlertCircle, CalendarPlus, Mail, Camera, UserPlus, Smartphone, CalendarDays, History as HistoryIcon, BadgeCheck, Ban, Lock, Search, Filter, Sparkles, ChevronDown, CalendarRange, Check, ChevronLeft, ChevronRight, Loader2, Wallet } from 'lucide-react';
+import { Plus, Trash2, Calendar, Clock, RefreshCcw, X, Swords, Edit3, MessageCircle, UserCheck, Phone, Edit, Building2, MapPin, LayoutGrid, Flag, Trophy, CheckCircle, XCircle, AlertCircle, CalendarPlus, Mail, Camera, UserPlus, Smartphone, CalendarDays, History as HistoryIcon, BadgeCheck, Ban, Lock, Search, Filter, Sparkles, ChevronDown, CalendarRange, Check, ChevronLeft, ChevronRight, Loader2, Wallet, Copy, Send } from 'lucide-react';
 import { Button } from '../components/Button';
-import { Field, MatchSlot, MatchType, User, CATEGORY_ORDER, RegisteredTeam, SPORTS, Gender, MatchStatus } from '../types';
+import { Field, MatchSlot, MatchType, User, CATEGORY_ORDER, RegisteredTeam, SPORTS, Gender, MatchStatus, HomeTeamKind } from '../types';
 import { api } from '../api';
-import { getNeighboringCategories } from '../utils';
+import { getNeighboringCategories, sportLabel, geocodeAddress, GeoResult } from '../utils';
+import { ArenaLocation } from '../components/ArenaLocation';
 import { MatchActions } from '../components/MatchActions';
 import { PayoutModal } from '../components/PayoutModal';
 import { shareInvite } from '../components/shareInvite';
+import { shareTeamInvite } from '../components/shareTeamInvite';
 import { computeShares, effectivePrice, firstTeamUserId, hasHomeTeam, normalizeMatchKind, opponentApproverId, MATCH_KIND_LABEL } from '../shared/matchRules';
 import { formatBRL } from '../shared/money';
 
@@ -64,6 +66,8 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
   const [acceptsMixed, setAcceptsMixed] = useState(false);
   const [acceptNeighbors, setAcceptNeighbors] = useState(true);
   const [selectedRegisteredTeamId, setSelectedRegisteredTeamId] = useState<string>('');
+  // Tipo do mandante escolhido no horário: time da casa ou mensalista
+  const [homeKind, setHomeKind] = useState<HomeTeamKind>('LOCAL');
   const [localTeamCategory, setLocalTeamCategory] = useState<string>('');
   const [isRecurring, setIsRecurring] = useState(false);
 
@@ -101,10 +105,28 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
   const [mensalistaSport, setMensalistaSport] = useState('Futebol');
   const [mensalistaCourt, setMensalistaCourt] = useState(field.courts?.[0] || 'Principal');
   const [mensalistaDuration, setMensalistaDuration] = useState(60);
+  // Tipo do time no cadastro: mensalista ou time da casa
+  const [teamKind, setTeamKind] = useState<HomeTeamKind>('MENSALISTA');
 
 
 
   const todayStr = new Date().toISOString().split('T')[0];
+
+  // Arena sem posição no mapa: os times não veem a distância. Tenta achar pelo endereço uma vez.
+  const hasCoords = !!field.latitude && !!field.longitude && Math.abs(field.latitude) > 0.0001;
+  const [geoAttempted, setGeoAttempted] = useState(false);
+  const saveArenaGeo = async (geo: GeoResult | null) => {
+    if (!geo || !field.id) return;
+    await onUpdateField(field.id, { latitude: geo.lat, longitude: geo.lng });
+  };
+  useEffect(() => {
+    if (!field.id || hasCoords || geoAttempted || !field.location) return;
+    setGeoAttempted(true);
+    geocodeAddress(field.location).then(geo => {
+      // Só salva sozinho se achou pelo menos a rua/CEP (cidade inteira deixaria a distância errada)
+      if (geo && geo.precision !== 'city') saveArenaGeo(geo);
+    });
+  }, [field.id, hasCoords, field.location]);
 
   const [historicSlots, setHistoricSlots] = useState<MatchSlot[]>([]);
 
@@ -115,6 +137,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
     // Check conflict
     const hasConflict = registeredTeams.some(t => {
       if (t.id === teamId) return false;
+      if (t.kind !== 'MENSALISTA' || !t.fixedTime) return false;
       if (t.status !== 'approved') return false;
       if (t.courtName !== team.courtName) return false;
       if (Number(t.fixedDay) !== Number(team.fixedDay)) return false;
@@ -245,11 +268,16 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
     }
 
     if (team) {
-      if (team.categories && team.categories.length > 0) {
+      const editing = editingSlotId ? slots.find(s => s.id === editingSlotId) : null;
+      if (editing?.localTeamCategory && (!team.categories?.length || team.categories.includes(editing.localTeamCategory))) {
+        setLocalTeamCategory(editing.localTeamCategory);
+      } else if (team.categories && team.categories.length > 0) {
         setLocalTeamCategory(team.categories[0]);
+      } else {
+        setLocalTeamCategory('');
       }
       if (team.gender) setLocalTeamGender(team.gender);
-      if (team.sport) setSlotSport(team.sport);
+      if (team.sport) setSlotSport(sportLabel(team.sport));
     }
   }, [selectedRegisteredTeamId, currentUser.teams, registeredTeams]);
 
@@ -308,6 +336,19 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
     setManualLocalTeamName(displayTeamName);
     
     setManualLocalCategory(slot.localTeamCategory || CATEGORY_ORDER[0]);
+
+    // Mandante já salvo no horário
+    if (slot.hasLocalTeam) {
+      const sameName = (a?: string, b?: string) => (a || '').trim().toLowerCase() === (b || '').trim().toLowerCase();
+      const reg = slot.homeTeamId
+        ? registeredTeams.find(t => t.id === slot.homeTeamId)
+        : registeredTeams.find(t => sameName(t.name, slot.localTeamName) && (slot.homeTeamType === 'LOCAL' ? t.kind === 'LOCAL' : t.kind === 'MENSALISTA'));
+      const ownerIdx = (currentUser.teams || []).findIndex(t => sameName(t.name, slot.localTeamName));
+      setHomeKind(reg ? reg.kind : slot.homeTeamType === 'MENSALISTA' ? 'MENSALISTA' : 'LOCAL');
+      setSelectedRegisteredTeamId(reg ? reg.id : ownerIdx >= 0 ? `OWNER_TEAM_${ownerIdx}` : '');
+    } else {
+      setSelectedRegisteredTeamId('');
+    }
     setShowAddSlotModal(true);
   };
 
@@ -369,9 +410,16 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
     const dayOfWeek = dateObj.getDay(); 
 
     const hasMensalistaConflict = registeredTeams.some(t => {
+      if (t.kind !== 'MENSALISTA' || !t.fixedTime) return false;
       if (t.status !== 'approved') return false;
+      // O próprio mensalista como mandante do horário não conflita com ele mesmo
+      if (isLocalTeamSlot && t.id === selectedRegisteredTeamId) return false;
+      // Mensalista que ainda não aceitou o convite: a agenda dele é criada quando aceitar
+      if (!t.captainUserId) return false;
       if (t.courtName !== court) return false;
       if (Number(t.fixedDay) !== dayOfWeek) return false;
+      // Se já existe horário deste mensalista nesta data, o conflito é com o horário (checado acima)
+      if (slots.some(s => s.homeTeamId === t.id && s.date === date)) return false;
       
       const [tH, tM] = t.fixedTime.split(':').map(Number);
       const tStart = tH * 60 + tM;
@@ -407,8 +455,12 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
           setIsLoading(false);
           return;
         }
-        if (original && original.hasLocalTeam !== isLocalTeamSlot) {
-          alert('Para trocar entre horário livre e horário com mensalista/time da casa, exclua o horário e crie de novo.');
+        // Horário livre que passa a ter mandante: liberado enquanto nenhum time reservou
+        const addingHome = !!original && !original.hasLocalTeam && isLocalTeamSlot && original.status === 'available' && !original.bookedByUserId;
+        if (original && original.hasLocalTeam !== isLocalTeamSlot && !addingHome) {
+          alert(isLocalTeamSlot
+            ? 'Um time já reservou este horário. Para colocar um mandante, cancele a reserva primeiro.'
+            : 'Para tirar o mandante, exclua o horário e crie de novo (ou peça para o mandante liberar o horário).');
           setIsLoading(false);
           return;
         }
@@ -432,6 +484,8 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
       let teamGender = null;
       let teamLogo = null;
       let homeTeamType = 'OUTSIDE';
+      let homeTeamId: string | null = null;
+      let ownerTeamName: string | null = null;
 
       if (isLocalTeamSlot) {
         if (selectedRegisteredTeamId) {
@@ -440,21 +494,23 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
              const ownerTeam = currentUser.teams[idx];
              if (ownerTeam) {
                 teamName = ownerTeam.name;
+                ownerTeamName = ownerTeam.name;
                 teamCategory = localTeamCategory;
                 teamPhone = field.contactPhone; // Owner's phone
-                teamGender = ownerTeam.gender;
+                teamGender = localTeamGender || ownerTeam.gender;
                 teamLogo = ownerTeam.logoUrl;
                 homeTeamType = 'LOCAL';
              }
           } else {
              const regTeam = registeredTeams.find(t => t.id === selectedRegisteredTeamId);
              if (regTeam) {
-               teamName = regTeam.name;
+               teamName = regTeam.name || (regTeam.kind === 'MENSALISTA' ? 'Mensalista' : field.name);
                teamCategory = localTeamCategory;
-               teamPhone = regTeam.captainPhone;
-               teamGender = regTeam.gender;
+               teamPhone = regTeam.captainPhone || (regTeam.kind === 'LOCAL' ? field.contactPhone : null);
+               teamGender = localTeamGender || regTeam.gender;
                teamLogo = regTeam.logoUrl;
-               homeTeamType = 'MENSALISTA';
+               homeTeamType = regTeam.kind;
+               homeTeamId = regTeam.id;
              }
           }
         } 
@@ -486,6 +542,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
         localTeamGender: teamGender,
         localTeamLogoUrl: teamLogo,
         homeTeamType: homeTeamType,
+        homeTeamId: homeTeamId,
         price: slotMatchType === 'AMISTOSO' ? 0 : slotPrice,
         status: isLocalTeamSlot ? 'waiting_opponent' : 'available',
         courtName: slotCourt,
@@ -501,7 +558,24 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
         const updateData = { ...slotData };
         delete updateData.isBooked;
         delete updateData.status;
+        const original = slots.find(s => s.id === editingSlotId);
+        const addingHome = !!original && !original.hasLocalTeam && isLocalTeamSlot;
+        if (addingHome) {
+          // Dados do mandante e o status mudam pelo servidor (horário passa a esperar adversário)
+          for (const k of ['hasLocalTeam', 'localTeamName', 'localTeamCategory', 'localTeamPhone', 'localTeamGender', 'localTeamLogoUrl', 'homeTeamType', 'homeTeamId', 'allowedOpponentCategories', 'allowedOpponentGenders']) {
+            delete updateData[k];
+          }
+        }
         await onUpdateSlot(editingSlotId, updateData);
+        if (addingHome) {
+          await api.match('assign_home', editingSlotId, {
+            homeTeamId,
+            ownerTeamName,
+            category: teamCategory,
+            allowedCategories: allowedCats,
+            allowedGenders: allowedGenders.filter(Boolean),
+          });
+        }
         
         // Update Field PIX Config if changed
         if (pixKey !== field.pixConfig?.key || pixName !== field.pixConfig?.name || bank !== field.pixConfig?.bank) {
@@ -564,70 +638,121 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
     }
   };
 
+  const openNewTeam = (kind: HomeTeamKind) => {
+    setTeamKind(kind);
+    setEditingMensalista(null);
+    setMensalistaName(kind === 'LOCAL' ? field.name : '');
+    setMensalistaPhone('');
+    setMensalistaCategory('');
+    setMensalistaDay(1);
+    setMensalistaTime('19:00');
+    setMensalistaDuration(60);
+    setMensalistaSport('Futebol');
+    setMensalistaGender('MASCULINO');
+    setMensalistaCourt(field.courts?.[0] || 'Principal');
+    setShowAddMensalistaModal(true);
+  };
+
+  const openEditTeam = (t: RegisteredTeam) => {
+    setTeamKind(t.kind);
+    setEditingMensalista(t);
+    setMensalistaName(t.name || '');
+    setMensalistaPhone(t.captainPhone || '');
+    setMensalistaCategory(t.categories?.[0] || '');
+    setMensalistaDay(Number(t.fixedDay) || 0);
+    setMensalistaTime(t.fixedTime || '19:00');
+    setMensalistaDuration(t.fixedDurationMinutes || 60);
+    setMensalistaSport(sportLabel(t.sport));
+    setMensalistaGender(t.gender || 'MASCULINO');
+    setMensalistaCourt(t.courtName || field.courts?.[0] || 'Principal');
+    setShowAddMensalistaModal(true);
+  };
+
   const handleSaveMensalista = async () => {
-    if (!mensalistaName || !mensalistaPhone) {
-      alert("Nome e WhatsApp são obrigatórios.");
+    if (teamKind === 'LOCAL' && !mensalistaName.trim()) {
+      alert('Informe o nome do time da casa.');
       return;
     }
 
     setIsLoading(true);
     try {
-      // Check conflict for mensalista
-      // We need to check if there are any slots on the mensalista day/time for the next few weeks?
-      // Or just check if there is another mensalista on the same day/time/court.
-      
-      const hasMensalistaConflict = registeredTeams.some(t => {
-        if (t.id === editingMensalista?.id) return false;
-        if (t.status !== 'approved') return false;
-        if (t.courtName !== mensalistaCourt) return false;
-        if (Number(t.fixedDay) !== Number(mensalistaDay)) return false;
-        
-        const [tH, tM] = t.fixedTime.split(':').map(Number);
-        const tStart = tH * 60 + tM;
-        const tEnd = tStart + (t.fixedDurationMinutes || 60);
-        
-        const [nH, nM] = mensalistaTime.split(':').map(Number);
-        const nStart = nH * 60 + nM;
-        const nEnd = nStart + mensalistaDuration;
-        
-        return (nStart < tEnd && nEnd > tStart);
-      });
+      if (teamKind === 'MENSALISTA') {
+        const hasMensalistaConflict = registeredTeams.some(t => {
+          if (t.id === editingMensalista?.id) return false;
+          if (t.kind !== 'MENSALISTA' || !t.fixedTime) return false;
+          if (t.status !== 'approved') return false;
+          if (t.courtName !== mensalistaCourt) return false;
+          if (Number(t.fixedDay) !== Number(mensalistaDay)) return false;
 
-      if (hasMensalistaConflict) {
-        alert('Já existe um mensalista neste horário e quadra.');
-        setIsLoading(false);
-        return;
+          const [tH, tM] = t.fixedTime.split(':').map(Number);
+          const tStart = tH * 60 + tM;
+          const tEnd = tStart + (t.fixedDurationMinutes || 60);
+
+          const [nH, nM] = mensalistaTime.split(':').map(Number);
+          const nStart = nH * 60 + nM;
+          const nEnd = nStart + mensalistaDuration;
+
+          return (nStart < tEnd && nEnd > tStart);
+        });
+
+        if (hasMensalistaConflict) {
+          alert('Já existe um mensalista neste dia, horário e quadra.');
+          setIsLoading(false);
+          return;
+        }
       }
 
-      const payload: Partial<RegisteredTeam> = {
-        name: mensalistaName,
-        captainName: mensalistaCaptain,
-        captainPhone: mensalistaPhone,
-        email: mensalistaEmail,
-        fixedDay: String(mensalistaDay),
-        fixedTime: mensalistaTime,
-        fixedDurationMinutes: mensalistaDuration,
-        categories: [mensalistaCategory],
-        logoUrl: mensalistaLogo,
-        gender: mensalistaGender,
-        sport: mensalistaSport,
-        courtName: mensalistaCourt,
-        fieldId: field.id
-      };
+      const payload: Partial<RegisteredTeam> = teamKind === 'MENSALISTA'
+        ? {
+            kind: 'MENSALISTA',
+            name: mensalistaName.trim(),
+            fixedDay: String(mensalistaDay),
+            fixedTime: mensalistaTime,
+            fixedDurationMinutes: mensalistaDuration,
+            gender: mensalistaGender,
+            sport: mensalistaSport,
+            courtName: mensalistaCourt,
+            fieldId: field.id,
+          }
+        : {
+            kind: 'LOCAL',
+            name: mensalistaName.trim(),
+            gender: mensalistaGender,
+            sport: mensalistaSport,
+            fieldId: field.id,
+          };
+      // Categoria do mensalista: quem escolhe é o time ao aceitar o convite (o campo pode corrigir depois)
+      if (teamKind === 'MENSALISTA' && editingMensalista && mensalistaCategory) payload.categories = [mensalistaCategory];
 
       if (editingMensalista) {
         await api.updateRegisteredTeam(editingMensalista.id, payload);
+        setShowAddMensalistaModal(false);
+        await loadMensalistas();
+        alert('Time salvo!');
       } else {
-        await api.addRegisteredTeam(payload);
+        const created = await api.addRegisteredTeam({ ...payload, status: 'approved' });
+        setShowAddMensalistaModal(false);
+        await loadMensalistas();
+        if (confirm(`${teamKind === 'LOCAL' ? 'Time da casa' : 'Mensalista'} criado! Copiar o convite agora para enviar ao ${teamKind === 'LOCAL' ? 'responsável pelo time' : 'dono do time'}?`)) {
+          await shareTeamInvite(created.id, 'copy');
+        }
       }
-      
-      setShowAddMensalistaModal(false);
-      loadMensalistas();
-      alert("Mensalista salvo com sucesso!");
-    } catch (e) {
-      alert("Erro ao salvar mensalista.");
+    } catch (e: any) {
+      alert('Erro ao salvar o time: ' + (e?.message || 'tente de novo.'));
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleReleaseTeam = async (t: RegisteredTeam) => {
+    if (!confirm(`Tirar ${t.captainName || 'o responsável'} do ${t.name || 'time'}? Depois você pode enviar um novo convite.`)) return;
+    try {
+      const res = await api.releaseTeam(t.id);
+      alert(res.message);
+      await loadMensalistas();
+      onRefreshData();
+    } catch (e: any) {
+      alert(e.message || 'Não foi possível remover o responsável.');
     }
   };
 
@@ -695,6 +820,10 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
   };
 
   const handleGenerateRecurringSlots = async (team: RegisteredTeam) => {
+    if (!team.captainUserId || !team.categories?.[0]) {
+      alert('Envie o convite para o mensalista. Quando o time aceitar e escolher a categoria, os jogos são criados automaticamente.');
+      return;
+    }
     if (!confirm(`Gerar próximos 8 jogos para ${team.name}?`)) return;
     setIsLoading(true);
     try {
@@ -745,9 +874,10 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
               allowedOpponentGenders: [team.gender],
               status: 'waiting_opponent', 
               price: field.hourlyRate, 
-              sport: team.sport, 
+              sport: sportLabel(team.sport), 
               courtName: team.courtName, 
               homeTeamType: 'MENSALISTA',
+              homeTeamId: team.id,
               pixKey: field.pixConfig?.key || ''
             });
             count++;
@@ -905,7 +1035,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
               </div>}
               {tab === 'MENSALISTAS' && <UserCheck className="w-3 h-3 inline-block mr-1 mb-0.5" />}
               {tab === 'HISTORICO' && <HistoryIcon className="w-3 h-3 inline-block mr-1 mb-0.5" />}
-              {tab.charAt(0) + tab.slice(1).toLowerCase()}
+              {tab === 'MENSALISTAS' ? 'Times' : tab === 'SOLICITACOES' ? 'Solicitações' : tab === 'HISTORICO' ? 'Histórico' : tab.charAt(0) + tab.slice(1).toLowerCase()}
             </button>
           ))}
         </div>
@@ -913,6 +1043,11 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
 
         {activeTab === 'AGENDA' && (
           <div className="p-6">
+            {field.id && !hasCoords && (
+              <div className="mb-4">
+                <ArenaLocation value={null} onChange={saveArenaGeo} onSearchAddress={() => geocodeAddress(field.location)} />
+              </div>
+            )}
             {field.payoutStatus !== 'ACTIVE' && field.id && (
               <div className="bg-yellow-50 border border-yellow-200 rounded-[2rem] p-5 mb-4 space-y-3">
                 <h4 className="font-black text-yellow-800 text-xs uppercase">Configure sua conta para receber pagamentos</h4>
@@ -1330,47 +1465,107 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
         )}
 
         {activeTab === 'MENSALISTAS' && (
-          <div className="space-y-4">
-             <div className="flex justify-between items-center">
-                <h2 className="font-black text-pitch uppercase italic">Mensalistas Ativos</h2>
+          <div className="p-6 space-y-8">
+            {/* Times da casa */}
+            <section className="space-y-4">
+              <div className="flex justify-between items-center">
+                <div>
+                  <h2 className="font-black text-pitch uppercase italic">Times da casa</h2>
+                  <p className="text-[9px] font-bold text-gray-400 uppercase">Convide uma pessoa para ser dona do time: ela cria as categorias e joga em casa e fora.</p>
+                </div>
+                <button onClick={() => openNewTeam('LOCAL')} className="p-3 bg-pitch text-white rounded-xl flex items-center gap-1 shrink-0">
+                  <Plus className="w-4 h-4" /><span className="text-[9px] font-black uppercase">Novo</span>
+                </button>
               </div>
-             {registeredTeams.filter(t => t.status === 'approved' || t.status === 'active').map(t => (
-               <div key={t.id} className="bg-white p-6 rounded-[3rem] border shadow-sm space-y-4">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-4">
-                      <div className="w-14 h-14 bg-gray-50 rounded-2xl flex items-center justify-center border overflow-hidden">
-                        {t.logoUrl ? <img src={t.logoUrl} className="w-full h-full object-cover" /> : <div className="font-black text-pitch text-xl">{t.name.charAt(0)}</div>}
+              {registeredTeams.filter(t => t.kind === 'LOCAL').length === 0 && (
+                <p className="text-[10px] font-bold text-gray-400 uppercase text-center py-4">Nenhum time da casa cadastrado.</p>
+              )}
+              {registeredTeams.filter(t => t.kind === 'LOCAL').map(t => (
+                <div key={t.id} className="bg-white p-5 rounded-[2rem] border shadow-sm space-y-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="w-12 h-12 bg-gray-50 rounded-2xl flex items-center justify-center border overflow-hidden shrink-0">
+                        {t.logoUrl ? <img src={t.logoUrl} className="w-full h-full object-cover" /> : <div className="font-black text-pitch text-lg">{(t.name || '?').charAt(0)}</div>}
                       </div>
-                      <div>
-                          <h4 className="font-black text-pitch uppercase leading-none">{t.name}</h4>
-                          <p className="text-[9px] font-black text-gray-400 uppercase mt-2 flex items-center gap-1">
-                             {['Dom','Seg','Ter','Qua','Qui','Sex','Sab'][Number(t.fixedDay)]} às {t.fixedTime}
-                          </p>
-                          <p className="text-[8px] font-bold text-grass-600 uppercase mt-1">{t.sport} • {t.courtName} • {t.categories?.[0] || 'Livre'}</p>
+                      <div className="min-w-0">
+                        <h4 className="font-black text-pitch uppercase leading-none truncate">{t.name}</h4>
+                        <p className="text-[9px] font-black text-gray-400 uppercase mt-1">
+                          {t.categories?.length ? t.categories.join(', ') : 'Sem categorias ainda'}
+                        </p>
+                        <p className={`text-[9px] font-black uppercase mt-1 ${t.captainUserId ? 'text-grass-600' : 'text-orange-500'}`}>
+                          {t.captainUserId ? `Responsável: ${t.captainName || 'definido'}` : 'Aguardando responsável aceitar o convite'}
+                        </p>
                       </div>
                     </div>
-                    <div className="flex gap-2">
-                      <button onClick={() => { 
-                        setEditingMensalista(t); 
-                        setMensalistaName(t.name); 
-                        setMensalistaPhone(t.captainPhone || ''); 
-                        setMensalistaCategory(t.categories?.[0] || '');
-                        setMensalistaDay(Number(t.fixedDay));
-                        setMensalistaTime(t.fixedTime);
-                        setMensalistaDuration(t.fixedDurationMinutes || 60);
-                        setMensalistaSport(t.sport);
-                        setMensalistaCourt(t.courtName);
-                        setShowAddMensalistaModal(true); 
-                      }} className="p-3 text-gray-300 hover:text-pitch"><Edit className="w-5 h-5"/></button>
-                      <button onClick={() => { if(confirm("Remover mensalista?")) api.deleteRegisteredTeam(t.id).then(loadMensalistas); }} className="p-3 text-gray-300 hover:text-red-500"><Trash2 className="w-4 h-4"/></button>
+                    <div className="flex shrink-0">
+                      <button onClick={() => openEditTeam(t)} className="p-2 text-gray-300 hover:text-pitch"><Edit className="w-4 h-4"/></button>
+                      <button onClick={() => { if (confirm(`Remover o time da casa ${t.name}?`)) api.deleteRegisteredTeam(t.id).then(loadMensalistas); }} className="p-2 text-gray-300 hover:text-red-500"><Trash2 className="w-4 h-4"/></button>
                     </div>
                   </div>
-                  <Button variant="outline" onClick={() => handleGenerateRecurringSlots(t)} isLoading={isLoading} className="w-full py-4 rounded-2xl text-[9px] font-black uppercase flex items-center justify-center gap-2 border-dashed">
-                    <CalendarPlus className="w-4 h-4" /> Gerar Agenda Mensalista
-                  </Button>
-               </div>
-             ))}
-             
+                  {t.captainUserId ? (
+                    <button onClick={() => handleReleaseTeam(t)} className="w-full py-3 rounded-2xl border border-dashed text-[9px] font-black uppercase text-gray-400">Trocar responsável</button>
+                  ) : (
+                    <div className="grid grid-cols-2 gap-2">
+                      <Button variant="outline" onClick={() => shareTeamInvite(t.id, 'copy')} className="py-3 rounded-2xl text-[9px] font-black uppercase"><Copy className="w-4 h-4" /> Copiar convite</Button>
+                      <Button onClick={() => shareTeamInvite(t.id, 'whatsapp')} className="py-3 rounded-2xl text-[9px] font-black uppercase bg-pitch"><Send className="w-4 h-4" /> WhatsApp</Button>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </section>
+
+            {/* Mensalistas */}
+            <section className="space-y-4">
+              <div className="flex justify-between items-center">
+                <div>
+                  <h2 className="font-black text-pitch uppercase italic">Mensalistas</h2>
+                  <p className="text-[9px] font-bold text-gray-400 uppercase">Defina dia, horário e quadra. O time escolhe a categoria ao aceitar o convite.</p>
+                </div>
+                <button onClick={() => openNewTeam('MENSALISTA')} className="p-3 bg-pitch text-white rounded-xl flex items-center gap-1 shrink-0">
+                  <Plus className="w-4 h-4" /><span className="text-[9px] font-black uppercase">Novo</span>
+                </button>
+              </div>
+              {registeredTeams.filter(t => t.kind === 'MENSALISTA' && (t.status === 'approved' || t.status === 'active')).length === 0 && (
+                <p className="text-[10px] font-bold text-gray-400 uppercase text-center py-4">Nenhum mensalista cadastrado.</p>
+              )}
+              {registeredTeams.filter(t => t.kind === 'MENSALISTA' && (t.status === 'approved' || t.status === 'active')).map(t => (
+                <div key={t.id} className="bg-white p-5 rounded-[2rem] border shadow-sm space-y-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="w-12 h-12 bg-gray-50 rounded-2xl flex items-center justify-center border overflow-hidden shrink-0">
+                        {t.logoUrl ? <img src={t.logoUrl} className="w-full h-full object-cover" /> : <div className="font-black text-pitch text-lg">{(t.name || '?').charAt(0)}</div>}
+                      </div>
+                      <div className="min-w-0">
+                        <h4 className="font-black text-pitch uppercase leading-none truncate">{t.name || 'Mensalista (aguardando time)'}</h4>
+                        <p className="text-[9px] font-black text-gray-400 uppercase mt-1">
+                          {['Dom','Seg','Ter','Qua','Qui','Sex','Sab'][Number(t.fixedDay)]} às {t.fixedTime} • {t.courtName} • {sportLabel(t.sport)}
+                        </p>
+                        <p className={`text-[9px] font-black uppercase mt-1 ${t.captainUserId ? 'text-grass-600' : 'text-orange-500'}`}>
+                          {t.captainUserId ? `${t.categories?.[0] || 'Sem categoria'} • ${t.captainName || ''}` : 'Aguardando o time aceitar o convite'}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex shrink-0">
+                      <button onClick={() => openEditTeam(t)} className="p-2 text-gray-300 hover:text-pitch"><Edit className="w-4 h-4"/></button>
+                      <button onClick={() => { if (confirm('Remover este mensalista?')) api.deleteRegisteredTeam(t.id).then(loadMensalistas); }} className="p-2 text-gray-300 hover:text-red-500"><Trash2 className="w-4 h-4"/></button>
+                    </div>
+                  </div>
+                  {t.captainUserId ? (
+                    <div className="grid grid-cols-2 gap-2">
+                      <Button variant="outline" onClick={() => handleGenerateRecurringSlots(t)} isLoading={isLoading} className="py-3 rounded-2xl text-[9px] font-black uppercase border-dashed">
+                        <CalendarPlus className="w-4 h-4" /> Gerar + 8 jogos
+                      </Button>
+                      <button onClick={() => handleReleaseTeam(t)} className="py-3 rounded-2xl border border-dashed text-[9px] font-black uppercase text-gray-400">Trocar time</button>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-2 gap-2">
+                      <Button variant="outline" onClick={() => shareTeamInvite(t.id, 'copy')} className="py-3 rounded-2xl text-[9px] font-black uppercase"><Copy className="w-4 h-4" /> Copiar convite</Button>
+                      <Button onClick={() => shareTeamInvite(t.id, 'whatsapp')} className="py-3 rounded-2xl text-[9px] font-black uppercase bg-pitch"><Send className="w-4 h-4" /> WhatsApp</Button>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </section>
           </div>
         )}
 
@@ -1455,8 +1650,8 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
 
                  <div className="bg-gray-50 p-4 rounded-2xl border flex items-center justify-between cursor-pointer" onClick={() => setIsLocalTeamSlot(!isLocalTeamSlot)}>
                     <div>
-                        <h4 className="font-black text-pitch text-xs uppercase">Tem mensalista ou time da casa neste horário?</h4>
-                        <p className="text-[8px] text-gray-400">Se sim, o jogo vai direto para a agenda desse time e só falta 1 adversário.</p>
+                        <h4 className="font-black text-pitch text-xs uppercase">Tem mandante neste horário?</h4>
+                        <p className="text-[8px] text-gray-400">Time da casa ou mensalista. O jogo vai direto para a agenda desse time, só falta 1 adversário, e o adversário paga 100% da taxa.</p>
                     </div>
                     <div className={`w-12 h-6 rounded-full p-1 transition-all ${isLocalTeamSlot ? 'bg-pitch' : 'bg-gray-200'}`}>
                         <div className={`w-4 h-4 rounded-full bg-white shadow-sm transition-all transform ${isLocalTeamSlot ? 'translate-x-6' : ''}`} />
@@ -1478,52 +1673,74 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                  {isLocalTeamSlot && (
                     <div className="animate-in fade-in slide-in-from-top-2 space-y-4 bg-gray-50 p-4 rounded-2xl border">
                         <div>
-                           <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Qual time?</label>
+                           <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Quem é o mandante?</label>
+                           <div className="grid grid-cols-2 gap-2">
+                             {(['LOCAL', 'MENSALISTA'] as HomeTeamKind[]).map(k => (
+                               <button
+                                 key={k}
+                                 type="button"
+                                 onClick={() => { setHomeKind(k); setSelectedRegisteredTeamId(''); setLocalTeamCategory(''); }}
+                                 className={`py-3 rounded-xl text-[10px] font-black uppercase border ${homeKind === k ? 'bg-pitch text-white border-pitch' : 'bg-white text-gray-400'}`}
+                               >
+                                 {k === 'LOCAL' ? 'Time da casa' : 'Mensalista'}
+                               </button>
+                             ))}
+                           </div>
+                        </div>
+                        <div>
+                           <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">{homeKind === 'LOCAL' ? 'Qual time da casa?' : 'Qual mensalista?'}</label>
                            <select 
                              className="w-full p-4 bg-white border rounded-xl text-xs font-bold" 
                              value={selectedRegisteredTeamId} 
                              onChange={e => setSelectedRegisteredTeamId(e.target.value)}
                            >
-                              <option value="">Selecione um time</option>
-                              {currentUser.teams.map((t, i) => (
-                                <option key={`OWNER_TEAM_${i}`} value={`OWNER_TEAM_${i}`}>[MEU TIME] {t.name}</option>
+                              <option value="">Selecione o time</option>
+                              {homeKind === 'LOCAL' && registeredTeams.filter(t => t.kind === 'LOCAL').map(t => (
+                                <option key={t.id} value={t.id}>{t.name}{t.captainName ? ` (${t.captainName})` : ''}</option>
                               ))}
-                              {registeredTeams.filter(t => t.status === 'approved' || t.status === 'active').map(t => (
-                                <option key={t.id} value={t.id}>[MENSALISTA] {t.name}</option>
+                              {homeKind === 'LOCAL' && (currentUser.teams || []).filter(t => !registeredTeams.some(r => r.kind === 'LOCAL' && r.name.trim().toLowerCase() === t.name.trim().toLowerCase())).map(t => {
+                                const i = currentUser.teams.indexOf(t);
+                                return <option key={`OWNER_TEAM_${i}`} value={`OWNER_TEAM_${i}`}>{t.name} (meu perfil)</option>;
+                              })}
+                              {homeKind === 'MENSALISTA' && registeredTeams.filter(t => t.kind === 'MENSALISTA' && (t.status === 'approved' || t.status === 'active')).map(t => (
+                                <option key={t.id} value={t.id}>
+                                  {t.name || 'Aguardando o time aceitar'} • {['Dom','Seg','Ter','Qua','Qui','Sex','Sab'][Number(t.fixedDay)] || ''} {t.fixedTime}
+                                </option>
                               ))}
                            </select>
+                           {homeKind === 'LOCAL' && registeredTeams.filter(t => t.kind === 'LOCAL').length === 0 && (currentUser.teams || []).length === 0 && (
+                             <p className="text-[9px] font-bold text-orange-500 uppercase mt-2">Cadastre um time da casa na aba "Times".</p>
+                           )}
+                           {homeKind === 'MENSALISTA' && registeredTeams.filter(t => t.kind === 'MENSALISTA').length === 0 && (
+                             <p className="text-[9px] font-bold text-orange-500 uppercase mt-2">Cadastre um mensalista na aba "Times".</p>
+                           )}
                         </div>
                         
-                        {(selectedRegisteredTeamId && (
-                          (() => {
-                            let team;
-                            if (selectedRegisteredTeamId.startsWith('OWNER_TEAM_')) {
-                              const idx = parseInt(selectedRegisteredTeamId.split('_')[2]);
-                              team = currentUser.teams[idx];
-                            } else {
-                              team = registeredTeams.find(t => t.id === selectedRegisteredTeamId);
-                            }
-
-                            if (team && team.categories && team.categories.length > 0) {
-                              return (
-                                <div>
-                                  <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Selecione a Categoria</label>
-                                  <select 
-                                    className="w-full p-4 bg-white border rounded-xl text-xs font-bold" 
-                                    value={localTeamCategory} 
-                                    onChange={e => setLocalTeamCategory(e.target.value)}
-                                  >
-                                    <option value="">Selecione a categoria</option>
-                                    {team.categories.map(cat => (
-                                      <option key={cat} value={cat}>{cat}</option>
-                                    ))}
-                                  </select>
-                                </div>
-                              );
-                            }
-                            return null;
-                          })()
-                        ))}
+                        {selectedRegisteredTeamId && (() => {
+                          let teamCats: string[] = [];
+                          if (selectedRegisteredTeamId.startsWith('OWNER_TEAM_')) {
+                            teamCats = currentUser.teams[parseInt(selectedRegisteredTeamId.split('_')[2])]?.categories || [];
+                          } else {
+                            teamCats = registeredTeams.find(t => t.id === selectedRegisteredTeamId)?.categories || [];
+                          }
+                          // Time sem categorias ainda (ex.: convite não aceito): mostra todas
+                          const options = teamCats.length > 0 ? teamCats : categories.length > 0 ? categories : CATEGORY_ORDER;
+                          return (
+                            <div>
+                              <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Categoria do mandante neste horário</label>
+                              <select 
+                                className="w-full p-4 bg-white border rounded-xl text-xs font-bold" 
+                                value={localTeamCategory} 
+                                onChange={e => setLocalTeamCategory(e.target.value)}
+                              >
+                                <option value="">Selecione a categoria</option>
+                                {options.map(cat => (
+                                  <option key={cat} value={cat}>{cat}</option>
+                                ))}
+                              </select>
+                            </div>
+                          );
+                        })()}
                         
                         <div className="flex items-center gap-2 cursor-pointer" onClick={() => setAcceptNeighbors(!acceptNeighbors)}>
                            <div className={`w-5 h-5 rounded border flex items-center justify-center transition-all ${acceptNeighbors ? 'bg-pitch border-pitch text-white' : 'bg-white border-gray-300'}`}>
@@ -1623,24 +1840,20 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
       )}
 
       {showAddMensalistaModal && (
-        <div className="fixed inset-0 bg-pitch/95 backdrop-blur-md z-[100] flex items-end">
-           <div className="bg-white w-full rounded-t-[3rem] p-10 animate-in slide-in-from-bottom duration-500 max-h-[90vh] overflow-y-auto pb-safe">
-              <div className="flex justify-between items-center mb-8">
-                 <h2 className="text-2xl font-black italic uppercase text-pitch">{editingMensalista ? 'Editar' : 'Novo Mensalista'}</h2>
+        <div className="fixed inset-0 bg-pitch/95 backdrop-blur-md z-[400] flex items-end">
+           <div className="bg-white w-full rounded-t-[3rem] p-8 animate-in slide-in-from-bottom duration-500 max-h-[90vh] overflow-y-auto pb-safe">
+              <div className="flex justify-between items-center mb-6">
+                 <h2 className="text-xl font-black italic uppercase text-pitch">
+                   {editingMensalista ? 'Editar' : 'Novo'} {teamKind === 'LOCAL' ? 'time da casa' : 'mensalista'}
+                 </h2>
                  <button onClick={() => setShowAddMensalistaModal(false)} className="p-2 bg-gray-100 rounded-full"><X className="w-6 h-6"/></button>
               </div>
-              <div className="space-y-6">
-                 <div className="grid grid-cols-2 gap-4">
-                    <div className="bg-gray-50 p-4 rounded-2xl border">
-                       <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Nome Time</label>
-                       <input className="w-full bg-transparent font-black outline-none text-pitch" value={mensalistaName} onChange={e => setMensalistaName(e.target.value)} />
-                    </div>
-                    <div className="bg-gray-50 p-4 rounded-2xl border">
-                       <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Categoria</label>
-                       <select className="w-full bg-transparent font-black outline-none text-xs" value={mensalistaCategory} onChange={e => setMensalistaCategory(e.target.value)}>
-                          {CATEGORY_ORDER.map(c => <option key={c} value={c}>{c}</option>)}
-                       </select>
-                    </div>
+              <div className="space-y-4">
+                 <div className="bg-gray-50 p-4 rounded-2xl border">
+                    <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">
+                      {teamKind === 'LOCAL' ? 'Nome do time da casa' : 'Nome do time (opcional: o time preenche ao aceitar)'}
+                    </label>
+                    <input className="w-full bg-transparent font-black outline-none text-pitch" value={mensalistaName} onChange={e => setMensalistaName(e.target.value)} placeholder={teamKind === 'LOCAL' ? 'Ex.: Arena FC' : 'Ex.: Amigos do Bairro'} />
                  </div>
                  <div className="grid grid-cols-2 gap-4">
                     <div className="bg-gray-50 p-4 rounded-2xl border">
@@ -1650,32 +1863,55 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                        </select>
                     </div>
                     <div className="bg-gray-50 p-4 rounded-2xl border">
-                       <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Local (Quadra)</label>
-                       <select className="w-full bg-transparent font-black outline-none text-xs" value={mensalistaCourt} onChange={e => setMensalistaCourt(e.target.value)}>
-                          {field.courts.map(c => <option key={c} value={c}>{c}</option>)}
+                       <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Gênero</label>
+                       <select className="w-full bg-transparent font-black outline-none text-xs uppercase" value={mensalistaGender} onChange={e => setMensalistaGender(e.target.value as Gender)}>
+                          <option value="MASCULINO">Masculino</option>
+                          <option value="FEMININO">Feminino</option>
+                          <option value="MISTO">Misto</option>
                        </select>
                     </div>
                  </div>
-                 <div className="grid grid-cols-2 gap-4">
-                    <div className="bg-gray-50 p-4 rounded-2xl border">
-                       <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Dia da Semana</label>
-                       <select className="w-full bg-transparent font-black outline-none text-xs uppercase" value={mensalistaDay} onChange={e => setMensalistaDay(Number(e.target.value))}>
-                          {['Dom','Seg','Ter','Qua','Qui','Sex','Sab'].map((d, i) => <option key={i} value={i}>{d}</option>)}
-                       </select>
-                    </div>
-                    <div className="bg-gray-50 p-4 rounded-2xl border">
-                       <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Horário</label>
-                       <input type="time" className="w-full bg-transparent font-black outline-none text-pitch" value={mensalistaTime} onChange={e => setMensalistaTime(e.target.value)} />
-                    </div>
-                    <div className="bg-gray-50 p-4 rounded-2xl border">
-                       <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Duração (minutos)</label>
-                       <input type="number" className="w-full bg-transparent font-black outline-none text-pitch" value={mensalistaDuration} onChange={e => setMensalistaDuration(Number(e.target.value))} />
-                    </div>
-                 </div>
-                 <div className="bg-pitch/5 p-6 rounded-[2.5rem] border border-pitch/10 space-y-4">
-                    <input className="w-full p-4 bg-white rounded-xl border text-xs font-bold" placeholder="WhatsApp Capitão" value={mensalistaPhone} onChange={e => setMensalistaPhone(e.target.value)} />
-                 </div>
-                 <Button onClick={handleSaveMensalista} isLoading={isLoading} className="w-full py-6 rounded-[2.5rem] font-black uppercase text-xs shadow-xl">Salvar Mensalista</Button>
+                 {teamKind === 'MENSALISTA' && (
+                   <>
+                     <div className="grid grid-cols-2 gap-4">
+                        <div className="bg-gray-50 p-4 rounded-2xl border">
+                           <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Dia da semana</label>
+                           <select className="w-full bg-transparent font-black outline-none text-xs uppercase" value={mensalistaDay} onChange={e => setMensalistaDay(Number(e.target.value))}>
+                              {['Domingo','Segunda','Terça','Quarta','Quinta','Sexta','Sábado'].map((d, i) => <option key={i} value={i}>{d}</option>)}
+                           </select>
+                        </div>
+                        <div className="bg-gray-50 p-4 rounded-2xl border">
+                           <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Horário</label>
+                           <input type="time" className="w-full bg-transparent font-black outline-none text-pitch" value={mensalistaTime} onChange={e => setMensalistaTime(e.target.value)} />
+                        </div>
+                        <div className="bg-gray-50 p-4 rounded-2xl border">
+                           <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Duração (min)</label>
+                           <input type="number" className="w-full bg-transparent font-black outline-none text-pitch" value={mensalistaDuration} onChange={e => setMensalistaDuration(Number(e.target.value))} />
+                        </div>
+                        <div className="bg-gray-50 p-4 rounded-2xl border">
+                           <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Quadra</label>
+                           <select className="w-full bg-transparent font-black outline-none text-xs" value={mensalistaCourt} onChange={e => setMensalistaCourt(e.target.value)}>
+                              {field.courts.map(c => <option key={c} value={c}>{c}</option>)}
+                           </select>
+                        </div>
+                     </div>
+                     {editingMensalista?.captainUserId && (
+                       <div className="bg-gray-50 p-4 rounded-2xl border">
+                          <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Categoria deste horário</label>
+                          <select className="w-full bg-transparent font-black outline-none text-xs" value={mensalistaCategory} onChange={e => setMensalistaCategory(e.target.value)}>
+                             {(categories.length > 0 ? categories : CATEGORY_ORDER).map(c => <option key={c} value={c}>{c}</option>)}
+                          </select>
+                       </div>
+                     )}
+                     {!editingMensalista && (
+                       <p className="text-[9px] font-bold text-gray-400 uppercase px-2">Depois de salvar, envie o convite. O dono do time cria a conta (se ainda não tiver) e escolhe a categoria. Os próximos 8 jogos entram na agenda automaticamente.</p>
+                     )}
+                   </>
+                 )}
+                 {teamKind === 'LOCAL' && !editingMensalista && (
+                   <p className="text-[9px] font-bold text-gray-400 uppercase px-2">Depois de salvar, envie o convite para a pessoa que vai cuidar do time. Ela cria as categorias e pode marcar jogos em casa e fora.</p>
+                 )}
+                 <Button onClick={handleSaveMensalista} isLoading={isLoading} className="w-full py-5 rounded-[2.5rem] font-black uppercase text-xs shadow-xl">Salvar</Button>
               </div>
            </div>
         </div>

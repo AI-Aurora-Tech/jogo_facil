@@ -44,14 +44,41 @@ stateDiagram-v2
     confirmed --> finished: 2h após o fim, time 1 lança placar
 ```
 
-- **Time 1** = mensalista/time da casa do horário, ou o primeiro time de fora que reservou.
-- O time 1 aprova o adversário. Se o mensalista não tiver conta no app, quem aprova é o dono do campo.
-- Ao criar o horário, o dono do campo responde "Tem mensalista ou time da casa neste horário?" e escolhe time e categoria. O jogo aparece direto na agenda desse time (e ele recebe notificação).
+- **Time 1** = mandante do horário (time da casa ou mensalista), ou o primeiro time de fora que reservou.
+- O time 1 aprova o adversário. Se o mandante ainda não tem responsável no app, quem aprova é o dono do campo.
+- Ao criar ou editar o horário, o dono do campo marca "Tem mandante?", escolhe **time da casa** ou **mensalista**, qual deles e a categoria. O jogo aparece direto na agenda desse time (e ele recebe notificação).
+- Horário criado **sem** mandante pode ganhar mandante depois:
+  - o dono do campo edita o horário (enquanto nenhum time reservou), ou
+  - o responsável pelo time da casa / mensalista daquela arena reserva o horário pelo app: ele entra como **mandante**.
+  Nos dois casos o adversário paga **100%** da taxa.
+- O mandante pode liberar o horário enquanto ainda não tem adversário.
 - Um time não pode ter 2 jogos da **mesma categoria** no mesmo horário (em casa ou fora). Categorias diferentes podem.
 - Recusa do campo devolve o horário para a agenda e estorna o que foi pago.
 - 2h depois do fim do jogo: o time 1 recebe aviso para lançar o placar, e os dois times avaliam o adversário e o campo (o aviso automático usa `pg_cron`, ver passo 5).
 
-## 4.1 Configuração de recebimento do dono do campo
+## 4.1 Times da casa e mensalistas (aba "Times" da arena)
+
+O dono do campo cadastra os times dele e manda um **convite** (botões "Copiar convite" e "WhatsApp"):
+
+| | Time da casa | Mensalista |
+|---|---|---|
+| O campo define | nome, esporte, gênero | dia da semana, horário, duração, quadra, esporte |
+| Quem abre o convite | cria a conta (ou entra) e vira o **responsável** pelo time | cria a conta (ou entra), escolhe qual time e **só a categoria** daquele horário |
+| Depois de aceitar | o time entra no perfil da pessoa: ela cria categorias e marca jogos em casa e fora | os próximos 8 jogos semanais entram na agenda automaticamente ("Gerar + 8 jogos" cria mais) |
+
+- O link é `https://SEU-DOMINIO/?time=TOKEN`, de uso único. O token fica só no servidor (tabela `team_invite`).
+- "Trocar responsável" / "Trocar time" tira a pessoa atual para mandar um novo convite.
+- Enquanto ninguém aceitou, o dono do campo já pode criar horários com esse time como mandante; quando a pessoa aceitar, ela assume esses jogos.
+
+## 4.2 Localização da arena e distância
+
+- No cadastro e no perfil da arena, a posição no mapa é salva junto com o endereço (antes era adivinhada a cada busca, e quando falhava caía no centro da cidade).
+- Ordem da busca: rua + número → coordenada do CEP → rua → cidade (a cidade aparece como "aproximada").
+- O jeito mais preciso é o botão **"Estou na arena"** (GPS do celular), no cadastro, no perfil e no aviso da agenda.
+- Arenas antigas sem posição: ao abrir a agenda, o app tenta achar pelo endereço e salva; se não conseguir, mostra o aviso para marcar.
+- Para os times: a distância usa a posição salva; se o navegador já tem permissão de localização, calcula sozinho ao abrir.
+
+## 4.3 Configuração de recebimento do dono do campo
 
 O dono do campo vê o botão **Configurar pagamento** (no topo da Arena e na agenda). Ele abre o seu WhatsApp
 (`VITE_SUPPORT_WHATSAPP`) com a mensagem: *"Olá, me chamo {nome}, e criei conta no Jogo Facil agora, pode me
@@ -98,7 +125,8 @@ App (React/Vite)  ──>  Supabase (leitura e cadastros simples)
 | `shared/matchRules.ts` | Regras do fluxo (quem aprova, quanto cada um paga, quando libera placar). Usado pela tela e pelo servidor. |
 | `shared/money.ts` | Formatação de valores em reais. |
 | `api/matches.ts` | Todas as etapas da partida: reservar, se inscrever, aprovar, pagar, aprovar pelo campo, cancelar, placar, avaliação. |
-| `api/invites.ts` | Cria e abre convites. |
+| `api/invites.ts` | Cria e abre convites de partida. |
+| `api/teams.ts` | Convites de time da casa e mensalista: criar link, ver, aceitar, trocar responsável. |
 | `api/payouts.ts` | Conta de recebimento do dono do campo. |
 | `api/webhooks/asaas.ts` | Confirmação de pagamentos (idempotente). Cancela assinaturas antigas da mensalidade. |
 | `api/auth/login.ts` | Login que devolve a sessão usada nas ações do servidor. |
@@ -125,6 +153,8 @@ App (React/Vite)  ──>  Supabase (leitura e cadastros simples)
 4. **Deploy** e teste o fluxo completo no sandbox.
 5. **Depois que a versão nova estiver no ar**, rode `supabase/migrations/20261022_02_endurecimento_colunas.sql`.
    Ele impede que o navegador altere status, pagamento, placar e assinatura (só o servidor muda).
+   Rode também `supabase/migrations/20261027_01_times_da_casa_e_convites.sql` (times da casa, convites de time e
+   mandante no horário). Esta pode rodar antes do deploy.
    Em seguida rode `supabase/migrations/20261023_01_senha_pelo_servidor.sql`: cria a tabela dos códigos de
    recuperação e tira do navegador a permissão de alterar a senha.
 6. Troque `ASAAS_ENV` para `production` e a chave de API de produção.

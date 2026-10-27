@@ -81,6 +81,11 @@ export const MatchActions: React.FC<MatchActionsProps> = ({ slot, field, current
                 <LogOut className="w-4 h-4" /> Cancelar
               </Button>
             )}
+            {hasHomeTeam(slot) && slot.homeTeamUserId === currentUser.id && ownerId !== currentUser.id && (
+              <Button onClick={() => run('cancel', {}, 'Liberar este horário? Seu time sai e o horário volta a ficar livre na arena.')} variant="outline" isLoading={busy} className={`${small} text-red-500 border-red-200`}>
+                <LogOut className="w-4 h-4" /> Liberar horário
+              </Button>
+            )}
           </div>
         </div>
       )}

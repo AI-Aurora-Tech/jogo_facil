@@ -4,7 +4,7 @@ import { Search, MapPin, Clock, Swords, Filter, X, Check, MessageCircle, Phone, 
 import { Button } from '../components/Button';
 import { Field, MatchSlot, User, CATEGORY_ORDER, SPORTS, Gender, RegisteredTeam } from '../types';
 import { api } from '../api';
-import { calculateDistance, getCurrentPosition, formatDistance, LatLng, geocodeAddress } from '../utils';
+import { calculateDistance, getCurrentPosition, formatDistance, LatLng, geocodeAddress, getCachedPosition, hasLocationPermission } from '../utils';
 import { MatchActions, firstTeamNameOf } from '../components/MatchActions';
 import { hasHomeTeam, normalizeMatchKind, opponentApproverId, shareFor, MATCH_KIND_LABEL, STATUS_LABEL } from '../shared/matchRules';
 import { formatBRL } from '../shared/money';
@@ -38,6 +38,8 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
   // Estado de GPS e Distâncias
   const [userCoords, setUserCoords] = useState<LatLng | null>(null);
   const [fieldDistances, setFieldDistances] = useState<Record<string, number>>({});
+  // Campos cuja posição foi achada só pela cidade: distância aproximada (mostra "~")
+  const [approxFields, setApproxFields] = useState<Record<string, boolean>>({});
   const [isCalculatingDistances, setIsCalculatingDistances] = useState(false);
   const [gpsError, setGpsError] = useState(false);
 
@@ -54,6 +56,8 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
   
   const [myGamesSubTab, setMyGamesSubTab] = useState<'FUTUROS' | 'HISTORICO' | 'SOLICITACOES'>('FUTUROS');
   const [myRequests, setMyRequests] = useState<RegisteredTeam[]>([]);
+  // Times do campo (mensalista/time da casa) dos quais sou o responsável
+  const [myHomeTeams, setMyHomeTeams] = useState<RegisteredTeam[]>([]);
   // Jogos do time (inclui os passados, para placar e avaliação)
   const [mySlots, setMySlots] = useState<MatchSlot[]>([]);
 
@@ -85,8 +89,23 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
   useEffect(() => {
     if (currentUser.role === 'TEAM_CAPTAIN') {
       api.getRegisteredTeamsForCaptain(currentUser.phoneNumber).then(setMyRequests);
+      api.getMyHomeTeams(currentUser.id).then(setMyHomeTeams).catch(() => setMyHomeTeams([]));
     }
   }, [currentUser]);
+
+  // Já tem posição desta sessão ou permissão dada antes: calcula as distâncias sem precisar tocar no botão
+  useEffect(() => {
+    const cached = getCachedPosition();
+    if (cached) {
+      setUserCoords(cached);
+      return;
+    }
+    hasLocationPermission().then(granted => {
+      if (granted) {
+        getCurrentPosition().then(setUserCoords).catch(() => setGpsError(true));
+      }
+    });
+  }, []);
 
   const activateGPS = async () => {
     setIsCalculatingDistances(true);
@@ -105,36 +124,38 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
   const calculateAllDistances = async (origin: LatLng) => {
     setIsCalculatingDistances(true);
     const newDistances: Record<string, number> = {};
-    const uniqueFieldIds: string[] = Array.from(new Set(slots.map(s => s.fieldId)));
-    
-    for (const fieldId of uniqueFieldIds) {
-      const field = fields.find(f => f.id === fieldId);
-      if (!field) continue;
+    const approx: Record<string, boolean> = {};
 
-      let lat = field.latitude;
-      let lng = field.longitude;
-
-      if ((!lat || !lng || (Math.abs(lat) < 0.0001)) && field.location && field.location.length > 5) {
-         try {
-            const geo = await geocodeAddress(field.location);
-            if (geo) {
-              lat = geo.lat;
-              lng = geo.lng;
-            }
-         } catch (e) {
-           console.warn(`Falha ao geocodificar ${field.name}`);
-         }
+    // 1. Campos com posição salva: cálculo direto, sem consultar nada
+    const missing: Field[] = [];
+    for (const field of fields) {
+      if (field.latitude && field.longitude && Math.abs(field.latitude) > 0.0001) {
+        const dist = calculateDistance(origin.lat, origin.lng, field.latitude, field.longitude);
+        if (dist >= 0) newDistances[field.id] = dist;
+      } else if (field.location && field.location.length > 5) {
+        missing.push(field);
       }
+    }
+    setFieldDistances(prev => ({ ...prev, ...newDistances }));
 
-      if (lat && lng && Math.abs(lat) > 0.0001) {
-        const dist = calculateDistance(origin.lat, origin.lng, lat, lng);
-        if (dist >= 0) {
-          newDistances[fieldId] = dist;
+    // 2. Campos sem posição salva: busca pelo endereço (mais lento, 1 por segundo)
+    for (const field of missing) {
+      try {
+        const geo = await geocodeAddress(field.location);
+        if (geo) {
+          const dist = calculateDistance(origin.lat, origin.lng, geo.lat, geo.lng);
+          if (dist >= 0) {
+            newDistances[field.id] = dist;
+            if (geo.precision === 'city') approx[field.id] = true;
+            setFieldDistances(prev => ({ ...prev, [field.id]: dist }));
+          }
         }
+      } catch (e) {
+        console.warn(`Falha ao localizar ${field.name}`);
       }
     }
 
-    setFieldDistances(prev => ({ ...prev, ...newDistances }));
+    setApproxFields(approx);
     setIsCalculatingDistances(false);
   };
 
@@ -536,7 +557,8 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
         ) : (
           processedSlots.map(slot => {
             const field = fields.find(f => f.id === slot.fieldId);
-            const distMeters = fieldDistances[field?.id || ''] || -1;
+            const distMeters = fieldDistances[field?.id || ''] ?? -1;
+            const distApprox = !!approxFields[field?.id || ''];
             const status = getStatusBadge(slot);
 
             return (
@@ -565,7 +587,7 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
                            {distMeters >= 0 && (
                               <div className="flex items-center gap-1 bg-grass-50 text-grass-700 px-2 py-1 rounded-lg border border-grass-100">
                                 <MapPin className="w-3 h-3" />
-                                <span className="text-[9px] font-black uppercase">{formatDistance(distMeters)}</span>
+                                <span className="text-[9px] font-black uppercase" title={distApprox ? 'Distância aproximada: a arena ainda não marcou a localização exata' : undefined}>{distApprox ? '~' : ''}{formatDistance(distMeters)}</span>
                               </div>
                            )}
                         </div>
@@ -715,11 +737,14 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
 
                {(() => {
                  const isNew = selectedSlot.status === 'available' && !hasHomeTeam(selectedSlot) && !selectedSlot.bookedByTeamName;
-                 const share = shareFor(selectedSlot, isNew ? 'FIRST' : 'OPPONENT');
+                 const myTeamName = currentUser.teams[selectedTeamIdx]?.name || '';
+                 // Time da casa/mensalista deste campo assume o horário como mandante: adversário paga 100%
+                 const asHome = isNew && myHomeTeams.some(t => t.fieldId === selectedSlot.fieldId && (t.name || '').trim().toLowerCase() === myTeamName.trim().toLowerCase());
+                 const share = asHome ? 0 : shareFor(selectedSlot, isNew ? 'FIRST' : 'OPPONENT');
                  return (
                    <div className="bg-gray-50 p-4 rounded-2xl border text-[10px] font-bold text-gray-500 uppercase space-y-1">
-                     <p className="text-pitch font-black">{isNew ? 'Você será o time 1 deste horário' : `Desafiar ${firstTeamNameOf(selectedSlot)}`}</p>
-                     <p>{share > 0 ? `Sua parte da taxa: ${formatBRL(share)} (PIX, depois da aprovação)` : 'Sem taxa (amistoso)'}</p>
+                     <p className="text-pitch font-black">{asHome ? 'Você assume este horário como mandante' : isNew ? 'Você será o time 1 deste horário' : `Desafiar ${firstTeamNameOf(selectedSlot)}`}</p>
+                     <p>{asHome ? 'Mandante não paga: o adversário paga 100% da taxa.' : share > 0 ? `Sua parte da taxa: ${formatBRL(share)} (PIX, depois da aprovação)` : 'Sem taxa (amistoso)'}</p>
                      {isNew && <p>Depois de reservar, envie o convite para um adversário. Você aprova quem se inscrever.</p>}
                    </div>
                  );

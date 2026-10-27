@@ -3,6 +3,7 @@ import { UserRole, Field, MatchSlot, User, InAppNotification } from './types';
 import { Landing } from './views/Landing';
 import { Auth, AuthMode } from './views/Auth';
 import { InviteLanding } from './views/InviteLanding';
+import { TeamInviteLanding } from './views/TeamInviteLanding';
 import { FieldDashboard } from './views/FieldDashboard';
 import { TeamDashboard } from './views/TeamDashboard';
 import { EditProfileModal, PasswordChange } from './components/EditProfileModal';
@@ -37,7 +38,19 @@ const App: React.FC = () => {
       return sessionStorage.getItem('jf_invite');
     } catch { return null; }
   });
-  const [authOptions, setAuthOptions] = useState<{ mode?: AuthMode; inviteCategory?: string }>({});
+  // Convite de time do campo (?time=TOKEN): mensalista ou time da casa
+  const [teamInviteToken, setTeamInviteToken] = useState<string | null>(() => {
+    try {
+      const fromUrl = new URLSearchParams(window.location.search).get('time');
+      if (fromUrl) {
+        sessionStorage.setItem('jf_team_invite', fromUrl);
+        window.history.replaceState({}, document.title, window.location.pathname);
+        return fromUrl;
+      }
+      return sessionStorage.getItem('jf_team_invite');
+    } catch { return null; }
+  });
+  const [authOptions, setAuthOptions] = useState<{ mode?: AuthMode; inviteCategory?: string; teamInvite?: { kind: 'MENSALISTA' | 'LOCAL'; teamName?: string; fieldName: string } }>({});
 
   
   const [fields, setFields] = useState<Field[]>([]);
@@ -74,6 +87,11 @@ const App: React.FC = () => {
   const clearInvite = () => {
     try { sessionStorage.removeItem('jf_invite'); } catch { /* ignore */ }
     setInviteToken(null);
+  };
+
+  const clearTeamInvite = () => {
+    try { sessionStorage.removeItem('jf_team_invite'); } catch { /* ignore */ }
+    setTeamInviteToken(null);
   };
 
   // Sessão expirada no servidor: volta para o login
@@ -338,6 +356,10 @@ const App: React.FC = () => {
       }
 
       const resUser = await api.updateUser(updatedUser);
+      if (resUser.role === UserRole.TEAM_CAPTAIN) {
+        // Time da casa: o campo usa as categorias do time ao criar horários com mandante
+        await api.syncHomeTeamCategories(resUser).catch(e => console.warn('Não foi possível atualizar o time da casa', e));
+      }
       if (impersonatingUser) {
         setImpersonatingUser(resUser);
       } else {
@@ -398,6 +420,32 @@ const App: React.FC = () => {
     );
   }
 
+  // Convite de time do campo (mensalista / time da casa), antes ou depois de entrar
+  if (teamInviteToken && view !== 'AUTH' && !impersonatingUser) {
+    return (
+      <TeamInviteLanding
+        token={teamInviteToken}
+        currentUser={user}
+        categories={categories}
+        onAuth={(mode, invite) => {
+          setAuthOptions({ mode, teamInvite: { kind: invite.kind, teamName: invite.teamName, fieldName: invite.field.name } });
+          setView('AUTH');
+        }}
+        onUserUpdated={saveSessionUser}
+        onDone={() => {
+          clearTeamInvite();
+          setView('APP');
+          setActiveTab('MY_GAMES');
+          refreshData();
+        }}
+        onDismiss={() => {
+          clearTeamInvite();
+          setView(user ? 'APP' : 'LANDING');
+        }}
+      />
+    );
+  }
+
   // Convite aberto (antes ou depois de entrar)
   if (inviteToken && view !== 'AUTH' && !impersonatingUser) {
     return (
@@ -428,10 +476,11 @@ const App: React.FC = () => {
   if (view === 'AUTH') {
     return (
       <Auth 
-        key={`${authOptions.mode || 'LOGIN'}-${authOptions.inviteCategory || ''}`}
+        key={`${authOptions.mode || 'LOGIN'}-${authOptions.inviteCategory || ''}-${authOptions.teamInvite?.kind || ''}`}
         categories={categories} 
         initialMode={authOptions.mode}
         inviteCategory={authOptions.inviteCategory}
+        teamInvite={authOptions.teamInvite}
         onLogin={(u) => { 
           saveSessionUser(u);
           setAuthOptions({});
