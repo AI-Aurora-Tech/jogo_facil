@@ -4,7 +4,8 @@ import { User, UserRole, Field, TeamConfig, Gender } from '../types';
 import { Button } from './Button';
 import { WalletSetup } from './WalletSetup';
 import { X, User as UserIcon, Shield, Check, Plus, AlertCircle, Building2, MapPin, Smartphone, Camera, Trash2, LayoutGrid, Tag, Lock, PlusCircle, Globe, Search, Eye, EyeOff } from 'lucide-react';
-import { formatCategory, convertFileToBase64, geocodeAddress, fetchAddressByCEP } from '../utils';
+import { formatCategory, convertFileToBase64, geocodeAddressParts, fetchAddressByCEP, GeoResult } from '../utils';
+import { ArenaLocation } from './ArenaLocation';
 
 interface EditProfileModalProps {
   categories: string[];
@@ -46,6 +47,10 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({ categories, 
   const [city, setCity] = useState('');
   const [state, setState] = useState('');
   const [isLoadingCEP, setIsLoadingCEP] = useState(false);
+  // Posição da arena no mapa. 'saved' = a que já estava salva; muda quando o dono marca pelo GPS ou busca pelo endereço
+  const [arenaGeo, setArenaGeo] = useState<GeoResult | null>(
+    field && field.latitude && field.longitude && Math.abs(field.latitude) > 0.0001 ? { lat: field.latitude, lng: field.longitude, precision: 'saved' } : null
+  );
   
   const [isLoading, setIsLoading] = useState(false);
   const [categoryInputs, setCategoryInputs] = useState<string[]>(['', '']);
@@ -185,13 +190,14 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({ categories, 
              fullAddress = street;
           }
 
-          // Geocoding Automático
+          // Posição no mapa: a marcada pelo dono (GPS/busca) vale mais; senão busca se o endereço mudou ou não tinha
           let finalLat = field.latitude;
           let finalLng = field.longitude;
-
-          // Se o endereço mudou ou se não tem coordenadas, busca agora
-          if (fullAddress !== field.location || !finalLat || !finalLng) {
-              const coords = await geocodeAddress(fullAddress);
+          if (arenaGeo && arenaGeo.precision !== 'saved') {
+              finalLat = arenaGeo.lat;
+              finalLng = arenaGeo.lng;
+          } else if (fullAddress !== field.location || !finalLat || !finalLng) {
+              const coords = await geocodeAddressParts({ street, number, neighborhood, city, state, cep });
               if (coords) {
                   finalLat = coords.lat;
                   finalLng = coords.lng;
@@ -370,7 +376,12 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({ categories, 
                        />
                     </div>
                  </div>
-                 <p className="text-[8px] text-gray-400 italic font-bold text-center">* Ao salvar, o GPS da arena será atualizado automaticamente.</p>
+                 <ArenaLocation
+                   value={arenaGeo}
+                   onChange={setArenaGeo}
+                   onSearchAddress={() => geocodeAddressParts({ street, number, neighborhood, city, state, cep })}
+                 />
+                 <p className="text-[8px] text-gray-400 italic font-bold text-center">* Se você mudar o endereço, a posição no mapa é buscada de novo ao salvar (a não ser que tenha marcado pelo GPS).</p>
               </div>
 
               {/* GESTÃO DE QUADRAS */}

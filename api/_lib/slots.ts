@@ -165,3 +165,16 @@ export const CLEAR_FIRST_TEAM = {
   is_booked: false,
   home_team_type: 'OUTSIDE',
 };
+
+/** Campos do mandante (time da casa/mensalista) zerados (horário volta a ficar livre). */
+export const CLEAR_HOME_TEAM = {
+  has_local_team: false,
+  home_team_id: null,
+  home_team_user_id: null,
+  local_team_name: null,
+  local_team_category: null,
+  local_team_phone: null,
+  local_team_logo_url: null,
+  local_team_gender: null,
+  allowed_opponent_genders: [],
+};

@@ -5,7 +5,8 @@ import { Button } from '../components/Button';
 import { Shield, MapPin, AlertCircle, KeyRound, ChevronLeft, Camera, LayoutGrid, Loader2, Eye, EyeOff } from 'lucide-react';
 import { api, ServerError } from '../api';
 import { openPasswordHelpWhatsApp } from '../support';
-import { convertFileToBase64, fetchAddressByCEP } from '../utils';
+import { convertFileToBase64, fetchAddressByCEP, geocodeAddressParts, GeoResult } from '../utils';
+import { ArenaLocation } from '../components/ArenaLocation';
 
 interface AuthProps {
   categories: string[];
@@ -14,6 +15,8 @@ interface AuthProps {
   initialMode?: AuthMode;
   /** Cadastro vindo de um convite: conta de time com só a categoria do jogo (grátis). */
   inviteCategory?: string;
+  /** Cadastro vindo de convite de time do campo: conta de dono de time (sem opção de dono de campo). */
+  teamInvite?: { kind: 'MENSALISTA' | 'LOCAL'; teamName?: string; fieldName: string };
 }
 
 export type AuthMode = 'LOGIN' | 'REGISTER' | 'FORGOT_PASSWORD';
@@ -25,9 +28,10 @@ export type AuthMode = 'LOGIN' | 'REGISTER' | 'FORGOT_PASSWORD';
  */
 const EMAIL_PASSWORD_RESET_ENABLED = false;
 
-export const Auth: React.FC<AuthProps> = ({ onLogin, onCancel, initialMode, inviteCategory }) => {
+export const Auth: React.FC<AuthProps> = ({ onLogin, onCancel, initialMode, inviteCategory, teamInvite }) => {
   const [mode, setMode] = useState<AuthMode>(initialMode || 'LOGIN');
   const isInviteSignup = mode === 'REGISTER' && !!inviteCategory;
+  const isTeamInviteSignup = mode === 'REGISTER' && !!teamInvite;
   const [role, setRole] = useState<UserRole>(UserRole.TEAM_CAPTAIN);
   const [error, setError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
@@ -56,6 +60,8 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, onCancel, initialMode, invi
 
   // Address / CEP
   const [cep, setCep] = useState('');
+  // Coordenadas da arena (GPS no local ou pelo endereço)
+  const [arenaGeo, setArenaGeo] = useState<GeoResult | null>(null);
   const [street, setStreet] = useState('');
   const [number, setNumber] = useState('');
   const [neighborhood, setNeighborhood] = useState('');
@@ -64,7 +70,8 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, onCancel, initialMode, invi
   const [isLoadingCEP, setIsLoadingCEP] = useState(false);
 
   // Captain Specific States
-  const [teamName, setTeamName] = useState('');
+  // Time da casa: o cadastro já nasce com o nome do time do convite
+  const [teamName, setTeamName] = useState(teamInvite?.kind === 'LOCAL' ? teamInvite.teamName || '' : '');
   const [teamCategories, setTeamCategories] = useState<string[]>(inviteCategory ? [inviteCategory] : []);
   const [teamGender, setTeamGender] = useState<Gender>('MASCULINO');
   const [teamSport, setTeamSport] = useState('Futebol');
@@ -155,10 +162,13 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, onCancel, initialMode, invi
         
         // Constrói o endereço completo para salvar no banco
         let fullAddress = '';
+        let geo: GeoResult | null = null;
         if (role === UserRole.FIELD_OWNER) {
             fullAddress = `${street}, ${number}`;
             if (neighborhood) fullAddress += ` - ${neighborhood}`;
             fullAddress += ` - ${city} - ${state}, ${cep}`;
+            // Salva a posição da arena no cadastro (antes a distância era adivinhada a cada busca)
+            geo = arenaGeo || await geocodeAddressParts({ street, number, neighborhood, city, state, cep });
         }
 
         const payload = {
@@ -181,6 +191,8 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, onCancel, initialMode, invi
             location: fullAddress,
             contactPhone: phone,
             imageUrl: arenaPhoto,
+            latitude: geo?.lat,
+            longitude: geo?.lng,
             pixKey: undefined,
             pixName: undefined,
             complement,
@@ -253,7 +265,14 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, onCancel, initialMode, invi
                   Conta de time para a categoria {inviteCategory}. Depois do cadastro você já entra no jogo do convite.
                 </div>
               )}
-              <div className={`grid grid-cols-2 gap-3 mb-6 ${isInviteSignup ? 'hidden' : ''}`}>
+              {isTeamInviteSignup && (
+                <div className="bg-grass-50 border border-grass-100 p-4 rounded-2xl text-[10px] font-bold text-grass-700 uppercase">
+                  {teamInvite!.kind === 'LOCAL'
+                    ? `Conta do responsável pelo time da casa ${teamInvite!.teamName || ''} (${teamInvite!.fieldName}). Depois do cadastro você confirma o convite.`
+                    : `Conta do seu time para ser mensalista na arena ${teamInvite!.fieldName}. Depois do cadastro você escolhe a categoria do horário.`}
+                </div>
+              )}
+              <div className={`grid grid-cols-2 gap-3 mb-6 ${isInviteSignup || isTeamInviteSignup ? 'hidden' : ''}`}>
                 <button type="button" onClick={() => setRole(UserRole.TEAM_CAPTAIN)} className={`p-4 rounded-[1.5rem] border-2 flex flex-col items-center gap-2 transition-all ${role === UserRole.TEAM_CAPTAIN ? 'border-pitch bg-pitch text-white' : 'border-gray-100 text-gray-300'}`}>
                    <Shield className="w-6 h-6" />
                    <span className="text-[10px] font-black uppercase">Sou Capitão</span>
@@ -292,7 +311,7 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, onCancel, initialMode, invi
                        <span className="text-[8px] font-black text-gray-400 uppercase mt-2">Logo do Time</span>
                     </div>
 
-                    <input className="w-full bg-transparent border-b-2 border-gray-100 p-2 font-black text-lg outline-none focus:border-pitch transition-colors mb-4" placeholder="Nome do Time" value={teamName} onChange={e => setTeamName(e.target.value)} required />
+                    <input className="w-full bg-transparent border-b-2 border-gray-100 p-2 font-black text-lg outline-none focus:border-pitch transition-colors mb-4" placeholder="Nome do Time" value={teamName} onChange={e => setTeamName(e.target.value)} readOnly={isTeamInviteSignup && teamInvite?.kind === 'LOCAL'} required />
                     
                     <div className="mb-4">
                         <p className="text-[9px] font-bold text-gray-400 uppercase mb-2">Esporte Praticado</p>
@@ -403,6 +422,12 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, onCancel, initialMode, invi
                             <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Bairro</label>
                             <input className="w-full bg-transparent font-bold text-pitch outline-none" value={neighborhood} onChange={e => setNeighborhood(e.target.value)} placeholder="Bairro" required />
                          </div>
+
+                         <ArenaLocation
+                           value={arenaGeo}
+                           onChange={setArenaGeo}
+                           onSearchAddress={() => geocodeAddressParts({ street, number, neighborhood, city, state, cep })}
+                         />
 
                          {/* GESTÃO DE QUADRAS */}
                          <div className="bg-white p-4 rounded-xl border space-y-3">

@@ -1,5 +1,5 @@
 import { supabase } from './supabaseClient';
-import { User, Field, MatchSlot, RegisteredTeam, PendingUpdate, UserRole, InAppNotification, SubscriptionPlan, TutorialVideo, MatchPaymentInfo, InvitePreview } from './types';
+import { User, Field, MatchSlot, RegisteredTeam, PendingUpdate, UserRole, InAppNotification, SubscriptionPlan, TutorialVideo, MatchPaymentInfo, InvitePreview, TeamInvitePreview } from './types';
 
 const SESSION_TOKEN_KEY = 'jf_session_token';
 const USER_COLUMNS = 'id, email, name, phone_number, role, subscription, subscription_expiry, teams, latitude, longitude, team_rating, team_rating_count, is_subscribed, subscription_id, created_at, cpf_cnpj';
@@ -103,6 +103,7 @@ const mapSlotFromDb = (s: any): MatchSlot => ({
   pixKey: s.pix_key,
   prizeDescription: s.prize_description,
   homeTeamUserId: s.home_team_user_id,
+  homeTeamId: s.home_team_id || undefined,
   opponentUserId: s.opponent_user_id,
   firstTeamPaid: !!s.first_team_paid,
   opponentPaid: !!s.opponent_paid,
@@ -110,6 +111,30 @@ const mapSlotFromDb = (s: any): MatchSlot => ({
   awayScore: s.away_score,
   resultSetAt: s.result_set_at,
   fieldDecisionReason: s.field_decision_reason,
+});
+
+const mapRegisteredTeam = (t: any): RegisteredTeam => ({
+  id: t.id,
+  kind: t.kind === 'LOCAL' ? 'LOCAL' : 'MENSALISTA',
+  name: t.name || '',
+  fieldId: t.field_id,
+  fixedDay: t.fixed_day != null ? String(t.fixed_day) : '',
+  fixedTime: t.fixed_time ? String(t.fixed_time).slice(0, 5) : '',
+  fixedDurationMinutes: t.fixed_duration_minutes,
+  categories: t.categories || [],
+  logoUrl: t.logo_url,
+  createdAt: t.created_at,
+  captainName: t.captain_name,
+  captainPhone: t.captain_phone,
+  captainUserId: t.captain_user_id,
+  email: t.email,
+  gender: t.gender,
+  sport: t.sport,
+  courtName: t.court_name,
+  status: t.status || 'pending',
+  rejectionReason: t.rejection_reason,
+  updatedAt: t.updated_at,
+  processedBy: t.processed_by,
 });
 
 const mapFieldFromDb = (f: any): Field => ({
@@ -155,7 +180,7 @@ const mapUserFromDb = (u: any): User => ({
   cpfCnpj: u.cpf_cnpj || undefined,
 });
 
-export type MatchAction = 'book' | 'apply' | 'team_decision' | 'payment_status' | 'field_decision' | 'cancel' | 'set_result' | 'rate' | 'my_ratings';
+export type MatchAction = 'book' | 'apply' | 'assign_home' | 'team_decision' | 'payment_status' | 'field_decision' | 'cancel' | 'set_result' | 'rate' | 'my_ratings';
 
 export const api = {
   login: async (email: string, password: string): Promise<User> => {
@@ -223,6 +248,8 @@ export const api = {
         name: fieldData.name,
         location: fieldData.location,
         hourly_rate: fieldData.hourlyRate || 0,
+        latitude: Number.isFinite(fieldData.latitude) ? fieldData.latitude : null,
+        longitude: Number.isFinite(fieldData.longitude) ? fieldData.longitude : null,
         contact_phone: fieldData.contactPhone,
         image_url: fieldData.imageUrl || 'https://images.unsplash.com/photo-1529900748604-07564a03e7a6?auto=format&fit=crop&q=80&w=1000',
         complement: fieldData.complement || null,
@@ -487,6 +514,7 @@ export const api = {
       court_name: s.courtName,
       sport: s.sport,
       home_team_type: s.homeTeamType || 'OUTSIDE',
+      home_team_id: s.homeTeamId || null,
       receipt_url: s.receiptUrl || null,
       receipt_uploaded_at: s.receiptUploadedAt || null,
       pix_key: s.pixKey || null
@@ -514,6 +542,7 @@ export const api = {
     if (data.localTeamGender !== undefined) payload.local_team_gender = data.localTeamGender;
     if (data.localTeamLogoUrl !== undefined) payload.local_team_logo_url = data.localTeamLogoUrl;
     if (data.homeTeamType !== undefined) payload.home_team_type = data.homeTeamType;
+    if (data.homeTeamId !== undefined) payload.home_team_id = data.homeTeamId || null;
     if (data.price !== undefined) payload.price = data.price;
     if (data.courtName !== undefined) payload.court_name = data.courtName;
     if (data.sport !== undefined) payload.sport = data.sport;
@@ -545,6 +574,18 @@ export const api = {
   createInvite: (slotId: string) => callServer<{ token: string; url: string; message: string }>('/api/invites', { slotId }),
 
   getInvite: (token: string) => callServer<InvitePreview>(`/api/invites?token=${encodeURIComponent(token)}`, undefined, 'GET'),
+
+  /** Link de convite de um time do campo (mensalista ou time da casa). Só o dono do campo. */
+  createTeamInvite: (teamId: string) => callServer<{ token: string; url: string; message: string }>('/api/teams', { action: 'invite', teamId }),
+
+  getTeamInvite: (token: string) => callServer<TeamInvitePreview>(`/api/teams?token=${encodeURIComponent(token)}`, undefined, 'GET'),
+
+  /** Aceita o convite. Mensalista: { teamName, category }. Time da casa: { categories }. */
+  claimTeamInvite: (token: string, params: { teamName?: string; category?: string; categories?: string[] }) =>
+    callServer<{ message: string; kind: string; teamName: string; category?: string }>('/api/teams', { action: 'claim', token, ...params }),
+
+  /** Dono do campo tira o responsável de um time (para convidar outra pessoa). */
+  releaseTeam: (teamId: string) => callServer<{ message: string }>('/api/teams', { action: 'release', teamId }),
 
   payouts: (action: 'status' | 'set_wallet' | 'create_account', fieldId: string, params: Record<string, unknown> = {}) =>
     callServer<{ payoutStatus: string; hasWallet: boolean; walletIdEnd?: string | null; platformFeePercent?: number; message?: string }>('/api/payouts', { action, fieldId, ...params }),
@@ -589,60 +630,29 @@ export const api = {
 
   getRegisteredTeams: async (fieldId: string): Promise<RegisteredTeam[]> => {
     const { data } = await supabase.from('registered_team').select('*').eq('field_id', fieldId);
-    return (data || []).map(t => ({
-      id: t.id,
-      name: t.name,
-      fieldId: t.field_id,
-      fixedDay: t.fixed_day,
-      fixedTime: t.fixed_time,
-      fixedDurationMinutes: t.fixed_duration_minutes,
-      categories: t.categories,
-      logoUrl: t.logo_url,
-      createdAt: t.created_at,
-      captainName: t.captain_name,
-      captainPhone: t.captain_phone,
-      captainUserId: t.captain_user_id,
-      email: t.email,
-      gender: t.gender,
-      sport: t.sport,
-      courtName: t.court_name,
-      status: t.status || 'pending',
-      rejectionReason: t.rejection_reason
-    }));
+    return (data || []).map(mapRegisteredTeam);
+  },
+
+  /** Times do campo (mensalista/time da casa) cujo responsável é o usuário. */
+  getMyHomeTeams: async (userId: string): Promise<RegisteredTeam[]> => {
+    const { data } = await supabase.from('registered_team').select('*').eq('captain_user_id', userId).in('status', ['approved', 'active']);
+    return (data || []).map(mapRegisteredTeam);
   },
 
   getRegisteredTeamsForCaptain: async (phone: string): Promise<RegisteredTeam[]> => {
     const { data } = await supabase.from('registered_team').select('*').eq('captain_phone', phone);
-    return (data || []).map(t => ({
-      id: t.id,
-      name: t.name,
-      fieldId: t.field_id,
-      fixedDay: t.fixed_day,
-      fixedTime: t.fixed_time,
-      fixedDurationMinutes: t.fixed_duration_minutes,
-      categories: t.categories,
-      logoUrl: t.logo_url,
-      createdAt: t.created_at,
-      captainName: t.captain_name,
-      captainPhone: t.captain_phone,
-      captainUserId: t.captain_user_id,
-      email: t.email,
-      gender: t.gender,
-      sport: t.sport,
-      courtName: t.court_name,
-      status: t.status || 'pending',
-      rejectionReason: t.rejection_reason
-    }));
+    return (data || []).map(mapRegisteredTeam);
   },
 
   addRegisteredTeam: async (team: Partial<RegisteredTeam>): Promise<RegisteredTeam> => {
     const { data, error } = await supabase.from('registered_team').insert([{
       field_id: team.fieldId,
-      name: team.name,
-      fixed_day: parseInt(team.fixedDay || '0') || 0,
-      fixed_time: team.fixedTime,
+      kind: team.kind || 'MENSALISTA',
+      name: team.name || '',
+      fixed_day: team.fixedDay !== undefined && team.fixedDay !== null && team.fixedDay !== '' ? parseInt(team.fixedDay) || 0 : null,
+      fixed_time: team.fixedTime || null,
       fixed_duration_minutes: team.fixedDurationMinutes,
-      categories: team.categories,
+      categories: team.categories || [],
       logo_url: team.logoUrl,
       captain_name: team.captainName,
       captain_phone: team.captainPhone,
@@ -655,28 +665,7 @@ export const api = {
     }]).select().single();
 
     if (error) throw error;
-    
-    return {
-      id: data.id,
-      name: data.name,
-      fieldId: data.field_id,
-      fixedDay: data.fixed_day,
-      fixedTime: data.fixed_time,
-      fixedDurationMinutes: data.fixed_duration_minutes,
-      categories: data.categories,
-      logoUrl: data.logo_url,
-      createdAt: data.created_at,
-      captainName: data.captain_name,
-      captainPhone: data.captain_phone,
-      email: data.email,
-      gender: data.gender,
-      sport: data.sport,
-      courtName: data.court_name,
-      status: data.status,
-      rejectionReason: data.rejection_reason,
-      updatedAt: data.updated_at,
-      processedBy: data.processed_by
-    };
+    return mapRegisteredTeam(data);
   },
 
   updateRegisteredTeam: async (teamId: string, updates: Partial<RegisteredTeam>): Promise<void> => {
@@ -696,7 +685,26 @@ export const api = {
     if (updates.status !== undefined) payload.status = updates.status;
     if (updates.rejectionReason !== undefined) payload.rejection_reason = updates.rejectionReason;
     
-    await supabase.from('registered_team').update(payload).eq('id', teamId);
+    if (updates.kind !== undefined) payload.kind = updates.kind;
+    if (Object.keys(payload).length === 0) return;
+    const { error } = await supabase.from('registered_team').update(payload).eq('id', teamId);
+    if (error) throw error;
+  },
+
+  /**
+   * O dono do time da casa mudou as categorias no perfil: atualiza o cadastro do time
+   * no campo (o campo usa essas categorias ao criar horários com mandante).
+   */
+  syncHomeTeamCategories: async (user: User): Promise<void> => {
+    const { data } = await supabase.from('registered_team').select('id, name, categories').eq('captain_user_id', user.id).eq('kind', 'LOCAL');
+    for (const row of data || []) {
+      const team = (user.teams || []).find(t => (t.name || '').trim().toLowerCase() === (row.name || '').trim().toLowerCase());
+      if (!team) continue;
+      const cats = team.categories || [];
+      if (JSON.stringify(cats) !== JSON.stringify(row.categories || [])) {
+        await supabase.from('registered_team').update({ categories: cats }).eq('id', row.id);
+      }
+    }
   },
 
   deleteRegisteredTeam: async (id: string): Promise<void> => {

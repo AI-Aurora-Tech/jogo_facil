@@ -125,6 +125,8 @@ export interface MatchSlot {
   pixKey?: string;
   prizeDescription?: string;
   homeTeamUserId?: string;
+  /** Time da casa/mensalista cadastrado no campo que é o mandante deste horário. */
+  homeTeamId?: string;
   opponentUserId?: string;
   firstTeamPaid?: boolean;
   opponentPaid?: boolean;
@@ -168,8 +170,27 @@ export interface InvitePreview {
   field: { id: string; name: string; location: string; imageUrl?: string; ratingAvg: number; ratingCount: number };
 }
 
+/** Time do campo: mensalista (dia/horário fixos) ou time da casa. */
+export type HomeTeamKind = 'MENSALISTA' | 'LOCAL';
+
+/** Dados públicos do convite de time (mensalista ou time da casa). */
+export interface TeamInvitePreview {
+  token: string;
+  kind: HomeTeamKind;
+  open: boolean;
+  teamName: string;
+  fixedDay: number | null;
+  fixedTime: string | null;
+  durationMinutes: number;
+  courtName?: string | null;
+  sport: string;
+  gender?: string | null;
+  field: { id: string; name: string; location: string; imageUrl?: string };
+}
+
 export interface RegisteredTeam {
   id: string;
+  kind: HomeTeamKind;
   name: string;
   fieldId: string;
   fixedDay: string;

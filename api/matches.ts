@@ -13,6 +13,7 @@ import {
   firstTeamCategory,
   CLEAR_OPPONENT,
   CLEAR_FIRST_TEAM,
+  CLEAR_HOME_TEAM,
   type SlotRow,
   type FieldRow,
 } from './_lib/slots.js';
@@ -25,6 +26,7 @@ import {
   syncPendingPayments,
 } from './_lib/payments.js';
 import { findValidInvite, markInviteUsed } from './_lib/invites.js';
+import { loadHomeTeam } from './_lib/homeTeams.js';
 import {
   canRate,
   canSetResult,
@@ -56,13 +58,51 @@ const requireFuture = (slot: SlotRow) => {
 };
 
 // ---------------------------------------------------------------- reservar ---
-/** 1º time de fora reserva um horário livre (sem mensalista/time da casa). */
+const sameName = (a?: string | null, b?: string | null) => (a || '').trim().toLowerCase() === (b || '').trim().toLowerCase();
+
+/** Time da casa ou mensalista deste campo cujo responsável é o usuário (pelo nome do time). */
+const myHomeTeamAtField = async (userId: string, fieldId: string, teamName: string) => {
+  const { data, error } = await db()
+    .from('registered_team')
+    .select('id, kind, name, status')
+    .eq('field_id', fieldId)
+    .eq('captain_user_id', userId);
+  if (error) throw error;
+  return (data || []).find(t => sameName(t.name, teamName) && ['approved', 'active'].includes(t.status || 'approved')) || null;
+};
+
+/**
+ * Reserva um horário livre.
+ * - Time de fora: vira o "time 1" e a taxa é dividida 50/50 com o adversário.
+ * - Time da casa ou mensalista deste campo: assume o horário como MANDANTE e
+ *   o adversário paga 100% da taxa.
+ */
 const book = async ({ user, slot, field, body }: Ctx) => {
   assert(user.role === 'TEAM_CAPTAIN', 403, 'Apenas donos de time podem reservar horários.');
   assert(slot.status === 'available' && !hasHomeTeam(toRuleSlot(slot)), 409, 'Este horário não está mais livre.', 'STALE');
   requireFuture(slot);
   const team = findUserTeam(user, body.teamName, body.category);
   await assertNoCategoryConflict(user.id, team.name, body.category, slot);
+
+  const homeTeam = await myHomeTeamAtField(user.id, field.id, team.name);
+  if (homeTeam) {
+    const updated = await updateSlotIfStatus(slot.id, 'available', {
+      status: 'waiting_opponent',
+      is_booked: true,
+      has_local_team: true,
+      home_team_type: homeTeam.kind === 'LOCAL' ? 'LOCAL' : 'MENSALISTA',
+      home_team_id: homeTeam.id,
+      home_team_user_id: user.id,
+      local_team_name: team.name,
+      local_team_category: body.category,
+      local_team_phone: user.phone_number,
+      local_team_logo_url: team.logoUrl || null,
+      local_team_gender: team.gender || null,
+      allowed_opponent_categories: [body.category],
+    });
+    await notify(field.owner_id, 'Horário assumido pelo mandante ⚽', `${team.name} (${body.category}) assumiu ${dateBR(slot)} como mandante. Aguardando adversário.`, 'info');
+    return { slot: updated, message: 'Horário reservado como mandante! O adversário paga 100% da taxa. Agora envie o convite.' };
+  }
 
   const updated = await updateSlotIfStatus(slot.id, 'available', {
     status: 'waiting_opponent',
@@ -79,6 +119,65 @@ const book = async ({ user, slot, field, body }: Ctx) => {
 
   await notify(field.owner_id, 'Horário reservado ⚽', `${team.name} (${body.category}) reservou ${dateBR(slot)}. Aguardando adversário.`, 'info');
   return { slot: updated, message: 'Horário reservado! Agora envie o convite para um adversário.' };
+};
+
+// ------------------------------------------------ mandante pelo campo ---
+/**
+ * Dono do campo coloca um mandante (time da casa ou mensalista) num horário que
+ * criou livre. A partir daí o adversário paga 100% da taxa.
+ * body: { homeTeamId } (time cadastrado no campo) ou { ownerTeamName } (time do perfil do dono do campo),
+ *       category, allowedCategories?, allowedGenders?
+ */
+const assignHome = async (c: Ctx) => {
+  const { user, slot, field, body } = c;
+  assert(isFieldOwner(c), 403, 'Somente o dono do campo pode definir o mandante.');
+  assert(slot.status === 'available' && !slot.booked_by_user_id, 409, 'Este horário já tem time. Cancele a reserva antes de definir o mandante.', 'STALE');
+  requireFuture(slot);
+  const category = String(body.category || '').trim().slice(0, 30);
+  assert(category, 400, 'Selecione a categoria do mandante.');
+
+  let home: { kind: 'LOCAL' | 'MENSALISTA'; id: string | null; name: string; userId: string | null; phone: string | null; logo: string | null; gender: string | null };
+  if (body.homeTeamId) {
+    const team = await loadHomeTeam(String(body.homeTeamId));
+    assert(team.field_id === field.id, 400, 'Este time não é deste campo.');
+    home = {
+      kind: team.kind,
+      id: team.id,
+      name: team.name || 'Time da casa',
+      userId: team.captain_user_id || (team.kind === 'LOCAL' ? field.owner_id : null),
+      phone: team.captain_phone,
+      logo: team.logo_url,
+      gender: team.gender,
+    };
+  } else {
+    const ownerTeam = (user.teams || []).find(t => sameName(t.name, body.ownerTeamName));
+    assert(ownerTeam, 400, 'Selecione o time mandante.');
+    home = { kind: 'LOCAL', id: null, name: ownerTeam.name, userId: field.owner_id, phone: field.contact_phone || null, logo: ownerTeam.logoUrl || null, gender: ownerTeam.gender || null };
+  }
+
+  const list = (v: any, max: number) => (Array.isArray(v) ? v.map((x: any) => String(x).slice(0, 30)).filter(Boolean).slice(0, max) : []);
+  const allowedCategories = list(body.allowedCategories, 10);
+  const allowedGenders = list(body.allowedGenders, 3);
+
+  const updated = await updateSlotIfStatus(slot.id, 'available', {
+    status: 'waiting_opponent',
+    is_booked: true,
+    has_local_team: true,
+    home_team_type: home.kind,
+    home_team_id: home.id,
+    home_team_user_id: home.userId,
+    local_team_name: home.name,
+    local_team_category: category,
+    local_team_phone: home.phone,
+    local_team_logo_url: home.logo,
+    local_team_gender: home.gender,
+    allowed_opponent_categories: allowedCategories.length > 0 ? allowedCategories : [category],
+    allowed_opponent_genders: allowedGenders.length > 0 ? allowedGenders : home.gender ? [home.gender] : [],
+  });
+  if (home.userId && home.userId !== field.owner_id) {
+    await notify(home.userId, 'Novo jogo na sua agenda 📅', `A arena ${field.name} colocou o ${home.name} (${category}) como mandante em ${dateBR(slot)}. Envie o convite para um adversário!`, 'info');
+  }
+  return { slot: updated, message: 'Mandante definido! O adversário paga 100% da taxa.' };
 };
 
 // ------------------------------------------------------- se candidatar ---
@@ -252,6 +351,14 @@ const cancel = async (c: Ctx) => {
     return { slot: updated, message: 'Reserva cancelada.' };
   }
 
+  // Mandante (time da casa/mensalista) libera o horário enquanto ainda não tem adversário
+  if (hasHomeTeam(toRuleSlot(slot)) && slot.home_team_user_id === user.id && user.id !== field.owner_id) {
+    assert(slot.status === 'waiting_opponent' && !slot.opponent_user_id, 400, 'Já tem adversário inscrito. Recuse o adversário ou fale com o campo para cancelar.');
+    const updated = await updateSlotIfStatus(slot.id, 'waiting_opponent', { ...CLEAR_OPPONENT, ...CLEAR_FIRST_TEAM, ...CLEAR_HOME_TEAM, status: 'available' });
+    await notify(field.owner_id, 'Mandante liberou o horário', `${firstTeamName(slot)} não vai jogar em ${dateBR(slot)}. O horário voltou a ficar livre.`, 'info');
+    return { slot: updated, message: 'Horário liberado.' };
+  }
+
   throw new HttpError(403, 'Você não participa desta partida.');
 };
 
@@ -325,6 +432,7 @@ const quote = async ({ slot }: Ctx) => ({ opponentShare: opponentShare(toRuleSlo
 const ACTIONS: Record<string, (c: Ctx) => Promise<any>> = {
   book,
   apply,
+  assign_home: assignHome,
   team_decision: teamDecision,
   pay,
   payment_status: paymentStatus,
