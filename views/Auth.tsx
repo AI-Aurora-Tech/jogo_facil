@@ -18,6 +18,13 @@ interface AuthProps {
 
 export type AuthMode = 'LOGIN' | 'REGISTER' | 'FORGOT_PASSWORD';
 
+/**
+ * Recuperação de senha por código no e-mail (Resend). Desligada por enquanto:
+ * "Esqueci a senha" leva direto para o WhatsApp do suporte.
+ * Para religar, troque para true (e configure RESEND_API_KEY e EMAIL_FROM na Vercel).
+ */
+const EMAIL_PASSWORD_RESET_ENABLED = false;
+
 export const Auth: React.FC<AuthProps> = ({ onLogin, onCancel, initialMode, inviteCategory }) => {
   const [mode, setMode] = useState<AuthMode>(initialMode || 'LOGIN');
   const isInviteSignup = mode === 'REGISTER' && !!inviteCategory;
@@ -28,8 +35,8 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, onCancel, initialMode, invi
   const [showPassword, setShowPassword] = useState(false);
   // Recuperação de senha: 1) pede o código por e-mail  2) informa código + nova senha
   const [resetCodeSent, setResetCodeSent] = useState(false);
-  // Sem envio de e-mail configurado: recuperação de senha pelo WhatsApp do suporte
-  const [resetViaSupport, setResetViaSupport] = useState(false);
+  // Recuperação de senha pelo WhatsApp do suporte (padrão enquanto o e-mail estiver desligado)
+  const [resetViaSupport, setResetViaSupport] = useState(!EMAIL_PASSWORD_RESET_ENABLED);
   const [resetCode, setResetCode] = useState('');
 
   // Common Form States
@@ -127,6 +134,11 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, onCancel, initialMode, invi
     }
 
     if (mode === 'FORGOT_PASSWORD') {
+      // Recuperação pelo WhatsApp: Enter no campo de e-mail abre o WhatsApp em vez de pedir código
+      if (resetViaSupport) {
+        openPasswordHelpWhatsApp(email);
+        return;
+      }
       if (!email) {
         setError('Informe o e-mail cadastrado.');
         return;
@@ -443,6 +455,7 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, onCancel, initialMode, invi
               <div className="bg-blue-50 p-4 rounded-2xl border border-blue-100 text-blue-700 text-[10px] font-bold">
                 Para criar uma nova senha, fale com o nosso suporte pelo WhatsApp. A gente redefine para você rapidinho.
               </div>
+              <input className="w-full p-5 bg-gray-50 rounded-2xl border font-bold outline-none" placeholder="Seu e-mail cadastrado" type="email" value={email} onChange={e => setEmail(e.target.value)} />
               <Button type="button" onClick={() => openPasswordHelpWhatsApp(email)} className="w-full py-5 rounded-[2rem] font-black uppercase text-xs">
                 Pedir nova senha pelo WhatsApp
               </Button>

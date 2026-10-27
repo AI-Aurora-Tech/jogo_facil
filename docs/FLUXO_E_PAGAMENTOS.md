@@ -144,6 +144,10 @@ App (React/Vite)  ──>  Supabase (leitura e cadastros simples)
 
 ## 11. E-mail do código de senha (Resend)
 
+**Hoje está desligado:** "Esqueci a senha" leva direto para o WhatsApp do suporte (`SUPPORT_WHATSAPP`),
+e o admin geral redefine a senha pelo painel. Para religar o código por e-mail, troque
+`EMAIL_PASSWORD_RESET_ENABLED` para `true` em `views/Auth.tsx` e siga os passos abaixo.
+
 Usado **só** para o código de recuperação de senha.
 
 1. Crie a chave em https://resend.com e coloque em `RESEND_API_KEY` na Vercel. **Nunca** coloque a chave no código.
