@@ -4,16 +4,11 @@ Este documento explica como o app funciona depois da reformulação e o passo a 
 
 ## 1. Quem paga o quê
 
-| Conta | Cobrança |
-|---|---|
-| Dono de campo | Grátis |
-| Dono de time com 1 categoria | Grátis |
-| Dono de time com 2+ categorias | R$ 19,99 × nº de categorias por mês (2 = R$ 39,98; 3 = R$ 59,97) |
+Criar conta e usar o app é **grátis** para todos: não existe mais mensalidade para donos de time nem de campo.
+A única cobrança é a **taxa do jogo** que o dono do campo define em cada horário (abaixo).
 
-- "Categoria" = cada par time + categoria (ex.: Alfa Sub-11 e Alfa Sub-12 = 2).
-- O valor muda sozinho quando o time adiciona ou remove categorias (a assinatura no Asaas é atualizada).
-- Se voltar para 1 categoria, a assinatura é cancelada.
-- Regra configurável em `shared/pricing.ts` (`CHARGE_ALL_CATEGORIES_WHEN_PAYING`): hoje, quem passa de 1 categoria paga todas. Se preferir que a 1ª continue grátis (2 categorias = R$ 19,99), troque para `false`.
+Assinaturas antigas da mensalidade (Asaas) são canceladas automaticamente pelo webhook quando chega
+o próximo evento delas, mas o ideal é cancelá-las no painel do Asaas (Cobranças > Assinaturas).
 
 ## 2. Taxa do jogo (paga pelos times, vai para o dono do campo)
 
@@ -86,7 +81,6 @@ O convite expira no horário do jogo.
 
 - **Split nativo** por `walletId`: a cobrança já nasce dividida e o dinheiro do campo cai direto na conta dele, sem a plataforma precisar repassar.
 - **Subcontas por API**: o dono do campo cria a conta de recebimento dentro do app (ou informa o Wallet ID se já tiver Asaas).
-- **Assinatura com valor ajustável**: a mensalidade por categoria muda de valor sem cancelar/recriar.
 - No Mercado Pago, o split exige que cada dono de campo conecte a própria conta via OAuth (modelo marketplace), o que dá mais trabalho para você e para ele.
 
 ## 8. Arquitetura
@@ -102,12 +96,11 @@ App (React/Vite)  ──>  Supabase (leitura e cadastros simples)
 | Arquivo | O que faz |
 |---|---|
 | `shared/matchRules.ts` | Regras do fluxo (quem aprova, quanto cada um paga, quando libera placar). Usado pela tela e pelo servidor. |
-| `shared/pricing.ts` | Cálculo da mensalidade por categoria. |
+| `shared/money.ts` | Formatação de valores em reais. |
 | `api/matches.ts` | Todas as etapas da partida: reservar, se inscrever, aprovar, pagar, aprovar pelo campo, cancelar, placar, avaliação. |
 | `api/invites.ts` | Cria e abre convites. |
-| `api/billing.ts` | Mensalidade (assinatura Asaas). |
 | `api/payouts.ts` | Conta de recebimento do dono do campo. |
-| `api/webhooks/asaas.ts` | Confirmação de pagamentos (idempotente). |
+| `api/webhooks/asaas.ts` | Confirmação de pagamentos (idempotente). Cancela assinaturas antigas da mensalidade. |
 | `api/auth/login.ts` | Login que devolve a sessão usada nas ações do servidor. |
 | `api/auth/forgot.ts` | "Esqueci a senha": envia por e-mail um código de 6 dígitos (uso único, 15 min, 5 tentativas). |
 | `api/auth/reset.ts` | Confere o código e grava a nova senha. |
@@ -128,7 +121,7 @@ App (React/Vite)  ──>  Supabase (leitura e cadastros simples)
    - `SESSION_SECRET` (texto aleatório longo)
    - `ASAAS_API_KEY`, `ASAAS_ENV` (`sandbox` ou `production`), `ASAAS_WEBHOOK_TOKEN`
    - `PLATFORM_FEE_PERCENT` (opcional), `APP_URL` (ex.: `https://jogofacil.app`)
-   - `RESEND_API_KEY`, `EMAIL_FROM` (envio do código de recuperação de senha; crie a conta em https://resend.com e verifique o domínio do remetente)
+   - `RESEND_API_KEY` e `EMAIL_FROM` (código de recuperação de senha, ver item 11)
 4. **Deploy** e teste o fluxo completo no sandbox.
 5. **Depois que a versão nova estiver no ar**, rode `supabase/migrations/20261022_02_endurecimento_colunas.sql`.
    Ele impede que o navegador altere status, pagamento, placar e assinatura (só o servidor muda).
@@ -145,7 +138,21 @@ App (React/Vite)  ──>  Supabase (leitura e cadastros simples)
 ## 10. Mudanças de comportamento importantes
 
 - Todos precisam **entrar de novo** uma vez (a sessão agora é validada no servidor).
-- O teste grátis de 60 dias do capitão foi substituído pela regra de categorias.
-- Quem assinava o plano antigo do Mercado Pago continua liberado até mudar as categorias; depois disso passa para a assinatura do Asaas. Cancele as assinaturas antigas no painel do Mercado Pago.
+- A mensalidade dos donos de time (por categoria) foi removida: o app é grátis. Cancele as assinaturas antigas no painel do Asaas e do Mercado Pago.
 - O envio de comprovante PIX com verificação por IA foi substituído pelo PIX automático. Jogos antigos que estavam "aguardando validação" ainda podem ser aprovados pelo campo.
 - Antes, mensalista dividia a taxa 50/50 — agora o adversário paga 100%, como pedido.
+
+## 11. E-mail do código de senha (Resend)
+
+**Hoje está desligado:** "Esqueci a senha" leva direto para o WhatsApp do suporte (`SUPPORT_WHATSAPP`),
+e o admin geral redefine a senha pelo painel. Para religar o código por e-mail, troque
+`EMAIL_PASSWORD_RESET_ENABLED` para `true` em `views/Auth.tsx` e siga os passos abaixo.
+
+Usado **só** para o código de recuperação de senha.
+
+1. Crie a chave em https://resend.com e coloque em `RESEND_API_KEY` na Vercel. **Nunca** coloque a chave no código.
+2. Verifique um domínio seu em Resend > Domains (registros DKIM, SPF e DMARC no seu provedor de DNS).
+3. Defina `EMAIL_FROM` com um endereço desse domínio, por exemplo `Jogo Fácil <nao-responda@SEU-DOMINIO>`.
+
+Sem `EMAIL_FROM`, o padrão é `Jogo Fácil <onboarding@resend.dev>`, que **só entrega para o e-mail dono da
+conta Resend**. Sem `RESEND_API_KEY`, o "Esqueci a senha" leva para o WhatsApp de suporte.

@@ -7,7 +7,7 @@ import { api } from '../api';
 import { calculateDistance, getCurrentPosition, formatDistance, LatLng, geocodeAddress } from '../utils';
 import { MatchActions, firstTeamNameOf } from '../components/MatchActions';
 import { hasHomeTeam, normalizeMatchKind, opponentApproverId, shareFor, MATCH_KIND_LABEL, STATUS_LABEL } from '../shared/matchRules';
-import { formatBRL } from '../shared/pricing';
+import { formatBRL } from '../shared/money';
 
 interface TeamDashboardProps {
   categories: string[];

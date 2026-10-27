@@ -44,9 +44,6 @@ export interface User {
   createdAt: string; // ISO 8601 date string
   isSubscribed?: boolean;
   subscriptionId?: string;
-  /** FREE | ACTIVE | PENDING | OVERDUE | CANCELED (mensalidade por categoria) */
-  billingStatus?: string;
-  billingValue?: number;
   cpfCnpj?: string;
 }
 

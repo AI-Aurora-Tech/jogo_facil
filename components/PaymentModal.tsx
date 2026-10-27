@@ -3,7 +3,7 @@ import { X, Copy, Check, ExternalLink, Loader2, RefreshCw, QrCode } from 'lucide
 import { Button } from './Button';
 import { MatchSlot, MatchPaymentInfo } from '../types';
 import { api, ServerError } from '../api';
-import { formatBRL } from '../shared/pricing';
+import { formatBRL } from '../shared/money';
 
 interface PaymentModalProps {
   slot: MatchSlot;

@@ -1,17 +1,15 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { UserRole, Field, MatchSlot, User, InAppNotification, SubscriptionPlan } from './types';
+import { UserRole, Field, MatchSlot, User, InAppNotification } from './types';
 import { Landing } from './views/Landing';
 import { Auth, AuthMode } from './views/Auth';
 import { InviteLanding } from './views/InviteLanding';
 import { FieldDashboard } from './views/FieldDashboard';
 import { TeamDashboard } from './views/TeamDashboard';
-import { Subscription } from './views/Subscription';
 import { EditProfileModal, PasswordChange } from './components/EditProfileModal';
 import { HelpModal } from './views/HelpModal';
 import { MensalistaSubscriptionModal } from './components/MensalistaSubscriptionModal';
 import { api, sessionToken, setActAsUser } from './api';
-import { monthlyPriceForTeams, countBillableCategories, formatBRL } from './shared/pricing';
-import { RefreshCw, Settings, Building2, Shield, Search, Loader2, Bell, X, Info, History, KeyRound, Eye, LogOut, Smartphone, Download, Share, Trophy, Crown, Users, UserPlus, HelpCircle } from 'lucide-react';
+import { RefreshCw, Settings, Building2, Shield, Search, Loader2, Bell, X, Info, History, KeyRound, Eye, LogOut, Smartphone, Download, Share, Trophy, Users, UserPlus, HelpCircle } from 'lucide-react';
 import { supabase } from './supabaseClient';
 
 const App: React.FC = () => {
@@ -27,8 +25,6 @@ const App: React.FC = () => {
   const [showMensalistaSubModal, setShowMensalistaSubModal] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const [fieldDashForceTab, setFieldDashForceTab] = useState<'AGENDA' | 'SOLICITACOES' | 'MENSALISTAS' | 'HISTORICO' | undefined>(undefined);
-  const [showNeedsSubscription, setShowNeedsSubscription] = useState(false);
-  const [showSubscriptionPage, setShowSubscriptionPage] = useState(false);
   // Link de convite (?convite=TOKEN): guardado até a pessoa entrar/criar conta
   const [inviteToken, setInviteToken] = useState<string | null>(() => {
     try {
@@ -64,18 +60,6 @@ const App: React.FC = () => {
   
   const [isIOS] = useState(() => /iphone|ipad|ipod/.test(window.navigator.userAgent.toLowerCase()));
   const [isStandalone, setIsStandalone] = useState(false);
-
-  // Bloqueio da mensalidade: dono de time com mais de 1 categoria precisa estar com a assinatura ativa.
-  // Assinantes do plano antigo (Mercado Pago) continuam liberados até migrarem.
-  useEffect(() => {
-    if (!user || impersonatingUser || user.role !== UserRole.TEAM_CAPTAIN) {
-      setShowNeedsSubscription(false);
-      return;
-    }
-    const price = monthlyPriceForTeams(user.teams);
-    const legacySubscriber = !!user.isSubscribed && (!user.billingStatus || user.billingStatus === 'FREE');
-    setShowNeedsSubscription(price > 0 && user.billingStatus !== 'ACTIVE' && !legacySubscriber);
-  }, [user, impersonatingUser]);
 
   // Admin geral acessando outra conta: as ações no servidor vão em nome dela
   useEffect(() => {
@@ -289,7 +273,6 @@ const App: React.FC = () => {
             setAuthOptions({ mode: 'LOGIN' });
           } else if (u && u.id) {
             setUser(u);
-            // A view inicial depende da assinatura, mas deixamos o useEffect Gatekeeper decidir
             setView('APP'); 
             if (u.role === UserRole.SUPER_ADMIN) setActiveTab('SUPER');
             else if (u.role === UserRole.FIELD_OWNER) setActiveTab('ADMIN');
@@ -354,16 +337,7 @@ const App: React.FC = () => {
         }
       }
 
-      let resUser = await api.updateUser(updatedUser);
-      if (resUser.role === UserRole.TEAM_CAPTAIN) {
-        // Ajusta a mensalidade ao novo número de categorias
-        try {
-          await api.billing('sync');
-          resUser = await api.getUserById(resUser.id);
-        } catch (e) {
-          console.warn('Não foi possível sincronizar a mensalidade', e);
-        }
-      }
+      const resUser = await api.updateUser(updatedUser);
       if (impersonatingUser) {
         setImpersonatingUser(resUser);
       } else {
@@ -472,36 +446,7 @@ const App: React.FC = () => {
     );
   }
 
-  if (user && (showNeedsSubscription || showSubscriptionPage) && !impersonatingUser) {
-    return (
-      <>
-        <Subscription
-          user={user}
-          blocking={showNeedsSubscription}
-          onLogout={handleLogout}
-          onBack={() => setShowSubscriptionPage(false)}
-          onEditCategories={() => setShowProfileModal(true)}
-          onUserUpdated={saveSessionUser}
-        />
-        {showProfileModal && (
-          <EditProfileModal
-            categories={categories}
-            user={user}
-            field={undefined}
-            onUpdate={handleUpdateProfile}
-            onClose={() => setShowProfileModal(false)}
-          />
-        )}
-      </>
-    );
-  }
-
   const currentUserContext = impersonatingUser || user;
-  // Selo PRO: dono de time com mensalidade ativa (ou assinante do plano antigo)
-  const isPro = !!currentUserContext && currentUserContext.role === UserRole.TEAM_CAPTAIN && (
-    currentUserContext.billingStatus === 'ACTIVE' ||
-    (!!currentUserContext.isSubscribed && (!currentUserContext.billingStatus || currentUserContext.billingStatus === 'FREE'))
-  );
   const unreadNotifs = notifications.filter(n => !n.read).length;
 
   return (
@@ -549,11 +494,6 @@ const App: React.FC = () => {
                 {user && (
                     <div className="flex items-center gap-2 mt-1">
                         <span className="text-[8px] font-bold text-gray-400 uppercase tracking-widest">Olá, {currentUserContext?.name.split(' ')[0]}</span>
-                        {isPro && (
-                           <span className="bg-yellow-400 text-pitch px-2 py-0.5 rounded-full text-[8px] font-black uppercase flex items-center gap-1">
-                              <Crown className="w-2 h-2" /> PRO
-                           </span>
-                        )}
                     </div>
                 )}
             </div>
@@ -675,9 +615,6 @@ const App: React.FC = () => {
                         <p className="text-[9px] font-bold text-gray-400 uppercase truncate">{u.email}</p>
                         <div className="flex items-center gap-2 mt-1">
                            <span className="text-[8px] font-black bg-gray-100 px-2 py-0.5 rounded-md uppercase">{u.role === UserRole.FIELD_OWNER ? 'Dono de Campo' : 'Capitão'}</span>
-                           <span className={`text-[8px] font-black px-2 py-0.5 rounded-md uppercase ${u.subscription !== SubscriptionPlan.FREE && u.subscription !== SubscriptionPlan.NONE ? 'bg-yellow-100 text-yellow-700' : 'bg-gray-100 text-gray-400'}`}>
-                             {u.subscription === SubscriptionPlan.NONE ? 'Sem Plano' : u.subscription}
-                           </span>
                         </div>
                       </div>
                     </div>
@@ -785,18 +722,7 @@ const App: React.FC = () => {
                 <h2 className="text-2xl font-black text-pitch italic uppercase tracking-tighter leading-none">{currentUserContext.name}</h2>
                 <div className="flex items-center gap-2 mt-2">
                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{currentUserContext.role}</p>
-                   {isPro && (
-                      <span className="bg-yellow-400 text-pitch px-2 py-0.5 rounded-full text-[8px] font-black uppercase flex items-center gap-1">
-                          <Crown className="w-2 h-2" /> PRO
-                      </span>
-                   )}
                 </div>
-                {currentUserContext.role === UserRole.TEAM_CAPTAIN && (
-                  <div className="mt-4 text-xs font-bold text-gray-500 text-center">
-                    {countBillableCategories(currentUserContext.teams)} categoria(s) •{' '}
-                    {monthlyPriceForTeams(currentUserContext.teams) > 0 ? `${formatBRL(monthlyPriceForTeams(currentUserContext.teams))}/mês` : 'Plano grátis'}
-                  </div>
-                )}
                 
                 <div className="w-full mt-10 space-y-3">
                   {!isStandalone && (deferredPrompt || isIOS) && (
@@ -805,15 +731,6 @@ const App: React.FC = () => {
                       className="w-full py-5 bg-grass-500 text-pitch rounded-3xl font-black flex items-center justify-center gap-3 uppercase text-xs hover:bg-grass-400 transition-colors shadow-lg shadow-grass-500/20"
                     >
                       <Download className="w-5 h-5" /> {isIOS ? 'Instalar no iPhone' : 'Instalar Aplicativo'}
-                    </button>
-                  )}
-                  
-                  {currentUserContext.role === UserRole.TEAM_CAPTAIN && !impersonatingUser && (
-                    <button
-                      onClick={() => setShowSubscriptionPage(true)}
-                      className="w-full py-5 bg-yellow-400 text-pitch rounded-3xl font-black flex items-center justify-center gap-3 uppercase text-xs shadow-xl active:scale-95 transition-transform"
-                    >
-                      <Crown className="w-5 h-5" /> Minha mensalidade
                     </button>
                   )}
                   

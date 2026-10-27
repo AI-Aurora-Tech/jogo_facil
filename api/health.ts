@@ -15,6 +15,7 @@ export const GET = async (): Promise<Response> => {
     ASAAS_WEBHOOK_TOKEN: !!env.asaasWebhookToken(),
     ASAAS_ENV: env.asaasEnv(),
     APP_URL: !!env.appUrl(),
+    RESEND_API_KEY: !!env.resendApiKey(),
   };
 
   const checks: Record<string, string> = {};
@@ -26,6 +27,8 @@ export const GET = async (): Promise<Response> => {
       checks.migracao_pagamentos = colErr ? `FALTA rodar 20261022_01_fluxo_partidas_pagamentos.sql (${colErr.message})` : 'OK';
       const { error: tblErr } = await db().from('match_payment').select('id').limit(1);
       checks.tabelas_novas = tblErr ? `ERRO: ${tblErr.message}` : 'OK';
+      const { error: resetErr } = await db().from('password_reset').select('id').limit(1);
+      checks.migracao_senha = resetErr ? `FALTA rodar 20261023_01_senha_pelo_servidor.sql (${resetErr.message})` : 'OK';
     } catch (e: any) {
       checks.banco = `ERRO: ${e?.message || e}`;
     }

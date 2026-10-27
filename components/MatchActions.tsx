@@ -16,7 +16,7 @@ import {
   resultOpensAt,
   STATUS_LABEL,
 } from '../shared/matchRules';
-import { formatBRL } from '../shared/pricing';
+import { formatBRL } from '../shared/money';
 
 interface MatchActionsProps {
   slot: MatchSlot;

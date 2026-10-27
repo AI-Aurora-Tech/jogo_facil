@@ -9,7 +9,7 @@ import { MatchActions } from '../components/MatchActions';
 import { PayoutModal } from '../components/PayoutModal';
 import { shareInvite } from '../components/shareInvite';
 import { computeShares, effectivePrice, firstTeamUserId, hasHomeTeam, normalizeMatchKind, opponentApproverId, MATCH_KIND_LABEL } from '../shared/matchRules';
-import { formatBRL } from '../shared/pricing';
+import { formatBRL } from '../shared/money';
 
 interface FieldDashboardProps {
   categories: string[];

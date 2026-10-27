@@ -3,7 +3,7 @@ import { MapPin, Calendar, Trophy, Loader2, Swords, Star, X } from 'lucide-react
 import { Button } from '../components/Button';
 import { InvitePreview, User } from '../types';
 import { api } from '../api';
-import { formatBRL, monthlyPriceForTeams } from '../shared/pricing';
+import { formatBRL } from '../shared/money';
 
 interface InviteLandingProps {
   token: string;
@@ -59,12 +59,10 @@ export const InviteLanding: React.FC<InviteLandingProps> = ({ token, currentUser
     if (!currentUser || !invite || !invite.category || teams.length === 0) return;
     const team = teams[teamIdx] || teams[0];
     const newTeams = teams.map(t => (t.name === team.name ? { ...t, categories: [...t.categories, invite.category!] } : t));
-    const newPrice = monthlyPriceForTeams(newTeams);
-    if (newPrice > 0 && !confirm(`Adicionar ${invite.category} ao ${team.name}? Sua mensalidade passará a ser ${formatBRL(newPrice)}/mês.`)) return;
+    if (!confirm(`Adicionar ${invite.category} ao ${team.name}?`)) return;
     setSending(true);
     try {
       const updated = await api.updateUser({ ...currentUser, teams: newTeams, password: undefined });
-      await api.billing('sync').catch(() => null);
       onUserUpdated(updated);
       await apply(team.name, invite.category);
     } catch (e: any) {
@@ -130,7 +128,7 @@ export const InviteLanding: React.FC<InviteLandingProps> = ({ token, currentUser
                   <Button onClick={() => onAuth('REGISTER', invite.category)} className="w-full py-4 rounded-2xl font-black uppercase text-xs">
                     <Swords className="w-4 h-4" /> Criar conta grátis e jogar
                   </Button>
-                  <p className="text-[9px] text-center text-gray-400 font-bold uppercase">Conta com 1 categoria não paga mensalidade</p>
+                  <p className="text-[9px] text-center text-gray-400 font-bold uppercase">Criar conta é grátis, sem mensalidade</p>
                   <button onClick={() => onAuth('LOGIN')} className="w-full text-[10px] font-black uppercase text-pitch">Já tenho conta</button>
                 </div>
               )}

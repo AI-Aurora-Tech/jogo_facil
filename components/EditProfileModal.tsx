@@ -5,7 +5,6 @@ import { Button } from './Button';
 import { WalletSetup } from './WalletSetup';
 import { X, User as UserIcon, Shield, Check, Plus, AlertCircle, Building2, MapPin, Smartphone, Camera, Trash2, LayoutGrid, Tag, Lock, PlusCircle, Globe, Search, Eye, EyeOff } from 'lucide-react';
 import { formatCategory, convertFileToBase64, geocodeAddress, fetchAddressByCEP } from '../utils';
-import { countBillableCategories, monthlyPriceForTeams, formatBRL, CATEGORY_MONTHLY_PRICE } from '../shared/pricing';
 
 interface EditProfileModalProps {
   categories: string[];
@@ -470,23 +469,6 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({ categories, 
               ))}
             </div>
           </section>
-
-          {user.role === UserRole.TEAM_CAPTAIN && (
-            <div className="bg-pitch text-white rounded-[2rem] p-5 space-y-2">
-              <p className="text-[10px] font-black uppercase text-grass-500">Sua mensalidade</p>
-              {teams.map((t, i) => (
-                <div key={i} className="flex justify-between text-[10px] font-bold uppercase">
-                  <span className="truncate mr-2">{t.name || 'Time'}</span>
-                  <span>{t.categories.length} categoria(s)</span>
-                </div>
-              ))}
-              <div className="flex justify-between items-end border-t border-white/10 pt-2">
-                <span className="text-[10px] font-bold uppercase text-gray-300">{countBillableCategories(teams)} categoria(s) no total</span>
-                <span className="text-xl font-black">{monthlyPriceForTeams(teams) > 0 ? `${formatBRL(monthlyPriceForTeams(teams))}/mês` : 'Grátis'}</span>
-              </div>
-              <p className="text-[9px] font-bold text-gray-400 uppercase">{formatBRL(CATEGORY_MONTHLY_PRICE)} por categoria • 1 categoria é grátis • o valor da assinatura é atualizado ao salvar</p>
-            </div>
-          )}
 
           <Button type="submit" isLoading={isLoading} className="w-full py-5 rounded-[2rem] font-black uppercase text-xs shadow-xl active:scale-95">{isLoading ? 'Salvando...' : 'Salvar Todas as Configurações'}</Button>
         </form>

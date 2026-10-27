@@ -2,7 +2,7 @@ import { supabase } from './supabaseClient';
 import { User, Field, MatchSlot, RegisteredTeam, PendingUpdate, UserRole, InAppNotification, SubscriptionPlan, TutorialVideo, MatchPaymentInfo, InvitePreview } from './types';
 
 const SESSION_TOKEN_KEY = 'jf_session_token';
-const USER_COLUMNS = 'id, email, name, phone_number, role, subscription, subscription_expiry, teams, latitude, longitude, team_rating, team_rating_count, is_subscribed, subscription_id, created_at, billing_status, billing_value, cpf_cnpj';
+const USER_COLUMNS = 'id, email, name, phone_number, role, subscription, subscription_expiry, teams, latitude, longitude, team_rating, team_rating_count, is_subscribed, subscription_id, created_at, cpf_cnpj';
 
 export const sessionToken = {
   get: (): string | null => {
@@ -152,8 +152,6 @@ const mapUserFromDb = (u: any): User => ({
   createdAt: u.created_at,
   isSubscribed: u.role === UserRole.FIELD_OWNER || u.is_subscribed || u.subscription === SubscriptionPlan.PRO_TEAM || u.subscription === SubscriptionPlan.PRO_FIELD,
   subscriptionId: u.subscription_id,
-  billingStatus: u.billing_status || undefined,
-  billingValue: u.billing_value != null ? Number(u.billing_value) : undefined,
   cpfCnpj: u.cpf_cnpj || undefined,
 });
 
@@ -279,7 +277,7 @@ export const api = {
     return mapUserFromDb(data);
   },
 
-  /** Recarrega o usuário logado (ex.: depois de pagar a mensalidade). */
+  /** Recarrega o usuário logado. */
   getUserById: async (userId: string): Promise<User> => {
     const { data, error } = await supabase.from('user').select(USER_COLUMNS).eq('id', userId).single();
     if (error) throw error;
@@ -547,9 +545,6 @@ export const api = {
   createInvite: (slotId: string) => callServer<{ token: string; url: string; message: string }>('/api/invites', { slotId }),
 
   getInvite: (token: string) => callServer<InvitePreview>(`/api/invites?token=${encodeURIComponent(token)}`, undefined, 'GET'),
-
-  billing: (action: 'status' | 'subscribe' | 'sync' | 'set_document', params: Record<string, unknown> = {}) =>
-    callServer<{ categories: number; value: number; billingStatus: string; invoiceUrl?: string | null; hasCpf?: boolean }>('/api/billing', { action, ...params }),
 
   payouts: (action: 'status' | 'set_wallet' | 'create_account', fieldId: string, params: Record<string, unknown> = {}) =>
     callServer<{ payoutStatus: string; hasWallet: boolean; walletIdEnd?: string | null; platformFeePercent?: number; message?: string }>('/api/payouts', { action, fieldId, ...params }),

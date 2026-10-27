@@ -2,12 +2,10 @@
 import React, { useState } from 'react';
 import { UserRole, SubscriptionPlan, CATEGORY_ORDER, Gender } from '../types';
 import { Button } from '../components/Button';
-import { Shield, MapPin, AlertCircle, KeyRound, ChevronLeft, Camera, LayoutGrid, Loader2, Eye, EyeOff, Info } from 'lucide-react';
+import { Shield, MapPin, AlertCircle, KeyRound, ChevronLeft, Camera, LayoutGrid, Loader2, Eye, EyeOff } from 'lucide-react';
 import { api, ServerError } from '../api';
 import { openPasswordHelpWhatsApp } from '../support';
-import { formatCpfCnpj, isValidCpfCnpj, onlyDigits } from '../shared/document';
 import { convertFileToBase64, fetchAddressByCEP } from '../utils';
-import { formatBRL, CATEGORY_MONTHLY_PRICE, monthlyPriceForCategories } from '../shared/pricing';
 
 interface AuthProps {
   categories: string[];
@@ -20,6 +18,13 @@ interface AuthProps {
 
 export type AuthMode = 'LOGIN' | 'REGISTER' | 'FORGOT_PASSWORD';
 
+/**
+ * Recuperação de senha por código no e-mail (Resend). Desligada por enquanto:
+ * "Esqueci a senha" leva direto para o WhatsApp do suporte.
+ * Para religar, troque para true (e configure RESEND_API_KEY e EMAIL_FROM na Vercel).
+ */
+const EMAIL_PASSWORD_RESET_ENABLED = false;
+
 export const Auth: React.FC<AuthProps> = ({ onLogin, onCancel, initialMode, inviteCategory }) => {
   const [mode, setMode] = useState<AuthMode>(initialMode || 'LOGIN');
   const isInviteSignup = mode === 'REGISTER' && !!inviteCategory;
@@ -30,8 +35,8 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, onCancel, initialMode, invi
   const [showPassword, setShowPassword] = useState(false);
   // Recuperação de senha: 1) pede o código por e-mail  2) informa código + nova senha
   const [resetCodeSent, setResetCodeSent] = useState(false);
-  // Sem envio de e-mail configurado: recuperação de senha pelo WhatsApp do suporte
-  const [resetViaSupport, setResetViaSupport] = useState(false);
+  // Recuperação de senha pelo WhatsApp do suporte (padrão enquanto o e-mail estiver desligado)
+  const [resetViaSupport, setResetViaSupport] = useState(!EMAIL_PASSWORD_RESET_ENABLED);
   const [resetCode, setResetCode] = useState('');
 
   // Common Form States
@@ -60,8 +65,6 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, onCancel, initialMode, invi
 
   // Captain Specific States
   const [teamName, setTeamName] = useState('');
-  // CPF/CNPJ do responsável pelo time: usado na mensalidade e nos PIX dos jogos
-  const [cpfCnpj, setCpfCnpj] = useState('');
   const [teamCategories, setTeamCategories] = useState<string[]>(inviteCategory ? [inviteCategory] : []);
   const [teamGender, setTeamGender] = useState<Gender>('MASCULINO');
   const [teamSport, setTeamSport] = useState('Futebol');
@@ -111,10 +114,6 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, onCancel, initialMode, invi
           setError('O nome do time é obrigatório.');
           return;
         }
-        if (!isValidCpfCnpj(cpfCnpj)) {
-          setError('Informe um CPF ou CNPJ válido do responsável pelo time.');
-          return;
-        }
         if (teamCategories.length === 0) {
           setError('Selecione pelo menos uma categoria para o time.');
           return;
@@ -135,6 +134,11 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, onCancel, initialMode, invi
     }
 
     if (mode === 'FORGOT_PASSWORD') {
+      // Recuperação pelo WhatsApp: Enter no campo de e-mail abre o WhatsApp em vez de pedir código
+      if (resetViaSupport) {
+        openPasswordHelpWhatsApp(email);
+        return;
+      }
       if (!email) {
         setError('Informe o e-mail cadastrado.');
         return;
@@ -163,7 +167,6 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, onCancel, initialMode, invi
           role,
           name,
           phoneNumber: phone,
-          // CHANGE: Define subscription as NONE initially to force payment flow
           subscription: role === UserRole.FIELD_OWNER ? SubscriptionPlan.PRO_FIELD : SubscriptionPlan.NONE,
           teams: role === UserRole.TEAM_CAPTAIN ? [{ 
               name: teamName, 
@@ -187,17 +190,7 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, onCancel, initialMode, invi
         await api.register(payload);
         // Entra logo em seguida para obter a sessão do servidor (usada em partidas e pagamentos)
         try {
-          const logged = await api.login(payload.email, password);
-          if (role === UserRole.TEAM_CAPTAIN) {
-            // Salva o CPF pelo servidor (usado automaticamente na mensalidade)
-            try {
-              await api.billing('set_document', { cpfCnpj: onlyDigits(cpfCnpj) });
-              logged.cpfCnpj = onlyDigits(cpfCnpj);
-            } catch (docErr) {
-              console.warn('Não foi possível salvar o CPF no cadastro', docErr);
-            }
-          }
-          onLogin(logged);
+          onLogin(await api.login(payload.email, password));
         } catch (loginErr: any) {
           setMode('LOGIN');
           setError(`Sua conta foi criada, mas não conseguimos entrar agora: ${loginErr?.message || 'erro no servidor'}`);
@@ -257,7 +250,7 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, onCancel, initialMode, invi
             <>
               {isInviteSignup && (
                 <div className="bg-grass-50 border border-grass-100 p-4 rounded-2xl text-[10px] font-bold text-grass-700 uppercase">
-                  Conta grátis de time para a categoria {inviteCategory}. Depois do cadastro você já entra no jogo do convite.
+                  Conta de time para a categoria {inviteCategory}. Depois do cadastro você já entra no jogo do convite.
                 </div>
               )}
               <div className={`grid grid-cols-2 gap-3 mb-6 ${isInviteSignup ? 'hidden' : ''}`}>
@@ -274,16 +267,6 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, onCancel, initialMode, invi
               <div className="space-y-3">
                 <input className="w-full p-4 bg-gray-50 rounded-2xl border font-bold outline-none" placeholder="Nome Completo" value={name} onChange={e => setName(e.target.value)} required />
                 <input className="w-full p-4 bg-gray-50 rounded-2xl border font-bold outline-none" placeholder="WhatsApp (com DDD)" value={phone} onChange={e => setPhone(e.target.value)} required />
-                {role === UserRole.TEAM_CAPTAIN && (
-                  <input
-                    className="w-full p-4 bg-gray-50 rounded-2xl border font-bold outline-none"
-                    placeholder="CPF ou CNPJ do responsável"
-                    inputMode="numeric"
-                    value={cpfCnpj}
-                    onChange={e => setCpfCnpj(formatCpfCnpj(e.target.value))}
-                    required
-                  />
-                )}
                 <input className="w-full p-4 bg-gray-50 rounded-2xl border font-bold outline-none" placeholder="E-mail" type="email" value={email} onChange={e => setEmail(e.target.value)} required />
                 
                 <div className="relative">
@@ -351,16 +334,6 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, onCancel, initialMode, invi
                       <span className="inline-block px-4 py-2 rounded-xl text-[10px] font-black uppercase bg-pitch text-white">{inviteCategory}</span>
                     )}
 
-                    <div className="mt-6 bg-blue-50 border border-blue-100 p-4 rounded-xl flex items-start gap-3">
-                       <Info className="w-5 h-5 text-blue-500 shrink-0 mt-0.5" />
-                       <div>
-                          <p className="text-xs font-bold text-blue-900">Mensalidade por categoria</p>
-                          <p className="text-[10px] text-blue-700 mt-1 leading-relaxed">
-                             Com <strong>1 categoria o app é grátis</strong>. A partir de 2, são <strong>{formatBRL(CATEGORY_MONTHLY_PRICE)} por categoria</strong> por mês.
-                             {teamCategories.length > 1 && <> Seu time: <strong>{formatBRL(monthlyPriceForCategories(teamCategories.length))}/mês</strong>.</>}
-                          </p>
-                       </div>
-                    </div>
                   </div>
                 )}
 
@@ -482,6 +455,7 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, onCancel, initialMode, invi
               <div className="bg-blue-50 p-4 rounded-2xl border border-blue-100 text-blue-700 text-[10px] font-bold">
                 Para criar uma nova senha, fale com o nosso suporte pelo WhatsApp. A gente redefine para você rapidinho.
               </div>
+              <input className="w-full p-5 bg-gray-50 rounded-2xl border font-bold outline-none" placeholder="Seu e-mail cadastrado" type="email" value={email} onChange={e => setEmail(e.target.value)} />
               <Button type="button" onClick={() => openPasswordHelpWhatsApp(email)} className="w-full py-5 rounded-[2rem] font-black uppercase text-xs">
                 Pedir nova senha pelo WhatsApp
               </Button>
@@ -507,6 +481,9 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, onCancel, initialMode, invi
                   </div>
                   <button type="button" onClick={() => { setResetCodeSent(false); setResetCode(''); setSuccessMsg(''); setError(''); }} className="text-[9px] font-black text-gray-400 uppercase hover:text-pitch">
                     Não recebeu? Enviar outro código
+                  </button>
+                  <button type="button" onClick={() => openPasswordHelpWhatsApp(email)} className="block text-[9px] font-black text-gray-400 uppercase hover:text-pitch">
+                    Ainda sem o código? Falar com o suporte no WhatsApp
                   </button>
                 </>
               )}

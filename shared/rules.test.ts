@@ -1,7 +1,6 @@
 // Testes das regras de negócio. Rodar com: npm test
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { countBillableCategories, monthlyPriceForCategories, monthlyPriceForTeams } from './pricing.ts';
 import {
   computeShares,
   opponentApproverId,
@@ -26,25 +25,6 @@ const baseSlot = (over: Partial<SlotLike> = {}): SlotLike => ({
   bookedByUserId: 'first-team',
   homeTeamUserId: null,
   ...over,
-});
-
-test('mensalidade: 1 categoria é grátis', () => {
-  assert.equal(monthlyPriceForCategories(0), 0);
-  assert.equal(monthlyPriceForCategories(1), 0);
-});
-
-test('mensalidade: R$ 19,99 por categoria a partir de 2', () => {
-  assert.equal(monthlyPriceForCategories(2), 39.98);
-  assert.equal(monthlyPriceForCategories(3), 59.97);
-});
-
-test('mensalidade: conta categorias por time, sem duplicar', () => {
-  const teams = [
-    { name: 'Time A', categories: ['Sub-11', 'Sub-12', 'sub-11'] },
-    { name: 'Time B', categories: ['Sub-11'] },
-  ];
-  assert.equal(countBillableCategories(teams), 3);
-  assert.equal(monthlyPriceForTeams(teams), 59.97);
 });
 
 test('taxa: 2 times de fora pagam 50% cada', () => {

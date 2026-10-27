@@ -23,8 +23,8 @@ export const POST = handle(async request => {
   if (!email || !email.includes('@')) throw new HttpError(400, 'Informe o e-mail cadastrado.');
 
   // Checa a configuração antes de procurar a conta, para o erro não depender do e-mail existir
-  if (!env.resendApiKey() || !env.emailFrom()) {
-    console.error('[forgot] RESEND_API_KEY ou EMAIL_FROM não configurados');
+  if (!env.resendApiKey()) {
+    console.error('[forgot] RESEND_API_KEY não configurada');
     throw new HttpError(503, 'Recuperação de senha indisponível no momento. Fale com o suporte.', 'EMAIL_NOT_CONFIGURED');
   }
 
