@@ -622,7 +622,7 @@ export const api = {
   removeAvailability: (id: string) => callServer<{ message: string }>('/api/teams', { action: 'remove_availability', id }),
 
   /** Jogo em casa num local próprio (campo sem cadastro no app). */
-  createHomeGame: (params: { teamName: string; category: string; date: string; time: string; durationMinutes: number; location: string; price: number; matchType?: string; prizeDescription?: string }) =>
+  createHomeGame: (params: { teamName: string; category: string; date: string; time: string; durationMinutes: number; location: string; price: number; matchType?: string; prizeDescription?: string; inviteAvailabilityId?: string }) =>
     callServer<{ slot: any; message: string }>('/api/matches', { action: 'create_home_game', ...params }),
 
   /** Mensalidade do dono de time (1ª categoria grátis, R$ 19,99 por categoria adicional). */

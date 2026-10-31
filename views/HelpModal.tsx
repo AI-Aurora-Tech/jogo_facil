@@ -1,4 +1,7 @@
 import React, { useState, useEffect } from 'react';
+
+/** Vídeos tutoriais ocultos enquanto os vídeos são atualizados. Troque para true para mostrar de novo. */
+const SHOW_TUTORIALS = false;
 import { X, Play, Plus, Trash2, MessageCircle } from 'lucide-react';
 import { api } from '../api';
 import { User, UserRole, TutorialVideo } from '../types';
@@ -16,7 +19,7 @@ export const HelpModal: React.FC<HelpModalProps> = ({ onClose, currentUser }) =>
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
 
   useEffect(() => {
-    loadVideos();
+    if (SHOW_TUTORIALS) loadVideos();
   }, []);
 
   const loadVideos = async () => {
@@ -80,7 +83,7 @@ export const HelpModal: React.FC<HelpModalProps> = ({ onClose, currentUser }) =>
   return (
     <div className="fixed inset-0 bg-black/80 z-[100] flex flex-col animate-in fade-in duration-200">
       <div className="flex justify-between items-center p-4 bg-pitch text-white">
-        <h2 className="font-black italic uppercase text-xl">Ajuda e Tutoriais</h2>
+        <h2 className="font-black italic uppercase text-xl">{SHOW_TUTORIALS ? 'Ajuda e Tutoriais' : 'Ajuda'}</h2>
         <button onClick={onClose} className="p-2 bg-white/10 rounded-full active:scale-95">
           <X className="w-5 h-5" />
         </button>
@@ -100,7 +103,7 @@ export const HelpModal: React.FC<HelpModalProps> = ({ onClose, currentUser }) =>
           </button>
         </div>
 
-        {currentUser.role === UserRole.SUPER_ADMIN && (
+        {SHOW_TUTORIALS && currentUser.role === UserRole.SUPER_ADMIN && (
           <div className="bg-white p-6 rounded-3xl shadow-sm border">
             <h3 className="font-black text-pitch uppercase mb-4 text-sm flex items-center gap-2">
               <Plus className="w-4 h-4" /> Adicionar Tutorial
@@ -130,7 +133,7 @@ export const HelpModal: React.FC<HelpModalProps> = ({ onClose, currentUser }) =>
           </div>
         )}
 
-        <div>
+        {SHOW_TUTORIALS && (<div>
           <h3 className="font-black text-pitch uppercase mb-4 text-sm">Vídeos Tutoriais</h3>
           
           {loading ? (
@@ -164,7 +167,7 @@ export const HelpModal: React.FC<HelpModalProps> = ({ onClose, currentUser }) =>
               ))}
             </div>
           )}
-        </div>
+        </div>)}
 
       </div>
     </div>

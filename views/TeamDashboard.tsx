@@ -479,6 +479,7 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
                    )}
                </div>
                <div className="grid grid-cols-2 gap-2">
+                   {SPORTS.length > 1 && (
                    <div className="bg-white p-3 rounded-xl border flex items-center gap-2">
                       <Activity className="w-4 h-4 text-gray-400" />
                       <select value={filterSport} onChange={e => setFilterSport(e.target.value)} className="bg-transparent w-full font-bold text-[10px] uppercase outline-none">
@@ -486,6 +487,7 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
                          {SPORTS.map(s => <option key={s} value={s}>{s}</option>)}
                       </select>
                    </div>
+                   )}
                    <div className="bg-white p-3 rounded-xl border flex items-center gap-2">
                       <SlidersHorizontal className="w-4 h-4 text-gray-400" />
                       <select value={filterCategory} onChange={e => setFilterCategory(e.target.value)} className="bg-transparent w-full font-bold text-[10px] uppercase outline-none">
@@ -797,12 +799,14 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
                </div>
 
                <div className="grid grid-cols-2 gap-4">
+                  {SPORTS.length > 1 && (
                   <div className="bg-gray-50 p-4 rounded-2xl border">
                      <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Esporte</label>
                      <select className="w-full bg-transparent font-black outline-none text-xs" value={mensalistaSport} onChange={e => setMensalistaSport(e.target.value)}>
                         {SPORTS.map(s => <option key={s} value={s}>{s}</option>)}
                      </select>
                   </div>
+                  )}
                   <div className="bg-gray-50 p-4 rounded-2xl border">
                      <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Quadra</label>
                      <select className="w-full bg-transparent font-black outline-none text-xs" value={mensalistaCourt} onChange={e => setMensalistaCourt(e.target.value)}>

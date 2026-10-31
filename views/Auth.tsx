@@ -265,7 +265,8 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, onCancel, initialMode, invi
             <>
               {isInviteSignup && (
                 <div className="bg-grass-50 border border-grass-100 p-4 rounded-2xl text-[10px] font-bold text-grass-700 uppercase">
-                  Conta de time para a categoria {inviteCategory}. Depois do cadastro você já entra no jogo do convite.
+                  O jogo que você selecionou é da categoria: <b>{inviteCategory}</b>. Seu time já começa com ela (1ª categoria grátis).
+                  <br />Cada categoria adicional custa {formatBRL(CATEGORY_MONTHLY_PRICE)}/mês. Depois do cadastro você volta direto para confirmar o jogo.
                 </div>
               )}
               {isTeamInviteSignup && (
@@ -316,19 +317,6 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, onCancel, initialMode, invi
 
                     <input className="w-full bg-transparent border-b-2 border-gray-100 p-2 font-black text-lg outline-none focus:border-pitch transition-colors mb-4" placeholder="Nome do Time" value={teamName} onChange={e => setTeamName(e.target.value)} readOnly={isTeamInviteSignup && teamInvite?.kind === 'LOCAL'} required />
                     
-                    <div className="mb-4">
-                        <p className="text-[9px] font-bold text-gray-400 uppercase mb-2">Esporte Praticado</p>
-                        <select 
-                          className="w-full p-3 bg-white rounded-xl border font-bold text-xs outline-none"
-                          value={teamSport}
-                          onChange={e => setTeamSport(e.target.value)}
-                        >
-                          {["Futebol", "Volei", "Handball", "Basquete", "Tênis", "Beach Tenis"].map(s => (
-                            <option key={s} value={s}>{s}</option>
-                          ))}
-                        </select>
-                    </div>
-
                     <div className="mb-4">
                         <p className="text-[9px] font-bold text-gray-400 uppercase mb-2">Gênero do Time</p>
                         <div className="flex gap-1 p-1 bg-white rounded-xl border">
