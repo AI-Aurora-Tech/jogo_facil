@@ -4,22 +4,28 @@ Este documento explica como o app funciona depois da reformulação e o passo a 
 
 ## 1. Quem paga o quê
 
-Criar conta e usar o app é **grátis** para todos: não existe mais mensalidade para donos de time nem de campo.
-A única cobrança é a **taxa do jogo** que o dono do campo define em cada horário (abaixo).
-
-Assinaturas antigas da mensalidade (Asaas) são canceladas automaticamente pelo webhook quando chega
-o próximo evento delas, mas o ideal é cancelá-las no painel do Asaas (Cobranças > Assinaturas).
-
-## 2. Taxa do jogo (paga pelos times, vai para o dono do campo)
-
-| Situação | Quem paga |
+| Conta | Mensalidade |
 |---|---|
-| 2 times de fora | 50% cada (taxa R$ 200 → R$ 100 + R$ 100) |
-| Mensalista ou time da casa | 100% o adversário (taxa R$ 300 → adversário paga R$ 300) |
-| Amistoso | Ninguém (taxa R$ 0) |
+| Dono de campo | Grátis |
+| Dono de time | **1ª categoria grátis** (para todos, entrando pelo link de um time ou não). Cada categoria adicional: **R$ 19,99/mês** |
 
-O PIX é gerado pelo Asaas com **split**: o valor cai direto na conta Asaas do dono do campo.
-A plataforma pode reter uma porcentagem com a variável `PLATFORM_FEE_PERCENT` (padrão 0).
+- "Categoria" = cada par time + categoria (ex.: Alfa Sub-11 e Alfa Sub-12 = 2 → R$ 19,99/mês).
+- O valor muda sozinho quando o time adiciona ou remove categorias (a assinatura no Asaas é atualizada).
+- Com mais de 1 categoria e a assinatura não ativa, o app pede o pagamento antes de seguir.
+- Regra em `shared/pricing.ts` (`FREE_CATEGORY_LIMIT`, `CHARGE_ALL_CATEGORIES_WHEN_PAYING = false`).
+
+## 2. Taxa do jogo
+
+| Horário | Quem paga | Quem recebe |
+|---|---|---|
+| Livre do campo, 2 times de fora | 50% cada | Dono do campo |
+| Com mandante (time da casa / mensalista / local próprio) | 100% o adversário | **Dono do time mandante** (ele acerta o repasse com o campo por fora, se for o caso) |
+| Amistoso | Ninguém | — |
+
+- O dono do campo define a taxa dos horários livres. Num horário com mandante, quem define é o mandante.
+- O PIX é gerado pelo Asaas com **split**: o valor cai direto na conta Asaas de quem recebe
+  (arena: "Recebimentos" no painel; time: "Minha agenda > Recebimentos").
+- A plataforma pode reter uma porcentagem com a variável `PLATFORM_FEE_PERCENT` (padrão 0).
 
 ## 3. Tipos de jogo
 
@@ -46,11 +52,10 @@ stateDiagram-v2
 
 - **Time 1** = mandante do horário (time da casa ou mensalista), ou o primeiro time de fora que reservou.
 - O time 1 aprova o adversário. Se o mandante ainda não tem responsável no app, quem aprova é o dono do campo.
-- Ao criar ou editar o horário, o dono do campo marca "Tem mandante?", escolhe **time da casa** ou **mensalista**, qual deles e a categoria. O jogo aparece direto na agenda desse time (e ele recebe notificação).
-- Horário criado **sem** mandante pode ganhar mandante depois:
-  - o dono do campo edita o horário (enquanto nenhum time reservou), ou
-  - o responsável pelo time da casa / mensalista daquela arena reserva o horário pelo app: ele entra como **mandante**.
-  Nos dois casos o adversário paga **100%** da taxa.
+- O dono do campo cria **só horários livres**. Quem tem mandante é criado pelo próprio time (ver 4.4).
+- **Horário com mandante** é gerenciado pelo mandante: ele aprova o adversário, define e recebe a taxa.
+  Esses jogos **não passam pela aprovação do campo**: pago (ou sem taxa) = confirmado.
+- Horário livre do campo continua passando pela aprovação do campo depois do pagamento.
 - O mandante pode liberar o horário enquanto ainda não tem adversário.
 - Um time não pode ter 2 jogos da **mesma categoria** no mesmo horário (em casa ou fora). Categorias diferentes podem.
 - Recusa do campo devolve o horário para a agenda e estorna o que foi pago.
@@ -86,6 +91,20 @@ ajudar a configurar a conta para receber meus pagamentos?"*.
 
 Para concluir: ajude a pessoa a abrir a conta Asaas dela, pegue o **Wallet ID**, entre no app como admin geral,
 "Acessar Conta" do dono do campo → Arena → **Recebimentos** → cole o Wallet ID → Salvar.
+
+## 4.4 Agenda do time (aba "Agenda")
+
+- **Link exclusivo** do time: quem abre vê os jogos em casa abertos (pode desafiar) e os dias em que o time joga fora.
+  Quem não tem conta cria uma (1ª categoria grátis).
+- **Jogo em casa**:
+  - numa **arena do app** onde o time é time da casa ou mensalista (cadastrado antes pelo dono do campo):
+    o time escolhe um horário livre da arena e assume como mandante;
+  - num **local próprio** (campo sem cadastro no app): o time digita o endereço, a data e o horário.
+  Nos dois casos o time define a taxa do adversário e recebe.
+- **Quero jogar fora**: o time cadastra dia, faixa de horário e categoria.
+  Os mandantes veem em "Visitantes" os times que combinam com o jogo deles (dia, horário, categoria, gênero e esporte)
+  e convidam; o visitante aceita em "Minha agenda" e já entra aprovado (falta só o pagamento, se tiver taxa).
+- **Recebimentos**: conta Asaas do dono do time (Wallet ID) para receber as taxas dos jogos em casa.
 
 ## 5. Convites
 
@@ -123,12 +142,13 @@ App (React/Vite)  ──>  Supabase (leitura e cadastros simples)
 | Arquivo | O que faz |
 |---|---|
 | `shared/matchRules.ts` | Regras do fluxo (quem aprova, quanto cada um paga, quando libera placar). Usado pela tela e pelo servidor. |
-| `shared/money.ts` | Formatação de valores em reais. |
+| `shared/pricing.ts` | Cálculo da mensalidade (1ª categoria grátis, R$ 19,99 por categoria adicional). |
 | `api/matches.ts` | Todas as etapas da partida: reservar, se inscrever, aprovar, pagar, aprovar pelo campo, cancelar, placar, avaliação. |
 | `api/invites.ts` | Cria e abre convites de partida. |
-| `api/teams.ts` | Convites de time da casa e mensalista: criar link, ver, aceitar, trocar responsável. |
-| `api/payouts.ts` | Conta de recebimento do dono do campo. |
-| `api/webhooks/asaas.ts` | Confirmação de pagamentos (idempotente). Cancela assinaturas antigas da mensalidade. |
+| `api/teams.ts` | Convites de time da casa e mensalista; agenda do time (link exclusivo, disponibilidade para jogar fora). |
+| `api/billing.ts` | Mensalidade dos donos de time (assinatura Asaas). |
+| `api/payouts.ts` | Conta de recebimento do dono do campo ou do dono de time (mandante). |
+| `api/webhooks/asaas.ts` | Confirmação de pagamentos e da mensalidade (idempotente). |
 | `api/auth/login.ts` | Login que devolve a sessão usada nas ações do servidor. |
 | `api/auth/forgot.ts` | "Esqueci a senha": envia por e-mail um código de 6 dígitos (uso único, 15 min, 5 tentativas). |
 | `api/auth/reset.ts` | Confere o código e grava a nova senha. |
@@ -157,6 +177,8 @@ App (React/Vite)  ──>  Supabase (leitura e cadastros simples)
    mandante no horário). Esta pode rodar antes do deploy.
    Depois do deploy, rode `supabase/migrations/20261027_02_protege_times_do_campo.sql`: o navegador deixa de poder
    definir o responsável de um time ou aprovar pedidos de mensalista (agora feitos pelo servidor).
+   Rode `supabase/migrations/20261031_01_agenda_do_time.sql` (agenda do time, link exclusivo, visitantes e conta de
+   recebimento do time). Pode rodar antes do deploy.
    Em seguida rode `supabase/migrations/20261023_01_senha_pelo_servidor.sql`: cria a tabela dos códigos de
    recuperação e tira do navegador a permissão de alterar a senha.
 6. Troque `ASAAS_ENV` para `production` e a chave de API de produção.
@@ -170,7 +192,8 @@ App (React/Vite)  ──>  Supabase (leitura e cadastros simples)
 ## 10. Mudanças de comportamento importantes
 
 - Todos precisam **entrar de novo** uma vez (a sessão agora é validada no servidor).
-- A mensalidade dos donos de time (por categoria) foi removida: o app é grátis. Cancele as assinaturas antigas no painel do Asaas e do Mercado Pago.
+- Mensalidade dos donos de time: 1ª categoria grátis e R$ 19,99 por categoria adicional (antes, quem passava de 1 categoria pagava todas).
+- Horário com mandante: quem aprova, define a taxa e recebe é o time mandante; o campo não aprova esses jogos.
 - O envio de comprovante PIX com verificação por IA foi substituído pelo PIX automático. Jogos antigos que estavam "aguardando validação" ainda podem ser aprovados pelo campo.
 - Antes, mensalista dividia a taxa 50/50 — agora o adversário paga 100%, como pedido.
 

@@ -8,9 +8,11 @@
  *  available ─(1º time de fora reserva)──────────────┐
  *  (horário com mensalista/time da casa nasce aqui) ─┴─> waiting_opponent
  *  waiting_opponent ─(adversário se inscreve)──> pending_home_approval
- *  pending_home_approval ─(time 1 aprova)──> pending_payment (ou pending_field_approval se amistoso)
- *  pending_payment ─(todos pagaram)──> pending_field_approval
+ *  pending_home_approval ─(time 1 aprova)──> pending_payment (sem taxa: pula o pagamento)
+ *  pending_payment ─(todos pagaram)──> pending_field_approval (horário livre do campo)
+ *                                  └─> confirmed (horário com mandante: quem gerencia é o mandante)
  *  pending_field_approval ─(campo aprova)──> confirmed  |  (campo nega + estorno)──> volta a ficar livre
+ *  Jogo em local próprio do mandante (sem campo no app): nunca passa pela aprovação do campo.
  *  confirmed ─(2h após o fim, time 1 lança placar)──> finished
  */
 
@@ -120,8 +122,21 @@ export const opponentApproverId = (slot: SlotLike, fieldOwnerId: string): string
 /** "Time 1": quem lança o placar. Mesmo critério de quem aprova o adversário. */
 export const firstTeamUserId = opponentApproverId;
 
-export const statusAfterTeamApproval = (slot: Pick<SlotLike, 'price' | 'matchType'>): FlowStatus =>
-  requiresPayment(slot) ? 'pending_payment' : 'pending_field_approval';
+/**
+ * O dono do campo só aprova o jogo nos horários LIVRES dele (sem mandante).
+ * Com mandante (time da casa/mensalista que não é o próprio dono do campo) ou em local
+ * próprio do time (sem campo), quem gerencia o horário é o mandante.
+ */
+export const needsFieldApproval = (slot: Pick<SlotLike, 'homeTeamType' | 'hasLocalTeam' | 'homeTeamUserId'>, fieldOwnerId: string | null | undefined): boolean => {
+  if (!fieldOwnerId) return false;
+  return !(hasHomeTeam(slot) && !!slot.homeTeamUserId && slot.homeTeamUserId !== fieldOwnerId);
+};
+
+/** Status depois que todos pagaram (ou quando não há taxa). */
+export const statusAfterPayment = (needsField: boolean): FlowStatus => (needsField ? 'pending_field_approval' : 'confirmed');
+
+export const statusAfterTeamApproval = (slot: Pick<SlotLike, 'price' | 'matchType'>, needsField = true): FlowStatus =>
+  requiresPayment(slot) ? 'pending_payment' : statusAfterPayment(needsField);
 
 const pad = (n: number) => String(n).padStart(2, '0');
 

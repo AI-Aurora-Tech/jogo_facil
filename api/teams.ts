@@ -3,6 +3,7 @@ import { requireSession, isAdmin, type DbUser } from './_lib/auth.js';
 import { db, notify } from './_lib/supabaseAdmin.js';
 import { loadField, CLEAR_HOME_TEAM } from './_lib/slots.js';
 import { env } from './_lib/env.js';
+import { addAvailability, agendaLink, myAgenda, publicAgenda, removeAvailability } from './_lib/agenda.js';
 import {
   createMensalistaSlots,
   dayLabel,
@@ -25,6 +26,13 @@ import {
  *        time da casa: { categories: [...] }              (vira dono do time e cria as categorias)
  * POST /api/teams { action: 'release', teamId }           -> dono do campo tira o responsável do time
  * POST /api/teams { action: 'approve', teamId }           -> dono do campo aprova o pedido de mensalista de um time
+ *
+ * Agenda do time (dono de time):
+ * GET  /api/teams?agenda=TOKEN                            -> página pública do link exclusivo do time
+ * POST /api/teams { action: 'agenda_link', teamName }      -> cria/pega o link exclusivo
+ * POST /api/teams { action: 'my_agenda' }                  -> jogos em casa abertos, disponibilidade, convites recebidos
+ * POST /api/teams { action: 'add_availability', ... }      -> dia/horário/categoria para jogar fora
+ * POST /api/teams { action: 'remove_availability', id }
  */
 
 const cleanCategory = (c: unknown) => String(c || '').trim().slice(0, 30);
@@ -253,9 +261,29 @@ const approve = async (request: Request, body: any) => {
 };
 
 export const GET = handle(async request => {
-  const token = new URL(request.url).searchParams.get('token') || '';
-  return preview(token);
+  const params = new URL(request.url).searchParams;
+  // Link exclusivo da agenda de um time (?agenda=TOKEN)
+  if (params.get('agenda')) return json(await publicAgenda(params.get('agenda') || ''));
+  return preview(params.get('token') || '');
 });
+
+/** Ações da agenda do próprio time (dono de time logado). */
+const agendaAction = async (request: Request, body: any) => {
+  const { user } = await requireSession(request, body.actAsUserId);
+  assert(user.role === 'TEAM_CAPTAIN', 403, 'Disponível só para donos de time.');
+  switch (body.action) {
+    case 'agenda_link':
+      return json(await agendaLink(user, body.teamName, env.appUrl() || new URL(request.url).origin));
+    case 'my_agenda':
+      return json(await myAgenda(user));
+    case 'add_availability':
+      return json(await addAvailability(user, body));
+    case 'remove_availability':
+      return json(await removeAvailability(user, body.id));
+    default:
+      throw new HttpError(400, 'Ação inválida.');
+  }
+};
 
 export const POST = handle(async request => {
   const body = await readJson(request);
@@ -268,6 +296,11 @@ export const POST = handle(async request => {
       return release(request, body);
     case 'approve':
       return approve(request, body);
+    case 'agenda_link':
+    case 'my_agenda':
+    case 'add_availability':
+    case 'remove_availability':
+      return agendaAction(request, body);
     default:
       throw new HttpError(400, 'Ação inválida.');
   }

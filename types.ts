@@ -44,6 +44,9 @@ export interface User {
   createdAt: string; // ISO 8601 date string
   isSubscribed?: boolean;
   subscriptionId?: string;
+  /** FREE | ACTIVE | PENDING | OVERDUE | CANCELED (mensalidade por categoria) */
+  billingStatus?: string;
+  billingValue?: number;
   cpfCnpj?: string;
 }
 
@@ -127,6 +130,8 @@ export interface MatchSlot {
   homeTeamUserId?: string;
   /** Time da casa/mensalista cadastrado no campo que é o mandante deste horário. */
   homeTeamId?: string;
+  /** Jogo em local próprio do mandante (sem campo no app): endereço digitado pelo time. */
+  customLocation?: string;
   opponentUserId?: string;
   firstTeamPaid?: boolean;
   opponentPaid?: boolean;
@@ -186,6 +191,67 @@ export interface TeamInvitePreview {
   sport: string;
   gender?: string | null;
   field: { id: string; name: string; location: string; imageUrl?: string };
+}
+
+/** Lugar do jogo (campo do app ou local próprio do mandante). */
+export interface GamePlace {
+  name: string;
+  location: string | null;
+  imageUrl?: string | null;
+}
+
+export interface AgendaHomeGame {
+  slotId: string;
+  teamName?: string;
+  date: string;
+  time: string;
+  durationMinutes: number;
+  category: string | null;
+  allowedCategories: string[];
+  sport: string;
+  matchType: string;
+  opponentShare: number;
+  place: GamePlace;
+}
+
+export interface AgendaAvailability {
+  id: string;
+  teamName: string;
+  category: string;
+  gender?: string | null;
+  sport?: string | null;
+  date: string;
+  startTime: string;
+  endTime: string;
+  notes?: string | null;
+}
+
+/** Página pública do link exclusivo de um time. */
+export interface PublicAgenda {
+  token: string;
+  ownerUserId: string;
+  team: { name: string; logoUrl: string | null; categories: string[]; gender: string | null; sport: string };
+  homeGames: AgendaHomeGame[];
+  awayAvailability: AgendaAvailability[];
+}
+
+export interface AgendaInvite {
+  inviteId: string;
+  slotId: string;
+  teamName: string;
+  category: string;
+  homeTeamName: string;
+  date: string;
+  time: string;
+  opponentShare: number;
+  place: GamePlace;
+}
+
+/** Agenda do próprio time (logado). */
+export interface MyAgenda {
+  homeGames: AgendaHomeGame[];
+  availability: AgendaAvailability[];
+  invites: AgendaInvite[];
 }
 
 export interface RegisteredTeam {

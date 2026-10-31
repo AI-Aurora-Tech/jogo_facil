@@ -3,7 +3,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Search, MapPin, Clock, Swords, Filter, X, Check, MessageCircle, Phone, Navigation, Trophy, ChevronDown, Smartphone, Settings, AlertTriangle, ExternalLink, Activity, History as HistoryIcon, CalendarCheck, CalendarX, Locate, MapPinOff, Calendar, RotateCcw, ArrowUpDown, SlidersHorizontal, Camera, Upload, Clipboard } from 'lucide-react';
 import { Button } from '../components/Button';
 import { Field, MatchSlot, User, CATEGORY_ORDER, SPORTS, Gender, RegisteredTeam } from '../types';
-import { api } from '../api';
+import { api, customFieldsFor, CUSTOM_FIELD_PREFIX } from '../api';
 import { calculateDistance, getCurrentPosition, formatDistance, LatLng, geocodeAddress, getCachedPosition, hasLocationPermission } from '../utils';
 import { MatchActions, firstTeamNameOf } from '../components/MatchActions';
 import { hasHomeTeam, normalizeMatchKind, opponentApproverId, shareFor, MATCH_KIND_LABEL, STATUS_LABEL } from '../shared/matchRules';
@@ -22,7 +22,7 @@ interface TeamDashboardProps {
 
 type SortOption = 'DISTANCE_ASC' | 'DISTANCE_DESC' | 'PRICE_ASC' | 'PRICE_DESC' | 'NAME_ASC' | 'NAME_DESC';
 
-export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, fields, slots, viewMode, onRefresh, onCancelBooking, onRateTeam }) => {
+export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, fields: realFields, slots, viewMode, onRefresh, onCancelBooking, onRateTeam }) => {
   const [selectedSlot, setSelectedSlot] = useState<MatchSlot | null>(null);
   const [showMensalistaModal, setShowMensalistaModal] = useState(false);
   const [mensalistaRequestField, setMensalistaRequestField] = useState<Field | null>(null);
@@ -60,6 +60,8 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
   const [myHomeTeams, setMyHomeTeams] = useState<RegisteredTeam[]>([]);
   // Jogos do time (inclui os passados, para placar e avaliação)
   const [mySlots, setMySlots] = useState<MatchSlot[]>([]);
+  // Campos reais + "campos" virtuais dos jogos em local próprio do mandante
+  const fields = useMemo(() => [...realFields, ...customFieldsFor([...slots, ...mySlots])], [realFields, slots, mySlots]);
 
   const reloadMySlots = async () => {
     try {
@@ -132,7 +134,7 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
 
     // 1. Campos com posição salva: cálculo direto, sem consultar nada
     const missing: Field[] = [];
-    for (const field of fields) {
+    for (const field of realFields) {
       if (field.latitude && field.longitude && Math.abs(field.latitude) > 0.0001) {
         const dist = calculateDistance(origin.lat, origin.lng, field.latitude, field.longitude);
         if (dist >= 0) newDistances[field.id] = dist;
@@ -577,7 +579,7 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
                      <div className="flex justify-between items-start">
                         <h3 className="font-black text-pitch text-lg leading-none uppercase truncate mr-2">{field?.name}</h3>
                         <div className="flex items-center gap-2">
-                           {currentUser.role === 'TEAM_CAPTAIN' &&
+                           {currentUser.role === 'TEAM_CAPTAIN' && !slot.fieldId.startsWith(CUSTOM_FIELD_PREFIX) &&
                              <button 
                                onClick={(e) => {
                                  e.stopPropagation();
@@ -750,7 +752,7 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({ currentUser, field
                  return (
                    <div className="bg-gray-50 p-4 rounded-2xl border text-[10px] font-bold text-gray-500 uppercase space-y-1">
                      <p className="text-pitch font-black">{asHome ? 'Você assume este horário como mandante' : isNew ? 'Você será o time 1 deste horário' : `Desafiar ${firstTeamNameOf(selectedSlot)}`}</p>
-                     <p>{asHome ? 'Mandante não paga: o adversário paga 100% da taxa.' : share > 0 ? `Sua parte da taxa: ${formatBRL(share)} (PIX, depois da aprovação)` : 'Sem taxa (amistoso)'}</p>
+                     <p>{asHome ? 'Você é o mandante: define a taxa do adversário (100%) e recebe o valor.' : share > 0 ? `Sua parte da taxa: ${formatBRL(share)} (PIX, depois da aprovação)` : 'Sem taxa (amistoso)'}</p>
                      {isNew && <p>Depois de reservar, envie o convite para um adversário. Você aprova quem se inscrever.</p>}
                    </div>
                  );

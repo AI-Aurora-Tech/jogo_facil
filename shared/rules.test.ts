@@ -1,10 +1,12 @@
 // Testes das regras de negócio. Rodar com: npm test
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { countBillableCategories, monthlyPriceForCategories, monthlyPriceForTeams } from './pricing.ts';
 import {
   computeShares,
   opponentApproverId,
   statusAfterTeamApproval,
+  needsFieldApproval,
   canSetResult,
   canRate,
   matchStart,
@@ -25,6 +27,25 @@ const baseSlot = (over: Partial<SlotLike> = {}): SlotLike => ({
   bookedByUserId: 'first-team',
   homeTeamUserId: null,
   ...over,
+});
+
+test('mensalidade: 1ª categoria grátis', () => {
+  assert.equal(monthlyPriceForCategories(0), 0);
+  assert.equal(monthlyPriceForCategories(1), 0);
+});
+
+test('mensalidade: R$ 19,99 por categoria adicional', () => {
+  assert.equal(monthlyPriceForCategories(2), 19.99);
+  assert.equal(monthlyPriceForCategories(3), 39.98);
+});
+
+test('mensalidade: conta categorias por time, sem duplicar', () => {
+  const teams = [
+    { name: 'Time A', categories: ['Sub-11', 'Sub-12', 'sub-11'] },
+    { name: 'Time B', categories: ['Sub-11'] },
+  ];
+  assert.equal(countBillableCategories(teams), 3);
+  assert.equal(monthlyPriceForTeams(teams), 39.98);
 });
 
 test('taxa: 2 times de fora pagam 50% cada', () => {
@@ -106,4 +127,22 @@ test('CPF e CNPJ: dígitos verificadores', () => {
 test('CPF e CNPJ: formatação', () => {
   assert.equal(formatCpfCnpj('52998224725'), '529.982.247-25');
   assert.equal(formatCpfCnpj('11222333000181'), '11.222.333/0001-81');
+});
+
+test('aprovação do campo: só nos horários livres do campo', () => {
+  // Horário livre do campo (2 times de fora): o campo aprova
+  assert.equal(needsFieldApproval(baseSlot(), 'owner'), true);
+  // Mandante (time da casa/mensalista com dono próprio): quem gerencia é o mandante
+  const home = baseSlot({ homeTeamType: 'MENSALISTA', hasLocalTeam: true, homeTeamUserId: 'mensalista' });
+  assert.equal(needsFieldApproval(home, 'owner'), false);
+  // Time da casa sem responsável (o próprio dono do campo): continua com o campo
+  assert.equal(needsFieldApproval({ ...home, homeTeamType: 'LOCAL', homeTeamUserId: 'owner' }, 'owner'), true);
+  // Local próprio do mandante (sem campo no app)
+  assert.equal(needsFieldApproval(home, ''), false);
+});
+
+test('com mandante: sem taxa o jogo já fica confirmado', () => {
+  const home = baseSlot({ matchType: 'AMISTOSO', homeTeamType: 'LOCAL', hasLocalTeam: true, homeTeamUserId: 'casa' });
+  assert.equal(statusAfterTeamApproval(home, false), 'confirmed');
+  assert.equal(statusAfterTeamApproval(baseSlot({ homeTeamType: 'LOCAL', hasLocalTeam: true, homeTeamUserId: 'casa' }), false), 'pending_payment');
 });

@@ -7,7 +7,8 @@ import { openPaymentSetupWhatsApp } from '../support';
 const WALLET_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 interface WalletSetupProps {
-  fieldId: string;
+  /** Campo do dono de campo. Vazio: conta do próprio dono de time (taxa dos jogos em que é mandante). */
+  fieldId?: string;
   ownerName: string;
   onSaved?: () => void;
 }
@@ -16,7 +17,7 @@ interface WalletSetupProps {
  * Dono do campo informa o Wallet ID da conta Asaas dele.
  * As taxas dos jogos pagas pelos times caem direto nessa conta (split do Asaas).
  */
-export const WalletSetup: React.FC<WalletSetupProps> = ({ fieldId, ownerName, onSaved }) => {
+export const WalletSetup: React.FC<WalletSetupProps> = ({ fieldId = '', ownerName, onSaved }) => {
   const [status, setStatus] = useState<{ hasWallet: boolean; walletIdEnd?: string | null } | null>(null);
   const [editing, setEditing] = useState(false);
   const [walletId, setWalletId] = useState('');
@@ -24,7 +25,6 @@ export const WalletSetup: React.FC<WalletSetupProps> = ({ fieldId, ownerName, on
   const [error, setError] = useState('');
 
   useEffect(() => {
-    if (!fieldId) return;
     api.payouts('status', fieldId).then(setStatus).catch(e => setError(e.message));
   }, [fieldId]);
 

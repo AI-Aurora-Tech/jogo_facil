@@ -318,6 +318,10 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
   };
 
   const handleEditSlot = (slot: MatchSlot) => {
+    if (slot.hasLocalTeam && slot.homeTeamUserId && slot.homeTeamUserId !== currentUser.id) {
+      alert(`Este horário tem mandante (${slot.localTeamName}). Quem gerencia é o mandante: ele aprova o adversário, define e recebe a taxa. Você pode cancelar o horário, se precisar.`);
+      return;
+    }
     setEditingSlotId(slot.id);
     setSlotDate(slot.date);
     setSlotTime(slot.time);
@@ -1627,8 +1631,8 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                    {slotMatchType === 'AMISTOSO'
                      ? 'Amistoso: ninguém paga taxa.'
                      : isLocalTeamSlot
-                       ? `Com mensalista/time da casa, o adversário paga 100% (${formatBRL(slotPrice || 0)}).`
-                       : `Dois times de fora: cada um paga 50% (${formatBRL((slotPrice || 0) / 2)}).`}
+                       ? `Com mandante, o adversário paga 100% (${formatBRL(slotPrice || 0)}).`
+                       : `Dois times de fora: cada um paga 50% (${formatBRL((slotPrice || 0) / 2)}). Se um time da casa/mensalista assumir o horário, ele vira o mandante e define a taxa.`}
                  </p>
 
                  {field.payoutStatus !== 'ACTIVE' && (
@@ -1638,15 +1642,11 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                    </button>
                  )}
 
-                 <div className="bg-gray-50 p-4 rounded-2xl border flex items-center justify-between cursor-pointer" onClick={() => setIsLocalTeamSlot(!isLocalTeamSlot)}>
-                    <div>
-                        <h4 className="font-black text-pitch text-xs uppercase">Tem mandante neste horário?</h4>
-                        <p className="text-[8px] text-gray-400">Time da casa ou mensalista. O jogo vai direto para a agenda desse time, só falta 1 adversário, e o adversário paga 100% da taxa.</p>
-                    </div>
-                    <div className={`w-12 h-6 rounded-full p-1 transition-all ${isLocalTeamSlot ? 'bg-pitch' : 'bg-gray-200'}`}>
-                        <div className={`w-4 h-4 rounded-full bg-white shadow-sm transition-all transform ${isLocalTeamSlot ? 'translate-x-6' : ''}`} />
-                    </div>
-                 </div>
+                 {!editingSlotId && (
+                   <p className="text-[9px] font-bold text-gray-400 uppercase px-2">
+                     Crie aqui só horários LIVRES. Times da casa e mensalistas da arena marcam os jogos deles pela agenda do time (e cuidam da taxa).
+                   </p>
+                 )}
 
                  {!editingSlotId && (
                    <div className="bg-gray-50 p-4 rounded-2xl border flex items-center justify-between cursor-pointer" onClick={() => setIsRecurring(!isRecurring)}>
@@ -1661,103 +1661,9 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                  )}
 
                  {isLocalTeamSlot && (
-                    <div className="animate-in fade-in slide-in-from-top-2 space-y-4 bg-gray-50 p-4 rounded-2xl border">
-                        <div>
-                           <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Quem é o mandante?</label>
-                           <div className="grid grid-cols-2 gap-2">
-                             {(['LOCAL', 'MENSALISTA'] as HomeTeamKind[]).map(k => (
-                               <button
-                                 key={k}
-                                 type="button"
-                                 onClick={() => { setHomeKind(k); setSelectedRegisteredTeamId(''); setLocalTeamCategory(''); }}
-                                 className={`py-3 rounded-xl text-[10px] font-black uppercase border ${homeKind === k ? 'bg-pitch text-white border-pitch' : 'bg-white text-gray-400'}`}
-                               >
-                                 {k === 'LOCAL' ? 'Time da casa' : 'Mensalista'}
-                               </button>
-                             ))}
-                           </div>
-                        </div>
-                        <div>
-                           <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">{homeKind === 'LOCAL' ? 'Qual time da casa?' : 'Qual mensalista?'}</label>
-                           <select 
-                             className="w-full p-4 bg-white border rounded-xl text-xs font-bold" 
-                             value={selectedRegisteredTeamId} 
-                             onChange={e => setSelectedRegisteredTeamId(e.target.value)}
-                           >
-                              <option value="">Selecione o time</option>
-                              {homeKind === 'LOCAL' && registeredTeams.filter(t => t.kind === 'LOCAL').map(t => (
-                                <option key={t.id} value={t.id}>{t.name}{t.captainName ? ` (${t.captainName})` : ''}</option>
-                              ))}
-                              {homeKind === 'LOCAL' && (currentUser.teams || []).filter(t => !registeredTeams.some(r => r.kind === 'LOCAL' && r.name.trim().toLowerCase() === t.name.trim().toLowerCase())).map(t => {
-                                const i = currentUser.teams.indexOf(t);
-                                return <option key={`OWNER_TEAM_${i}`} value={`OWNER_TEAM_${i}`}>{t.name} (meu perfil)</option>;
-                              })}
-                              {homeKind === 'MENSALISTA' && registeredTeams.filter(t => t.kind === 'MENSALISTA' && (t.status === 'approved' || t.status === 'active')).map(t => (
-                                <option key={t.id} value={t.id}>
-                                  {t.name || 'Aguardando o time aceitar'} • {['Dom','Seg','Ter','Qua','Qui','Sex','Sab'][Number(t.fixedDay)] || ''} {t.fixedTime}
-                                </option>
-                              ))}
-                           </select>
-                           {homeKind === 'LOCAL' && registeredTeams.filter(t => t.kind === 'LOCAL').length === 0 && (currentUser.teams || []).length === 0 && (
-                             <p className="text-[9px] font-bold text-orange-500 uppercase mt-2">Cadastre um time da casa na aba "Times".</p>
-                           )}
-                           {homeKind === 'MENSALISTA' && registeredTeams.filter(t => t.kind === 'MENSALISTA').length === 0 && (
-                             <p className="text-[9px] font-bold text-orange-500 uppercase mt-2">Cadastre um mensalista na aba "Times".</p>
-                           )}
-                        </div>
-                        
-                        {selectedRegisteredTeamId && (() => {
-                          let teamCats: string[] = [];
-                          if (selectedRegisteredTeamId.startsWith('OWNER_TEAM_')) {
-                            teamCats = currentUser.teams[parseInt(selectedRegisteredTeamId.split('_')[2])]?.categories || [];
-                          } else {
-                            teamCats = registeredTeams.find(t => t.id === selectedRegisteredTeamId)?.categories || [];
-                          }
-                          // Time sem categorias ainda (ex.: convite não aceito): mostra todas
-                          const options = teamCats.length > 0 ? teamCats : categories.length > 0 ? categories : CATEGORY_ORDER;
-                          return (
-                            <div>
-                              <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Categoria do mandante neste horário</label>
-                              <select 
-                                className="w-full p-4 bg-white border rounded-xl text-xs font-bold" 
-                                value={localTeamCategory} 
-                                onChange={e => setLocalTeamCategory(e.target.value)}
-                              >
-                                <option value="">Selecione a categoria</option>
-                                {options.map(cat => (
-                                  <option key={cat} value={cat}>{cat}</option>
-                                ))}
-                              </select>
-                            </div>
-                          );
-                        })()}
-                        
-                        <div className="flex items-center gap-2 cursor-pointer" onClick={() => setAcceptNeighbors(!acceptNeighbors)}>
-                           <div className={`w-5 h-5 rounded border flex items-center justify-center transition-all ${acceptNeighbors ? 'bg-pitch border-pitch text-white' : 'bg-white border-gray-300'}`}>
-                              {acceptNeighbors && <Check className="w-3 h-3" />}
-                           </div>
-                           <span className="text-[10px] font-black text-pitch uppercase">Aceitar categorias vizinhas (Matchmaking)</span>
-                        </div>
-                        {acceptNeighbors && (
-                           <p className="text-[8px] text-gray-400 font-bold uppercase italic">* Permitirá desafios de uma categoria acima e uma abaixo.</p>
-                        )}
-
-                        <div className="grid grid-cols-2 gap-3 pt-3 border-t mt-3">
-                          <div className="bg-white p-3 rounded-xl border">
-                            <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Gênero do Time</label>
-                            <select value={localTeamGender} onChange={e => setLocalTeamGender(e.target.value as Gender)} className="w-full bg-transparent font-black outline-none text-xs uppercase">
-                              <option value="MASCULINO">Masculino</option>
-                              <option value="FEMININO">Feminino</option>
-                              <option value="MISTO">Misto</option>
-                            </select>
-                          </div>
-                          <div className="bg-white p-3 rounded-xl border flex items-center justify-center">
-                            <label className="flex items-center gap-2 text-xs font-black uppercase text-gray-600">
-                              <input type="checkbox" checked={acceptsMixed} onChange={e => setAcceptsMixed(e.target.checked)} className="w-4 h-4 rounded text-pitch focus:ring-pitch" />
-                              Aceita times mistos?
-                            </label>
-                          </div>
-                        </div>
+                    <div className="bg-gray-50 p-4 rounded-2xl border text-[10px] font-bold text-gray-500 uppercase">
+                       Mandante: <span className="text-pitch font-black">{slots.find(s => s.id === editingSlotId)?.localTeamName || 'time da casa'}</span>
+                       {' • '}{localTeamCategory || slots.find(s => s.id === editingSlotId)?.localTeamCategory}
                     </div>
                  )}
 

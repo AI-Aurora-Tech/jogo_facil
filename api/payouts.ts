@@ -5,9 +5,11 @@ import { asaas } from './_lib/asaas.js';
 import { env } from './_lib/env.js';
 
 /**
- * Conta de recebimento do dono do campo (para o split automático das taxas).
+ * Conta de recebimento (para o split automático das taxas).
+ * - Dono do campo (com fieldId): recebe a taxa dos horários livres do campo.
+ * - Dono de time (sem fieldId): recebe a taxa dos jogos em que o time dele é mandante.
  *
- * POST /api/payouts { action: 'status' | 'set_wallet' | 'create_account', fieldId, ... }
+ * POST /api/payouts { action: 'status' | 'set_wallet' | 'create_account', fieldId?, ... }
  *  - set_wallet:     quem já tem conta Asaas informa o Wallet ID (Asaas > Minha conta > Integrações)
  *  - create_account: cria uma subconta Asaas para o dono do campo, sem ele sair do app
  */
@@ -18,29 +20,41 @@ export const POST = handle(async request => {
   const body = await readJson(request);
   const { user, actor } = await requireSession(request, body.actAsUserId);
 
-  const { data: field, error } = await db().from('field').select('*').eq('id', body.fieldId).maybeSingle();
-  if (error) throw error;
-  assert(field, 404, 'Campo não encontrado.');
-  assert(field.owner_id === user.id || isAdmin(actor), 403, 'Somente o dono do campo pode configurar recebimentos.');
+  // Sem fieldId: conta de recebimento do próprio dono de time (taxa dos jogos em que ele é mandante)
+  let target: { table: 'field' | 'user'; id: string; wallet: string | null; status: string | null };
+  if (body.fieldId) {
+    const { data: field, error } = await db().from('field').select('*').eq('id', body.fieldId).maybeSingle();
+    if (error) throw error;
+    assert(field, 404, 'Campo não encontrado.');
+    assert(field.owner_id === user.id || isAdmin(actor), 403, 'Somente o dono do campo pode configurar recebimentos.');
+    target = { table: 'field', id: field.id, wallet: field.asaas_wallet_id, status: field.payout_status };
+  } else {
+    assert(user.role === 'TEAM_CAPTAIN', 400, 'Informe o campo.');
+    const { data: u, error } = await db().from('user').select('id, asaas_wallet_id, payout_status').eq('id', user.id).maybeSingle();
+    if (error) throw error;
+    target = { table: 'user', id: user.id, wallet: u?.asaas_wallet_id || null, status: u?.payout_status || null };
+  }
 
   switch (body.action) {
     case 'status':
       return json({
-        payoutStatus: field.payout_status || 'NONE',
-        hasWallet: !!field.asaas_wallet_id,
-        walletIdEnd: field.asaas_wallet_id ? String(field.asaas_wallet_id).slice(-6) : null,
+        payoutStatus: target.status || 'NONE',
+        hasWallet: !!target.wallet,
+        walletIdEnd: target.wallet ? String(target.wallet).slice(-6) : null,
         platformFeePercent: env.platformFeePercent(),
       });
 
     case 'set_wallet': {
       const walletId = String(body.walletId || '').trim();
       assert(WALLET_RE.test(walletId), 400, 'Wallet ID inválido. Ele tem o formato xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx.');
-      await db().from('field').update({ asaas_wallet_id: walletId, payout_status: 'ACTIVE' }).eq('id', field.id);
+      const { error: upErr } = await db().from(target.table).update({ asaas_wallet_id: walletId, payout_status: 'ACTIVE' }).eq('id', target.id);
+      if (upErr) throw upErr;
       return json({ payoutStatus: 'ACTIVE', hasWallet: true, message: 'Conta de recebimento salva!' });
     }
 
     case 'create_account': {
-      assert(!field.asaas_wallet_id, 400, 'Este campo já tem conta de recebimento.');
+      assert(target.table === 'field', 400, 'Para times, informe o Wallet ID da sua conta Asaas.');
+      assert(!target.wallet, 400, 'Este campo já tem conta de recebimento.');
       const required = ['cpfCnpj', 'mobilePhone', 'incomeValue', 'address', 'addressNumber', 'province', 'postalCode'];
       for (const key of required) assert(body[key], 400, 'Preencha todos os dados para criar a conta.');
       const doc = String(body.cpfCnpj).replace(/\D/g, '');
@@ -62,7 +76,7 @@ export const POST = handle(async request => {
         postalCode: String(body.postalCode),
       });
       if (!account.walletId) throw new HttpError(502, 'O Asaas não retornou a carteira. Tente novamente.');
-      await db().from('field').update({ asaas_wallet_id: account.walletId, asaas_account_id: account.id, payout_status: 'ACTIVE' }).eq('id', field.id);
+      await db().from('field').update({ asaas_wallet_id: account.walletId, asaas_account_id: account.id, payout_status: 'ACTIVE' }).eq('id', target.id);
       return json({
         payoutStatus: 'ACTIVE',
         hasWallet: true,

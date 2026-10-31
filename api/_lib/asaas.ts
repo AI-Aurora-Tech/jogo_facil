@@ -102,8 +102,27 @@ export const asaas = {
 
   deletePayment: (id: string) => request('DELETE', `/payments/${id}`),
 
-  /** Cancela assinaturas antigas da mensalidade dos times (que não existe mais). */
+  /** Assinatura mensal. billingType UNDEFINED deixa o cliente escolher PIX, boleto ou cartão. */
+  createSubscription: (p: { customer: string; value: number; description: string; externalReference: string; nextDueDate: string }) =>
+    request<{ id: string; status: string }>('POST', '/subscriptions', {
+      customer: p.customer,
+      billingType: 'UNDEFINED',
+      cycle: 'MONTHLY',
+      value: p.value,
+      nextDueDate: p.nextDueDate,
+      description: p.description,
+      externalReference: p.externalReference,
+    }),
+
+  updateSubscriptionValue: (id: string, value: number, description: string) =>
+    request('POST', `/subscriptions/${id}`, { value, description, updatePendingPayments: true }),
+
+  getSubscription: (id: string) => request<{ id: string; status: string; value: number; deleted?: boolean }>('GET', `/subscriptions/${id}`),
+
   cancelSubscription: (id: string) => request('DELETE', `/subscriptions/${id}`),
+
+  listSubscriptionPayments: (id: string) =>
+    request<{ data: AsaasPayment[] }>('GET', `/subscriptions/${id}/payments?limit=10`),
 
   /** Subconta (white label) do dono do campo. Retorna o walletId usado no split. */
   createSubaccount: (p: {
