@@ -59,7 +59,8 @@ export const TeamAgenda: React.FC<TeamAgendaProps> = ({ currentUser, fields, onC
   const [arenaSlots, setArenaSlots] = useState<MatchSlot[]>([]);
   const [arenaSlotId, setArenaSlotId] = useState('');
   const [hgCategory, setHgCategory] = useState('');
-  const [hgFee, setHgFee] = useState(0);
+  // Vazio = mantém a taxa da arena (horário da arena) / sem taxa (local próprio)
+  const [hgFee, setHgFee] = useState('');
   const [hgDate, setHgDate] = useState(todayStr());
   const [hgTime, setHgTime] = useState('19:00');
   const [hgDuration, setHgDuration] = useState(60);
@@ -199,7 +200,9 @@ export const TeamAgenda: React.FC<TeamAgendaProps> = ({ currentUser, fields, onC
       }
       const ok = await run(async () => {
         const res = await api.match('book', arenaSlotId, { teamName: team.name, category: hgCategory });
-        if (hgFee >= 0) await api.match('set_fee', arenaSlotId, { price: hgType === 'AMISTOSO' ? 0 : hgFee });
+        // Só muda a taxa se o mandante digitou um valor (ou escolheu amistoso)
+        if (hgType === 'AMISTOSO') await api.match('set_fee', arenaSlotId, { price: 0 });
+        else if (hgFee.trim() !== '') await api.match('set_fee', arenaSlotId, { price: Number(hgFee.replace(',', '.')) || 0 });
         return res;
       });
       if (ok) setShowNewHome(false);
@@ -217,7 +220,7 @@ export const TeamAgenda: React.FC<TeamAgendaProps> = ({ currentUser, fields, onC
         time: hgTime,
         durationMinutes: hgDuration,
         location: hgLocation.trim(),
-        price: hgType === 'AMISTOSO' ? 0 : hgFee,
+        price: hgType === 'AMISTOSO' ? 0 : Number(hgFee.replace(',', '.')) || 0,
         matchType: hgType,
       })
     );
@@ -436,7 +439,7 @@ export const TeamAgenda: React.FC<TeamAgendaProps> = ({ currentUser, fields, onC
             {hgType !== 'AMISTOSO' && (
               <div>
                 <label className={label}>Taxa do adversário (R$) — você recebe</label>
-                <input type="number" min={0} className={input} value={hgFee} onChange={e => setHgFee(Number(e.target.value))} />
+                <input type="number" min={0} className={input} value={hgFee} onChange={e => setHgFee(e.target.value)} placeholder={homeMode === 'ARENA' ? 'Em branco: valor da arena' : 'Em branco: sem taxa'} />
               </div>
             )}
             <p className="text-[9px] font-bold text-gray-400 uppercase">Você é o mandante: aprova o adversário, define a taxa e recebe o valor (o repasse ao campo você combina direto com ele).</p>

@@ -191,7 +191,7 @@ export const MatchActions: React.FC<MatchActionsProps> = ({ slot, field, current
           slot={slot}
           opponentName={isOpponent ? firstName : opponentName}
           fieldName={field?.name || 'Campo'}
-          canRateField={currentUser.id !== ownerId}
+          canRateField={!!ownerId && currentUser.id !== ownerId}
           onClose={() => setShowRating(false)}
           onDone={() => { setShowRating(false); onChanged(); }}
         />

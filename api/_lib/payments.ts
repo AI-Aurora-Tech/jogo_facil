@@ -4,7 +4,7 @@ import { env } from './env.js';
 import { HttpError } from './http.js';
 import type { DbUser } from './auth.js';
 import { dateBR, firstTeamName, loadSlotField, loadSlot, toRuleSlot, type FieldRow, type SlotRow } from './slots.js';
-import { computeShares, firstTeamUserId, needsFieldApproval, statusAfterPayment, type PayerRole } from '../../shared/matchRules.js';
+import { computeShares, firstTeamUserId, hasHomeTeam, statusAfterPayment, type PayerRole } from '../../shared/matchRules.js';
 import { isValidCpfCnpj } from '../../shared/document.js';
 
 export interface PaymentRow {
@@ -87,12 +87,40 @@ export const payerRoleFor = (slot: SlotRow, userId: string): PayerRole | null =>
  * - horário livre do campo: o dono do campo.
  */
 export const payeeFor = async (slot: SlotRow, field: FieldRow): Promise<{ userId: string | null; walletId: string | null; isHomeTeam: boolean }> => {
-  if (!needsFieldApproval(toRuleSlot(slot), field.owner_id) && slot.home_team_user_id) {
-    const { data } = await db().from('user').select('asaas_wallet_id').eq('id', slot.home_team_user_id).maybeSingle();
-    return { userId: slot.home_team_user_id, walletId: data?.asaas_wallet_id || null, isHomeTeam: true };
+  const home = await trustedHomeUserId(slot, field);
+  if (home) {
+    const { data } = await db().from('user').select('asaas_wallet_id').eq('id', home).maybeSingle();
+    if (data?.asaas_wallet_id) return { userId: home, walletId: data.asaas_wallet_id, isHomeTeam: true };
+    // Mandante ainda sem conta de recebimento: numa arena, o valor vai para o campo (e o mandante é avisado)
+    if (field.id && field.asaas_wallet_id) {
+      await notify(home, 'Configure seus recebimentos 💰', `A taxa do jogo de ${dateBR(slot)} foi para a arena porque você ainda não configurou a conta de recebimento. Acesse Agenda > Recebimentos.`, 'warning');
+      return { userId: field.owner_id, walletId: field.asaas_wallet_id, isHomeTeam: false };
+    }
+    return { userId: home, walletId: null, isHomeTeam: true };
   }
   return { userId: field.owner_id || null, walletId: field.asaas_wallet_id || null, isHomeTeam: false };
 };
+
+/**
+ * Mandante que gerencia o horário (aprova o adversário, define e recebe a taxa).
+ * Só vale quando dá para confiar nos dados (o navegador consegue mexer em alguns campos do horário):
+ * - jogo em local próprio (sem campo, criado pelo servidor); ou
+ * - horário da arena ligado (home_team_id) a um time da casa/mensalista aprovado DESTA arena, cujo
+ *   responsável é o próprio home_team_user_id, e sem time de fora reservado.
+ * Nos outros casos o horário é do campo (null).
+ */
+export const trustedHomeUserId = async (slot: SlotRow, field: FieldRow): Promise<string | null> => {
+  if (!hasHomeTeam(toRuleSlot(slot)) || !slot.home_team_user_id) return null;
+  if (!slot.field_id) return slot.home_team_user_id;
+  if (slot.home_team_user_id === field.owner_id || !slot.home_team_id || slot.booked_by_user_id) return null;
+  const { data: team } = await db().from('registered_team').select('field_id, captain_user_id, status').eq('id', slot.home_team_id).maybeSingle();
+  const ok = !!team && team.field_id === slot.field_id && team.captain_user_id === slot.home_team_user_id && ['approved', 'active'].includes(team.status || '');
+  return ok ? slot.home_team_user_id : null;
+};
+
+/** O campo precisa aprovar o jogo? Só nos horários do campo (sem mandante confiável). */
+export const fieldMustApprove = async (slot: SlotRow, field: FieldRow): Promise<boolean> =>
+  !!field.id && !(await trustedHomeUserId(slot, field));
 
 /**
  * Cria (ou reaproveita) a cobrança PIX do time.
@@ -207,7 +235,7 @@ export const markPaymentPaid = async (paymentId: string): Promise<void> => {
   const shares = computeShares(toRuleSlot(slot));
   const allPaid = shares.every(s => (s.role === 'FIRST' ? slot.first_team_paid : slot.opponent_paid));
   if (allPaid && slot.status === 'pending_payment') {
-    const needsField = needsFieldApproval(toRuleSlot(slot), field.owner_id);
+    const needsField = await fieldMustApprove(slot, field);
     const { data: moved } = await db()
       .from('match_slot')
       .update({

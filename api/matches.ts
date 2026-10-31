@@ -24,9 +24,12 @@ import {
   publicPayment,
   refundAndCancelPayments,
   syncPendingPayments,
+  trustedHomeUserId,
+  fieldMustApprove,
 } from './_lib/payments.js';
 import { findValidInvite, markInviteUsed } from './_lib/invites.js';
 import { loadHomeTeam } from './_lib/homeTeams.js';
+import { countBillableCategories, monthlyPriceForCategories } from '../shared/pricing.js';
 import {
   canRate,
   canSetResult,
@@ -37,7 +40,6 @@ import {
   opponentApproverId,
   opponentShare,
   statusAfterTeamApproval,
-  needsFieldApproval,
   FIELD_RATING_TAGS,
   TEAM_RATING_TAGS,
 } from '../shared/matchRules.js';
@@ -53,6 +55,22 @@ type Ctx = { user: DbUser; actor: DbUser; slot: SlotRow; field: FieldRow; body: 
 
 const isFieldOwner = (c: Ctx) => c.field.owner_id === c.user.id || isAdmin(c.actor);
 const money = (n: number) => `R$ ${n.toFixed(2).replace('.', ',')}`;
+
+/**
+ * Mensalidade: 1ª categoria grátis; com mais categorias a assinatura precisa estar ativa e cobrir
+ * todas elas (o app também bloqueia, mas a conferência que vale é esta).
+ */
+const requireSubscription = (user: DbUser) => {
+  const count = countBillableCategories(user.teams);
+  if (monthlyPriceForCategories(count) <= 0) return;
+  const billed = user.billed_categories == null ? count : Number(user.billed_categories) || 0;
+  assert(
+    user.billing_status === 'ACTIVE' && billed >= count,
+    402,
+    'Sua mensalidade não cobre todas as categorias do seu time (1ª categoria grátis, R$ 19,99 por categoria adicional). Abra "Minha mensalidade" no perfil para regularizar.',
+    'NEED_SUBSCRIPTION'
+  );
+};
 
 const requireFuture = (slot: SlotRow) => {
   assert(matchStart(toRuleSlot(slot)).getTime() > Date.now(), 400, 'Este horário já passou.');
@@ -80,6 +98,7 @@ const myHomeTeamAtField = async (userId: string, fieldId: string, teamName: stri
  */
 const book = async ({ user, slot, field, body }: Ctx) => {
   assert(user.role === 'TEAM_CAPTAIN', 403, 'Apenas donos de time podem reservar horários.');
+  requireSubscription(user);
   assert(slot.status === 'available' && !hasHomeTeam(toRuleSlot(slot)), 409, 'Este horário não está mais livre.', 'STALE');
   requireFuture(slot);
   const team = findUserTeam(user, body.teamName, body.category);
@@ -185,6 +204,7 @@ const assignHome = async (c: Ctx) => {
 /** Adversário se inscreve num horário que já tem o time 1. */
 const apply = async ({ user, slot, field, body }: Ctx) => {
   assert(user.role === 'TEAM_CAPTAIN', 403, 'Apenas donos de time podem se candidatar.');
+  requireSubscription(user);
   assert(slot.status === 'waiting_opponent', 409, 'Este jogo não está mais aberto para adversários.', 'STALE');
   requireFuture(slot);
 
@@ -242,7 +262,7 @@ const apply = async ({ user, slot, field, body }: Ctx) => {
  */
 const afterOpponentApproved = async (slot: SlotRow, field: FieldRow, from: string | string[], patch: Record<string, unknown> = {}) => {
   const merged = { ...slot, ...patch } as SlotRow;
-  const needsField = needsFieldApproval(toRuleSlot(merged), field.owner_id);
+  const needsField = await fieldMustApprove(merged, field);
   const next = statusAfterTeamApproval(toRuleSlot(merged), needsField);
   const now = new Date().toISOString();
   const updated = await updateSlotIfStatus(slot.id, from, {
@@ -354,6 +374,16 @@ const cancel = async (c: Ctx) => {
     return { slot: updated, message: 'Jogo cancelado.' };
   }
 
+  // Jogo em local próprio: não tem campo, quem cancela (em qualquer etapa, com estorno) é o mandante
+  if (!slot.field_id && slot.home_team_user_id === user.id) {
+    assert(!['finished', 'rejected'].includes(slot.status), 400, 'Este jogo não pode mais ser cancelado.');
+    const reason = String(c.body.reason || 'Cancelado pelo mandante').slice(0, 300);
+    const refunded = await refundAndCancelPayments(slot.id, reason);
+    const updated = await updateSlotIfStatus(slot.id, slot.status, { status: 'rejected', field_decision_reason: reason });
+    await notify(slot.opponent_user_id, 'Jogo cancelado pelo mandante', `O jogo de ${dateBR(slot)} foi cancelado: ${reason}.${refunded ? ' O valor pago será estornado.' : ''}`, 'warning');
+    return { slot: updated, message: refunded ? 'Jogo cancelado. Os pagamentos foram estornados.' : 'Jogo cancelado.' };
+  }
+
   const cancellable = ['waiting_opponent', 'pending_home_approval', 'pending_payment'];
   assert(cancellable.includes(slot.status), 400, 'Depois do pagamento, fale com o campo para cancelar.');
   assert(!anyPaid, 400, 'Já existe pagamento feito. Fale com o campo para cancelar e receber o estorno.');
@@ -378,7 +408,10 @@ const cancel = async (c: Ctx) => {
   // Mandante (time da casa/mensalista) libera o horário enquanto ainda não tem adversário
   if (hasHomeTeam(toRuleSlot(slot)) && slot.home_team_user_id === user.id && user.id !== field.owner_id) {
     assert(slot.status === 'waiting_opponent' && !slot.opponent_user_id, 400, 'Já tem adversário inscrito. Recuse o adversário ou fale com o campo para cancelar.');
-    const updated = await updateSlotIfStatus(slot.id, 'waiting_opponent', { ...CLEAR_OPPONENT, ...CLEAR_FIRST_TEAM, ...CLEAR_HOME_TEAM, status: 'available' });
+    // O horário volta para a arena com o valor dela (o mandante pode ter mudado a taxa)
+    const updated = await updateSlotIfStatus(slot.id, 'waiting_opponent', {
+      ...CLEAR_OPPONENT, ...CLEAR_FIRST_TEAM, ...CLEAR_HOME_TEAM, status: 'available', price: Number(field.hourly_rate) || 0,
+    });
     await notify(field.owner_id, 'Mandante liberou o horário', `${firstTeamName(slot)} não vai jogar em ${dateBR(slot)}. O horário voltou a ficar livre.`, 'info');
     return { slot: updated, message: 'Horário liberado.' };
   }
@@ -435,7 +468,8 @@ const rate = async ({ user, slot, field, body }: Ctx) => {
     rows.push({ slot_id: slot.id, rater_user_id: user.id, rater_team_name: raterTeam, target_type: 'TEAM', target_user_id: target.userId, target_team_name: target.team, score: teamScore, tags: tags(body.teamTags, TEAM_RATING_TAGS), comment });
   }
   const fieldScore = score(body.fieldScore);
-  if (fieldScore && user.id !== field.owner_id) {
+  // Jogo em local próprio do mandante não tem campo para avaliar
+  if (fieldScore && field.id && user.id !== field.owner_id) {
     rows.push({ slot_id: slot.id, rater_user_id: user.id, rater_team_name: raterTeam, target_type: 'FIELD', target_field_id: field.id, score: fieldScore, tags: tags(body.fieldTags, FIELD_RATING_TAGS), comment });
   }
   assert(rows.length > 0, 400, 'Dê uma nota de 1 a 5 estrelas.');
@@ -457,11 +491,12 @@ const quote = async ({ slot }: Ctx) => ({ opponentShare: opponentShare(toRuleSlo
 /** Mandante define a taxa que o adversário paga (antes de gerar cobrança). */
 const setFee = async ({ user, slot, field, body }: Ctx) => {
   const rule = toRuleSlot(slot);
-  assert(hasHomeTeam(rule) && slot.home_team_user_id === user.id && !needsFieldApproval(rule, field.owner_id), 403, 'Somente o time mandante define a taxa deste jogo.');
-  assert(['waiting_opponent', 'pending_home_approval'].includes(slot.status), 409, 'A taxa só pode mudar antes de aprovar o adversário.', 'STALE');
+  assert(hasHomeTeam(rule) && (await trustedHomeUserId(slot, field)) === user.id, 403, 'Somente o time mandante define a taxa deste jogo.');
+  // Depois que um adversário se inscreve, a taxa não muda mais (ele aceitou o valor mostrado)
+  assert(slot.status === 'waiting_opponent' && !slot.opponent_user_id, 409, 'A taxa só pode mudar enquanto o jogo não tem adversário.', 'STALE');
   const price = Math.round(Number(body.price) * 100) / 100;
   assert(Number.isFinite(price) && price >= 0 && price <= 5000, 400, 'Taxa inválida.');
-  const { data, error } = await db().from('match_slot').update({ price }).eq('id', slot.id).in('status', ['waiting_opponent', 'pending_home_approval']).select('*');
+  const { data, error } = await db().from('match_slot').update({ price }).eq('id', slot.id).eq('status', 'waiting_opponent').is('opponent_user_id', null).select('*');
   if (error) throw error;
   assert(data && data.length > 0, 409, 'Esta partida acabou de mudar. Atualize a tela.', 'STALE');
   return { slot: data[0], message: price > 0 ? `Taxa do adversário: ${money(price)}.` : 'Jogo sem taxa.' };
@@ -534,6 +569,7 @@ const loadInvite = async (slot: SlotRow, userId: string, inviteId: unknown) => {
 /** Visitante aceita o convite: entra como adversário já aprovado pelo mandante. */
 const acceptInvite = async ({ user, slot, field, body }: Ctx) => {
   assert(user.role === 'TEAM_CAPTAIN', 403, 'Entre com uma conta de dono de time.');
+  requireSubscription(user);
   const inv = await loadInvite(slot, user.id, body.inviteId);
   assert(slot.status === 'waiting_opponent' && !slot.opponent_user_id, 409, 'Este jogo já tem adversário.', 'STALE');
   requireFuture(slot);
@@ -573,6 +609,7 @@ const declineInvite = async ({ user, slot, body }: Ctx) => {
  */
 const createHomeGame = async (user: DbUser, body: any) => {
   assert(user.role === 'TEAM_CAPTAIN', 403, 'Apenas donos de time podem criar jogos em casa.');
+  requireSubscription(user);
   const category = String(body.category || '').trim();
   const team = findUserTeam(user, body.teamName, category);
   const date = String(body.date || '');
