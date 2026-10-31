@@ -626,6 +626,18 @@ const createHomeGame = async (user: DbUser, body: any) => {
   assert(matchStart(toRuleSlot({ ...draft, status: 'available' } as SlotRow)).getTime() > Date.now(), 400, 'Este horário já passou.');
   await assertNoCategoryConflict(user.id, team.name, category, draft);
 
+  // Veio do link de um time que quer jogar fora: o jogo já nasce com convite para esse time
+  let visitor: any = null;
+  if (body.inviteAvailabilityId) {
+    const { data: a } = await db().from('team_availability').select('*').eq('id', String(body.inviteAvailabilityId)).maybeSingle();
+    assert(a, 404, 'Este horário do time não está mais disponível.');
+    assert(a.user_id !== user.id, 400, 'Escolha um time adversário.');
+    assert(a.date === date, 400, 'A data precisa ser a mesma que o time escolheu.');
+    assert(time >= hm(a.start_time) && time <= hm(a.end_time), 400, `O horário precisa estar entre ${hm(a.start_time)} e ${hm(a.end_time)}.`);
+    assert(a.category === category, 400, `O jogo precisa ser da categoria ${a.category}.`);
+    visitor = a;
+  }
+
   const { data, error } = await db().from('match_slot').insert([{
     field_id: null,
     custom_location: location,
@@ -650,6 +662,14 @@ const createHomeGame = async (user: DbUser, body: any) => {
     sport: team.sport || 'Futebol',
   }]).select('*').single();
   if (error) throw error;
+  if (visitor) {
+    const { error: invErr } = await db().from('away_invite').insert([{
+      slot_id: data.id, availability_id: visitor.id, from_user_id: user.id, to_user_id: visitor.user_id, to_team_name: visitor.team_name, category: visitor.category,
+    }]);
+    if (invErr) throw invErr;
+    await notify(visitor.user_id, 'Convite para jogar fora ⚽', `${team.name} convidou o ${visitor.team_name} (${visitor.category}) para jogar em ${location}, ${dateBR(data)}. Abra "Agenda" para aceitar.`, 'info');
+    return { slot: data, message: `Convite enviado para ${visitor.team_name}! Quando eles aceitarem, o jogo aparece em "Meus Jogos".` };
+  }
   return { slot: data, message: 'Jogo em casa criado! Envie o convite ou convide um visitante disponível.' };
 };
 
