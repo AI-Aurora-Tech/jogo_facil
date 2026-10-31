@@ -283,7 +283,8 @@ export const CATEGORY_ORDER = [
   "Sport", "35+", "40+", "45+", "50+", "60+", "70+"
 ];
 
-export const SPORTS = ["Futebol", "Society", "Vôlei", "Beach Tennis", "Tênis", "Basquete", "Handball"];
+/** O app é só de futebol. (Para voltar a ter outros esportes, inclua aqui: as telas mostram a escolha quando há mais de um.) */
+export const SPORTS = ["Futebol"];
 
 /**
  * Interface representing the result of a PIX receipt verification processed by AI.

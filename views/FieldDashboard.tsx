@@ -1597,6 +1597,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                           <option value="AMISTOSO">Amistoso (taxa R$ 0)</option>
                        </select>
                     </div>
+                    {SPORTS.length > 1 && (
                     <div className="bg-gray-50 p-4 rounded-2xl border">
                        <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Esporte</label>
                        <select 
@@ -1608,6 +1609,7 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                           {SPORTS.map(s => <option key={s} value={s}>{s}</option>)}
                        </select>
                     </div>
+                    )}
                  </div>
                  <div className="grid grid-cols-2 gap-4">
                     <div className="bg-gray-50 p-4 rounded-2xl border">
@@ -1707,12 +1709,14 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                    <option value="AMISTOSO">Amistoso (R$ 0)</option>
                 </select>
               </div>
+              {SPORTS.length > 1 && (
               <div>
                 <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Esporte</label>
                 <select className="w-full bg-gray-50 p-3 rounded-xl border font-bold text-sm uppercase" value={autoGenSport} onChange={e => setAutoGenSport(e.target.value)}>
                    {SPORTS.map(s => <option key={s} value={s}>{s}</option>)}
                 </select>
               </div>
+              )}
               <div>
                 <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Quadra</label>
                 <select className="w-full bg-gray-50 p-3 rounded-xl border font-bold text-sm uppercase" value={autoGenCourt} onChange={e => setAutoGenCourt(e.target.value)}>
@@ -1752,12 +1756,14 @@ export const FieldDashboard: React.FC<FieldDashboardProps> = ({
                     <input className="w-full bg-transparent font-black outline-none text-pitch" value={mensalistaName} onChange={e => setMensalistaName(e.target.value)} placeholder={teamKind === 'LOCAL' ? 'Ex.: Arena FC' : 'Ex.: Amigos do Bairro'} />
                  </div>
                  <div className="grid grid-cols-2 gap-4">
+                    {SPORTS.length > 1 && (
                     <div className="bg-gray-50 p-4 rounded-2xl border">
                        <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Esporte</label>
                        <select className="w-full bg-transparent font-black outline-none text-xs" value={mensalistaSport} onChange={e => setMensalistaSport(e.target.value)}>
                           {SPORTS.map(s => <option key={s} value={s}>{s}</option>)}
                        </select>
                     </div>
+                    )}
                     <div className="bg-gray-50 p-4 rounded-2xl border">
                        <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Gênero</label>
                        <select className="w-full bg-transparent font-black outline-none text-xs uppercase" value={mensalistaGender} onChange={e => setMensalistaGender(e.target.value as Gender)}>

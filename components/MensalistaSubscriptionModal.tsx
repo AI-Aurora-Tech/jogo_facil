@@ -165,12 +165,14 @@ export const MensalistaSubscriptionModal: React.FC<MensalistaSubscriptionModalPr
           </div>
 
           <div className="grid grid-cols-2 gap-4">
+            {SPORTS.length > 1 && (
             <div className="bg-gray-50 p-4 rounded-2xl border">
               <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Esporte</label>
               <select className="w-full bg-transparent font-black outline-none text-[10px] uppercase" value={sport} onChange={e => setSport(e.target.value)}>
                 {SPORTS.map(s => <option key={s} value={s}>{s}</option>)}
               </select>
             </div>
+            )}
             <div className="bg-gray-50 p-4 rounded-2xl border">
               <label className="text-[8px] font-black text-gray-400 uppercase block mb-1">Quadra/Local</label>
               <select 

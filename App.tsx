@@ -469,6 +469,7 @@ const App: React.FC = () => {
       <TeamAgendaLanding
         token={agendaToken}
         currentUser={user}
+        onUserUpdated={saveSessionUser}
         onAuth={(mode, category) => {
           setAuthOptions({ mode, inviteCategory: mode === 'REGISTER' ? category : undefined });
           setView('AUTH');
@@ -933,7 +934,7 @@ const App: React.FC = () => {
                       <UserPlus className="w-5 h-5" /> Convidar Amigos
                   </button>
                   <button onClick={() => setShowHelpModal(true)} className="w-full py-5 bg-blue-50 text-blue-600 rounded-3xl font-black flex items-center justify-center gap-3 uppercase text-xs shadow-xl active:scale-95 transition-transform">
-                      <HelpCircle className="w-5 h-5" /> Ajuda e Tutoriais
+                      <HelpCircle className="w-5 h-5" /> Ajuda
                   </button>
                   <button onClick={() => setShowProfileModal(true)} className="w-full py-5 bg-[#022c22] text-white rounded-3xl font-black flex items-center justify-center gap-3 uppercase text-xs shadow-xl active:scale-95 transition-transform">
                       <Settings className="w-5 h-5 text-[#10b981]" /> Configurações
