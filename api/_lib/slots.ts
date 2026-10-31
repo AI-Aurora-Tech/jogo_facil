@@ -63,6 +63,22 @@ export const loadSlot = async (id: string): Promise<SlotRow> => {
   return data as SlotRow;
 };
 
+/**
+ * Campo do horário. Jogo em local próprio do mandante (sem campo no app) devolve um
+ * "campo" vazio: sem dono (ninguém aprova pelo campo) e com o endereço digitado pelo time.
+ */
+export const loadSlotField = async (slot: SlotRow): Promise<FieldRow> => {
+  if (slot.field_id) return loadField(slot.field_id);
+  return {
+    id: '',
+    owner_id: '',
+    name: slot.custom_location || 'Local do mandante',
+    location: slot.custom_location || null,
+    asaas_wallet_id: null,
+    payout_status: null,
+  };
+};
+
 export const loadField = async (id: string): Promise<FieldRow> => {
   const { data, error } = await db().from('field').select('*').eq('id', id).maybeSingle();
   if (error) throw error;

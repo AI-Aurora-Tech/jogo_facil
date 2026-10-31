@@ -4,19 +4,23 @@ import { Landing } from './views/Landing';
 import { Auth, AuthMode } from './views/Auth';
 import { InviteLanding } from './views/InviteLanding';
 import { TeamInviteLanding } from './views/TeamInviteLanding';
+import { TeamAgenda } from './views/TeamAgenda';
+import { TeamAgendaLanding } from './views/TeamAgendaLanding';
 import { FieldDashboard } from './views/FieldDashboard';
 import { TeamDashboard } from './views/TeamDashboard';
 import { EditProfileModal, PasswordChange } from './components/EditProfileModal';
 import { HelpModal } from './views/HelpModal';
 import { MensalistaSubscriptionModal } from './components/MensalistaSubscriptionModal';
+import { Subscription } from './views/Subscription';
+import { monthlyPriceForTeams, countBillableCategories, formatBRL } from './shared/pricing';
 import { api, sessionToken, setActAsUser } from './api';
-import { RefreshCw, Settings, Building2, Shield, Search, Loader2, Bell, X, Info, History, KeyRound, Eye, LogOut, Smartphone, Download, Share, Trophy, Users, UserPlus, HelpCircle } from 'lucide-react';
+import { RefreshCw, Settings, Building2, Shield, Search, Loader2, Bell, X, Info, History, KeyRound, Eye, LogOut, Smartphone, Download, Share, Trophy, Crown, Users, UserPlus, CalendarDays, HelpCircle } from 'lucide-react';
 import { supabase } from './supabaseClient';
 
 const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
   const [view, setView] = useState<'LANDING' | 'AUTH' | 'APP'>('LANDING');
-  const [activeTab, setActiveTab] = useState<'EXPLORE' | 'MY_GAMES' | 'ADMIN' | 'PROFILE' | 'SUPER'>('EXPLORE');
+  const [activeTab, setActiveTab] = useState<'EXPLORE' | 'MY_GAMES' | 'AGENDA' | 'ADMIN' | 'PROFILE' | 'SUPER'>('EXPLORE');
   const [notifPermission, setNotifPermission] = useState<NotificationPermission | 'unsupported'>(() => {
     if (!("Notification" in window)) return 'unsupported';
     return Notification.permission;
@@ -25,6 +29,8 @@ const App: React.FC = () => {
   const [showHelpModal, setShowHelpModal] = useState(false);
   const [showMensalistaSubModal, setShowMensalistaSubModal] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
+  const [showNeedsSubscription, setShowNeedsSubscription] = useState(false);
+  const [showSubscriptionPage, setShowSubscriptionPage] = useState(false);
   const [fieldDashForceTab, setFieldDashForceTab] = useState<'AGENDA' | 'SOLICITACOES' | 'MENSALISTAS' | 'HISTORICO' | undefined>(undefined);
   // Link de convite (?convite=TOKEN): guardado até a pessoa entrar/criar conta
   const [inviteToken, setInviteToken] = useState<string | null>(() => {
@@ -38,6 +44,22 @@ const App: React.FC = () => {
       return sessionStorage.getItem('jf_invite');
     } catch { return null; }
   });
+  // Link exclusivo da agenda de um time (?agenda=TOKEN)
+  const [agendaToken, setAgendaToken] = useState<string | null>(() => {
+    try {
+      const fromUrl = new URLSearchParams(window.location.search).get('agenda');
+      if (fromUrl) {
+        sessionStorage.setItem('jf_agenda', fromUrl);
+        window.history.replaceState({}, document.title, window.location.pathname);
+        return fromUrl;
+      }
+      return sessionStorage.getItem('jf_agenda');
+    } catch { return null; }
+  });
+  const clearAgenda = () => {
+    try { sessionStorage.removeItem('jf_agenda'); } catch { /* ignore */ }
+    setAgendaToken(null);
+  };
   // Convite de time do campo (?time=TOKEN): mensalista ou time da casa
   const [teamInviteToken, setTeamInviteToken] = useState<string | null>(() => {
     try {
@@ -73,6 +95,17 @@ const App: React.FC = () => {
   
   const [isIOS] = useState(() => /iphone|ipad|ipod/.test(window.navigator.userAgent.toLowerCase()));
   const [isStandalone, setIsStandalone] = useState(false);
+
+  // Mensalidade: dono de time com mais de 1 categoria precisa estar com a assinatura ativa.
+  // (1ª categoria grátis para todos; R$ 19,99 por categoria adicional)
+  useEffect(() => {
+    if (!user || impersonatingUser || user.role !== UserRole.TEAM_CAPTAIN) {
+      setShowNeedsSubscription(false);
+      return;
+    }
+    const price = monthlyPriceForTeams(user.teams);
+    setShowNeedsSubscription(price > 0 && user.billingStatus !== 'ACTIVE');
+  }, [user, impersonatingUser]);
 
   // Admin geral acessando outra conta: as ações no servidor vão em nome dela
   useEffect(() => {
@@ -333,6 +366,9 @@ const App: React.FC = () => {
     await refreshData();
     
     const t = n.title.toLowerCase();
+    if (user?.role === UserRole.TEAM_CAPTAIN && (t.includes('jogar fora') || t.includes('recebimentos') || t.includes('convite aceito'))) {
+      setActiveTab('AGENDA');
+    }
     if (user?.role === UserRole.FIELD_OWNER && (t.includes('desafio') || t.includes('mensalista') || t.includes('aprove') || t.includes('pagamento'))) {
       setActiveTab('ADMIN');
       setFieldDashForceTab('SOLICITACOES');
@@ -355,8 +391,15 @@ const App: React.FC = () => {
         }
       }
 
-      const resUser = await api.updateUser(updatedUser);
+      let resUser = await api.updateUser(updatedUser);
       if (resUser.role === UserRole.TEAM_CAPTAIN) {
+        // Ajusta a mensalidade ao novo número de categorias
+        try {
+          await api.billing('sync');
+          resUser = await api.getUserById(resUser.id);
+        } catch (e) {
+          console.warn('Não foi possível sincronizar a mensalidade', e);
+        }
         // Time da casa: o campo usa as categorias do time ao criar horários com mandante
         await api.syncHomeTeamCategories(resUser).catch(e => console.warn('Não foi possível atualizar o time da casa', e));
       }
@@ -417,6 +460,30 @@ const App: React.FC = () => {
         <Loader2 className="w-12 h-12 text-[#10b981] animate-spin mb-4" />
         <h1 className="text-xl font-black italic uppercase tracking-tighter">Jogo Fácil</h1>
       </div>
+    );
+  }
+
+  // Link exclusivo da agenda de um time, antes ou depois de entrar
+  if (agendaToken && view !== 'AUTH' && !impersonatingUser) {
+    return (
+      <TeamAgendaLanding
+        token={agendaToken}
+        currentUser={user}
+        onAuth={(mode, category) => {
+          setAuthOptions({ mode, inviteCategory: mode === 'REGISTER' ? category : undefined });
+          setView('AUTH');
+        }}
+        onDone={() => {
+          clearAgenda();
+          setView('APP');
+          setActiveTab('MY_GAMES');
+          refreshData();
+        }}
+        onDismiss={() => {
+          clearAgenda();
+          setView(user ? 'APP' : 'LANDING');
+        }}
+      />
     );
   }
 
@@ -495,7 +562,34 @@ const App: React.FC = () => {
     );
   }
 
+  // Mensalidade pendente (bloqueia o app) ou tela "Minha mensalidade"
+  if (user && (showNeedsSubscription || showSubscriptionPage) && !impersonatingUser && !teamInviteToken && !inviteToken && !agendaToken) {
+    return (
+      <>
+        <Subscription
+          user={user}
+          blocking={showNeedsSubscription}
+          onLogout={handleLogout}
+          onBack={() => setShowSubscriptionPage(false)}
+          onEditCategories={() => setShowProfileModal(true)}
+          onUserUpdated={saveSessionUser}
+        />
+        {showProfileModal && (
+          <EditProfileModal
+            categories={categories}
+            user={user}
+            field={undefined}
+            onUpdate={handleUpdateProfile}
+            onClose={() => setShowProfileModal(false)}
+          />
+        )}
+      </>
+    );
+  }
+
   const currentUserContext = impersonatingUser || user;
+  // Selo PRO: dono de time com mensalidade ativa
+  const isPro = !!currentUserContext && currentUserContext.role === UserRole.TEAM_CAPTAIN && currentUserContext.billingStatus === 'ACTIVE';
   const unreadNotifs = notifications.filter(n => !n.read).length;
 
   return (
@@ -543,6 +637,11 @@ const App: React.FC = () => {
                 {user && (
                     <div className="flex items-center gap-2 mt-1">
                         <span className="text-[8px] font-bold text-gray-400 uppercase tracking-widest">Olá, {currentUserContext?.name.split(' ')[0]}</span>
+                        {isPro && (
+                           <span className="bg-yellow-400 text-pitch px-2 py-0.5 rounded-full text-[8px] font-black uppercase flex items-center gap-1">
+                              <Crown className="w-2 h-2" /> PRO
+                           </span>
+                        )}
                     </div>
                 )}
             </div>
@@ -706,6 +805,10 @@ const App: React.FC = () => {
             />
         )}
 
+        {activeTab === 'AGENDA' && currentUserContext?.role === UserRole.TEAM_CAPTAIN && (
+            <TeamAgenda currentUser={currentUserContext} fields={fields} onChanged={refreshData} />
+        )}
+
         {activeTab === 'ADMIN' && currentUserContext && (
           currentUserContext.role === UserRole.FIELD_OWNER ? (
             (() => {
@@ -771,7 +874,18 @@ const App: React.FC = () => {
                 <h2 className="text-2xl font-black text-pitch italic uppercase tracking-tighter leading-none">{currentUserContext.name}</h2>
                 <div className="flex items-center gap-2 mt-2">
                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{currentUserContext.role}</p>
+                   {isPro && (
+                      <span className="bg-yellow-400 text-pitch px-2 py-0.5 rounded-full text-[8px] font-black uppercase flex items-center gap-1">
+                          <Crown className="w-2 h-2" /> PRO
+                      </span>
+                   )}
                 </div>
+                {currentUserContext.role === UserRole.TEAM_CAPTAIN && (
+                  <div className="mt-4 text-xs font-bold text-gray-500 text-center">
+                    {countBillableCategories(currentUserContext.teams)} categoria(s) •{' '}
+                    {monthlyPriceForTeams(currentUserContext.teams) > 0 ? `${formatBRL(monthlyPriceForTeams(currentUserContext.teams))}/mês` : 'Plano grátis (1 categoria)'}
+                  </div>
+                )}
                 
                 <div className="w-full mt-10 space-y-3">
                   {!isStandalone && (deferredPrompt || isIOS) && (
@@ -783,6 +897,15 @@ const App: React.FC = () => {
                     </button>
                   )}
                   
+                  {currentUserContext.role === UserRole.TEAM_CAPTAIN && !impersonatingUser && (
+                    <button
+                      onClick={() => setShowSubscriptionPage(true)}
+                      className="w-full py-5 bg-yellow-400 text-pitch rounded-3xl font-black flex items-center justify-center gap-3 uppercase text-xs shadow-xl active:scale-95 transition-transform"
+                    >
+                      <Crown className="w-5 h-5" /> Minha mensalidade
+                    </button>
+                  )}
+
                   {currentUserContext.role === UserRole.TEAM_CAPTAIN && (
                     <button 
                       onClick={() => setShowMensalistaSubModal(true)} 
@@ -835,10 +958,16 @@ const App: React.FC = () => {
               </button>
               
               {currentUserContext?.role === UserRole.TEAM_CAPTAIN ? (
-                <button onClick={() => setActiveTab('MY_GAMES')} className={`flex flex-col items-center gap-1 ${activeTab === 'MY_GAMES' ? 'text-[#10b981]' : 'text-gray-300'}`}>
-                  <History className="w-6 h-6" />
-                  <span className="text-[8px] font-black uppercase">Meus Jogos</span>
-                </button>
+                <>
+                  <button onClick={() => setActiveTab('MY_GAMES')} className={`flex flex-col items-center gap-1 ${activeTab === 'MY_GAMES' ? 'text-[#10b981]' : 'text-gray-300'}`}>
+                    <History className="w-6 h-6" />
+                    <span className="text-[8px] font-black uppercase">Meus Jogos</span>
+                  </button>
+                  <button onClick={() => setActiveTab('AGENDA')} className={`flex flex-col items-center gap-1 ${activeTab === 'AGENDA' ? 'text-[#10b981]' : 'text-gray-300'}`}>
+                    <CalendarDays className="w-6 h-6" />
+                    <span className="text-[8px] font-black uppercase">Agenda</span>
+                  </button>
+                </>
               ) : (
                 <button onClick={() => setActiveTab('ADMIN')} className={`flex flex-col items-center gap-1 ${activeTab === 'ADMIN' ? 'text-[#10b981]' : 'text-gray-300'}`}>
                   <Building2 className="w-6 h-6" />

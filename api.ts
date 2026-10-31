@@ -1,8 +1,8 @@
 import { supabase } from './supabaseClient';
-import { User, Field, MatchSlot, RegisteredTeam, PendingUpdate, UserRole, InAppNotification, SubscriptionPlan, TutorialVideo, MatchPaymentInfo, InvitePreview, TeamInvitePreview } from './types';
+import { User, Field, MatchSlot, RegisteredTeam, PendingUpdate, UserRole, InAppNotification, SubscriptionPlan, TutorialVideo, MatchPaymentInfo, InvitePreview, TeamInvitePreview, PublicAgenda, MyAgenda } from './types';
 
 const SESSION_TOKEN_KEY = 'jf_session_token';
-const USER_COLUMNS = 'id, email, name, phone_number, role, subscription, subscription_expiry, teams, latitude, longitude, team_rating, team_rating_count, is_subscribed, subscription_id, created_at, cpf_cnpj';
+const USER_COLUMNS = 'id, email, name, phone_number, role, subscription, subscription_expiry, teams, latitude, longitude, team_rating, team_rating_count, is_subscribed, subscription_id, created_at, billing_status, billing_value, cpf_cnpj';
 
 export const sessionToken = {
   get: (): string | null => {
@@ -66,9 +66,35 @@ const callServer = async <T = any>(path: string, body?: Record<string, unknown>,
   return data as T;
 };
 
+export const CUSTOM_FIELD_PREFIX = 'custom:';
+
+/**
+ * "Campos" virtuais para os jogos em local próprio do mandante, para as telas que
+ * mostram o horário junto com o campo (nome, endereço, foto).
+ */
+export const customFieldsFor = (slots: MatchSlot[]): Field[] =>
+  slots
+    .filter(s => s.fieldId.startsWith(CUSTOM_FIELD_PREFIX))
+    .map(s => ({
+      id: s.fieldId,
+      ownerId: '',
+      name: `${s.localTeamName || 'Mandante'} • local próprio`,
+      location: s.customLocation || '',
+      hourlyRate: 0,
+      cancellationFeePercent: 0,
+      pixConfig: { key: '', name: '' },
+      imageUrl: 'https://images.unsplash.com/photo-1529900748604-07564a03e7a6?auto=format&fit=crop&q=80&w=1000',
+      contactPhone: s.localTeamPhone || '',
+      latitude: 0,
+      longitude: 0,
+      courts: [],
+    }));
+
 const mapSlotFromDb = (s: any): MatchSlot => ({
   id: s.id,
-  fieldId: s.field_id,
+  // Jogo em local próprio do mandante (sem campo no app): id de campo virtual, ver customFieldsFor
+  fieldId: s.field_id || `${CUSTOM_FIELD_PREFIX}${s.id}`,
+  customLocation: s.custom_location || undefined,
   date: s.date,
   time: typeof s.time === 'string' ? s.time.slice(0, 5) : s.time,
   durationMinutes: s.duration_minutes,
@@ -177,10 +203,12 @@ const mapUserFromDb = (u: any): User => ({
   createdAt: u.created_at,
   isSubscribed: u.role === UserRole.FIELD_OWNER || u.is_subscribed || u.subscription === SubscriptionPlan.PRO_TEAM || u.subscription === SubscriptionPlan.PRO_FIELD,
   subscriptionId: u.subscription_id,
+  billingStatus: u.billing_status || undefined,
+  billingValue: u.billing_value != null ? Number(u.billing_value) : undefined,
   cpfCnpj: u.cpf_cnpj || undefined,
 });
 
-export type MatchAction = 'book' | 'apply' | 'assign_home' | 'team_decision' | 'payment_status' | 'field_decision' | 'cancel' | 'set_result' | 'rate' | 'my_ratings';
+export type MatchAction = 'book' | 'apply' | 'assign_home' | 'set_fee' | 'visitors' | 'invite_visitor' | 'accept_invite' | 'decline_invite' | 'team_decision' | 'payment_status' | 'field_decision' | 'cancel' | 'set_result' | 'rate' | 'my_ratings';
 
 export const api = {
   login: async (email: string, password: string): Promise<User> => {
@@ -304,7 +332,7 @@ export const api = {
     return mapUserFromDb(data);
   },
 
-  /** Recarrega o usuário logado. */
+  /** Recarrega o usuário logado (ex.: depois de pagar a mensalidade). */
   getUserById: async (userId: string): Promise<User> => {
     const { data, error } = await supabase.from('user').select(USER_COLUMNS).eq('id', userId).single();
     if (error) throw error;
@@ -574,6 +602,32 @@ export const api = {
   createInvite: (slotId: string) => callServer<{ token: string; url: string; message: string }>('/api/invites', { slotId }),
 
   getInvite: (token: string) => callServer<InvitePreview>(`/api/invites?token=${encodeURIComponent(token)}`, undefined, 'GET'),
+
+  // ------------------------------------------------------------------
+  // Agenda do time (dono de time)
+  // ------------------------------------------------------------------
+
+  /** Link exclusivo da agenda de um time. */
+  agendaLink: (teamName: string) => callServer<{ token: string; url: string; message: string }>('/api/teams', { action: 'agenda_link', teamName }),
+
+  /** Página pública do link (sem login). */
+  getPublicAgenda: (token: string) => callServer<PublicAgenda>(`/api/teams?agenda=${encodeURIComponent(token)}`, undefined, 'GET'),
+
+  /** Jogos em casa abertos, disponibilidade para jogar fora e convites recebidos. */
+  myAgenda: () => callServer<MyAgenda>('/api/teams', { action: 'my_agenda' }),
+
+  addAvailability: (params: { teamName: string; category: string; date: string; startTime: string; endTime: string; notes?: string }) =>
+    callServer<{ id: string; message: string }>('/api/teams', { action: 'add_availability', ...params }),
+
+  removeAvailability: (id: string) => callServer<{ message: string }>('/api/teams', { action: 'remove_availability', id }),
+
+  /** Jogo em casa num local próprio (campo sem cadastro no app). */
+  createHomeGame: (params: { teamName: string; category: string; date: string; time: string; durationMinutes: number; location: string; price: number; matchType?: string; prizeDescription?: string }) =>
+    callServer<{ slot: any; message: string }>('/api/matches', { action: 'create_home_game', ...params }),
+
+  /** Mensalidade do dono de time (1ª categoria grátis, R$ 19,99 por categoria adicional). */
+  billing: (action: 'status' | 'subscribe' | 'sync' | 'set_document', params: Record<string, unknown> = {}) =>
+    callServer<{ categories: number; value: number; billingStatus: string; invoiceUrl?: string | null; hasCpf?: boolean }>('/api/billing', { action, ...params }),
 
   /** Link de convite de um time do campo (mensalista ou time da casa). Só o dono do campo. */
   createTeamInvite: (teamId: string) => callServer<{ token: string; url: string; message: string }>('/api/teams', { action: 'invite', teamId }),

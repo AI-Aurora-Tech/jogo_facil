@@ -22,7 +22,7 @@ export const POST = handle(async request => {
 
   const { data: extra } = await db()
     .from('user')
-    .select('cpf_cnpj')
+    .select('billing_status, billed_categories, billing_value, cpf_cnpj')
     .eq('id', user.id)
     .maybeSingle();
 

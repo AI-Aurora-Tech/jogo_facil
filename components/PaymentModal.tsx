@@ -134,7 +134,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({ slot, fieldName, onC
                 {copied ? <Check className="w-5 h-5 text-grass-600 flex-shrink-0" /> : <Copy className="w-5 h-5 text-pitch flex-shrink-0" />}
               </button>
             )}
-            <p className="text-[9px] font-bold text-gray-400 uppercase text-center">PIX copia e cola • o valor vai direto para a arena</p>
+            <p className="text-[9px] font-bold text-gray-400 uppercase text-center">PIX copia e cola • o valor vai direto para o mandante do jogo (ou para a arena, em horário livre)</p>
 
             <Button onClick={checkPayment} isLoading={checking} className="w-full py-4 rounded-2xl font-black uppercase text-xs">Já paguei</Button>
             {payment.invoiceUrl && (

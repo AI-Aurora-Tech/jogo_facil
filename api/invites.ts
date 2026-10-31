@@ -2,7 +2,7 @@ import { handle, json, readJson, assert, HttpError } from './_lib/http.js';
 import { requireSession, isAdmin } from './_lib/auth.js';
 import { db } from './_lib/supabaseAdmin.js';
 import { findValidInvite, newInviteToken } from './_lib/invites.js';
-import { loadField, loadSlot, toRuleSlot, firstTeamName, firstTeamCategory } from './_lib/slots.js';
+import { loadSlotField, loadSlot, toRuleSlot, firstTeamName, firstTeamCategory } from './_lib/slots.js';
 import { env } from './_lib/env.js';
 import { firstTeamUserId, matchStart, normalizeMatchKind, opponentShare, MATCH_KIND_LABEL } from '../shared/matchRules.js';
 
@@ -17,7 +17,7 @@ export const POST = handle(async request => {
   const body = await readJson(request);
   const { user, actor } = await requireSession(request, body.actAsUserId);
   const slot = await loadSlot(body.slotId);
-  const field = await loadField(slot.field_id);
+  const field = await loadSlotField(slot);
 
   const first = firstTeamUserId(toRuleSlot(slot), field.owner_id);
   const allowed = isAdmin(actor) || user.id === field.owner_id || user.id === first || user.id === slot.home_team_user_id;
@@ -64,7 +64,7 @@ export const GET = handle(async request => {
   const token = new URL(request.url).searchParams.get('token') || '';
   const invite = await findValidInvite(token);
   const slot = await loadSlot(invite.slot_id);
-  const field = await loadField(slot.field_id);
+  const field = await loadSlotField(slot);
 
   await db().from('match_invite').update({ opened_count: (invite.opened_count || 0) + 1 }).eq('id', invite.id);
 

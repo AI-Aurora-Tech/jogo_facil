@@ -2,9 +2,10 @@
 import React, { useState } from 'react';
 import { UserRole, SubscriptionPlan, CATEGORY_ORDER, Gender } from '../types';
 import { Button } from '../components/Button';
-import { Shield, MapPin, AlertCircle, KeyRound, ChevronLeft, Camera, LayoutGrid, Loader2, Eye, EyeOff } from 'lucide-react';
+import { Shield, MapPin, AlertCircle, KeyRound, ChevronLeft, Camera, LayoutGrid, Loader2, Eye, EyeOff, Info } from 'lucide-react';
 import { api, ServerError } from '../api';
 import { openPasswordHelpWhatsApp } from '../support';
+import { formatBRL, CATEGORY_MONTHLY_PRICE, monthlyPriceForCategories } from '../shared/pricing';
 import { convertFileToBase64, fetchAddressByCEP, geocodeAddressParts, GeoResult } from '../utils';
 import { ArenaLocation } from '../components/ArenaLocation';
 
@@ -355,6 +356,16 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, onCancel, initialMode, invi
                       <span className="inline-block px-4 py-2 rounded-xl text-[10px] font-black uppercase bg-pitch text-white">{inviteCategory}</span>
                     )}
 
+                    <div className="mt-6 bg-blue-50 border border-blue-100 p-4 rounded-xl flex items-start gap-3">
+                       <Info className="w-5 h-5 text-blue-500 shrink-0 mt-0.5" />
+                       <div>
+                          <p className="text-xs font-bold text-blue-900">Mensalidade por categoria</p>
+                          <p className="text-[10px] text-blue-700 mt-1 leading-relaxed">
+                             A <strong>1ª categoria é grátis</strong>. Cada categoria adicional custa <strong>{formatBRL(CATEGORY_MONTHLY_PRICE)} por mês</strong>.
+                             {teamCategories.length > 1 && <> Seu time: <strong>{formatBRL(monthlyPriceForCategories(teamCategories.length))}/mês</strong>.</>}
+                          </p>
+                       </div>
+                    </div>
                   </div>
                 )}
 

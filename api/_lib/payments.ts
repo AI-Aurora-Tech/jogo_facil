@@ -3,8 +3,8 @@ import { asaas, dueDate, PAID_STATUSES } from './asaas.js';
 import { env } from './env.js';
 import { HttpError } from './http.js';
 import type { DbUser } from './auth.js';
-import { dateBR, firstTeamName, loadField, loadSlot, toRuleSlot, type FieldRow, type SlotRow } from './slots.js';
-import { computeShares, firstTeamUserId, type PayerRole } from '../../shared/matchRules.js';
+import { dateBR, firstTeamName, loadSlotField, loadSlot, toRuleSlot, type FieldRow, type SlotRow } from './slots.js';
+import { computeShares, firstTeamUserId, needsFieldApproval, statusAfterPayment, type PayerRole } from '../../shared/matchRules.js';
 import { isValidCpfCnpj } from '../../shared/document.js';
 
 export interface PaymentRow {
@@ -81,6 +81,20 @@ export const payerRoleFor = (slot: SlotRow, userId: string): PayerRole | null =>
 };
 
 /**
+ * Quem recebe a taxa do jogo:
+ * - horário com mandante (time da casa/mensalista que não é o dono do campo) ou em local próprio:
+ *   o dono do time mandante (ele acerta com o campo por fora, se for o caso);
+ * - horário livre do campo: o dono do campo.
+ */
+export const payeeFor = async (slot: SlotRow, field: FieldRow): Promise<{ userId: string | null; walletId: string | null; isHomeTeam: boolean }> => {
+  if (!needsFieldApproval(toRuleSlot(slot), field.owner_id) && slot.home_team_user_id) {
+    const { data } = await db().from('user').select('asaas_wallet_id').eq('id', slot.home_team_user_id).maybeSingle();
+    return { userId: slot.home_team_user_id, walletId: data?.asaas_wallet_id || null, isHomeTeam: true };
+  }
+  return { userId: field.owner_id || null, walletId: field.asaas_wallet_id || null, isHomeTeam: false };
+};
+
+/**
  * Cria (ou reaproveita) a cobrança PIX do time.
  * O valor cai direto na carteira Asaas do dono do campo (split), menos a taxa da plataforma.
  */
@@ -104,14 +118,23 @@ export const getOrCreateMatchPayment = async (slot: SlotRow, field: FieldRow, pa
     return data as PaymentRow;
   }
 
-  if (!field.asaas_wallet_id) {
+  const payee = await payeeFor(slot, field);
+  if (!payee.walletId) {
     await notify(
-      field.owner_id,
+      payee.userId,
       'Configure seus recebimentos 💰',
-      `Um time quer pagar o jogo de ${dateBR(slot)}, mas sua arena ainda não tem conta de recebimento. Acesse Arena > Recebimentos.`,
+      payee.isHomeTeam
+        ? `Um time quer pagar a taxa do jogo de ${dateBR(slot)}, mas você ainda não configurou a conta de recebimento. Acesse Minha agenda > Recebimentos.`
+        : `Um time quer pagar o jogo de ${dateBR(slot)}, mas sua arena ainda não tem conta de recebimento. Acesse Arena > Recebimentos.`,
       'warning'
     );
-    throw new HttpError(409, 'A arena ainda não configurou a conta de recebimento. Já avisamos o dono do campo.', 'FIELD_NO_WALLET');
+    throw new HttpError(
+      409,
+      payee.isHomeTeam
+        ? 'O time mandante ainda não configurou a conta de recebimento. Já avisamos o responsável.'
+        : 'A arena ainda não configurou a conta de recebimento. Já avisamos o dono do campo.',
+      'FIELD_NO_WALLET'
+    );
   }
 
   const customerId = await ensureCustomer(payer, cpfCnpj);
@@ -119,7 +142,7 @@ export const getOrCreateMatchPayment = async (slot: SlotRow, field: FieldRow, pa
 
   const { data: row, error } = await db()
     .from('match_payment')
-    .insert([{ slot_id: slot.id, payer_role: role, payer_user_id: payer.id, team_name: teamName, amount: share.amount, field_wallet_id: field.asaas_wallet_id, status: 'PENDING' }])
+    .insert([{ slot_id: slot.id, payer_role: role, payer_user_id: payer.id, team_name: teamName, amount: share.amount, field_wallet_id: payee.walletId, status: 'PENDING' }])
     .select('*')
     .single();
   if (error) {
@@ -135,7 +158,7 @@ export const getOrCreateMatchPayment = async (slot: SlotRow, field: FieldRow, pa
       dueDate: dueDate(1) > slot.date ? slot.date : dueDate(1),
       description: `Jogo Fácil - ${field.name} - ${dateBR(slot)} - ${teamName || ''}`.slice(0, 500),
       externalReference: `match_payment:${row.id}`,
-      split: fieldPercent > 0 ? [{ walletId: field.asaas_wallet_id, percentualValue: fieldPercent }] : undefined,
+      split: fieldPercent > 0 ? [{ walletId: payee.walletId, percentualValue: fieldPercent }] : undefined,
     });
     const qr = await asaas.getPixQrCode(payment.id);
     const { data: updated, error: upErr } = await db()
@@ -178,26 +201,38 @@ export const markPaymentPaid = async (paymentId: string): Promise<void> => {
   await db().from('match_slot').update(slotFlag).eq('id', payment.slot_id);
 
   const slot = await loadSlot(payment.slot_id);
-  const field = await loadField(slot.field_id);
+  const field = await loadSlotField(slot);
   await notify(payment.payer_user_id, 'Pagamento recebido ✅', `Recebemos o PIX de R$ ${Number(payment.amount).toFixed(2)} do jogo de ${dateBR(slot)}.`, 'success');
 
   const shares = computeShares(toRuleSlot(slot));
   const allPaid = shares.every(s => (s.role === 'FIRST' ? slot.first_team_paid : slot.opponent_paid));
   if (allPaid && slot.status === 'pending_payment') {
+    const needsField = needsFieldApproval(toRuleSlot(slot), field.owner_id);
     const { data: moved } = await db()
       .from('match_slot')
-      .update({ status: 'pending_field_approval', paid_at: new Date().toISOString() })
+      .update({
+        status: statusAfterPayment(needsField),
+        paid_at: new Date().toISOString(),
+        ...(needsField ? {} : { confirmed_at: new Date().toISOString() }),
+      })
       .eq('id', slot.id)
       .eq('status', 'pending_payment')
       .select('id');
     if (moved && moved.length > 0) {
-      await notify(
-        field.owner_id,
-        'Pagamento confirmado: aprove a partida ⚽',
-        `${firstTeamName(slot)} x ${slot.opponent_team_name} em ${dateBR(slot)} está pago. Aprove ou recuse o jogo.`,
-        'success'
-      );
-      await notify(firstTeamUserId(toRuleSlot(slot), field.owner_id), 'Pagamento concluído', `Todos pagaram o jogo de ${dateBR(slot)}. Agora falta a aprovação do campo.`, 'info');
+      if (needsField) {
+        await notify(
+          field.owner_id,
+          'Pagamento confirmado: aprove a partida ⚽',
+          `${firstTeamName(slot)} x ${slot.opponent_team_name} em ${dateBR(slot)} está pago. Aprove ou recuse o jogo.`,
+          'success'
+        );
+        await notify(firstTeamUserId(toRuleSlot(slot), field.owner_id), 'Pagamento concluído', `Todos pagaram o jogo de ${dateBR(slot)}. Agora falta a aprovação do campo.`, 'info');
+      } else {
+        // Horário do mandante: pago = jogo confirmado
+        for (const id of [slot.home_team_user_id, slot.opponent_user_id]) {
+          await notify(id, 'Jogo confirmado! ⚽', `${firstTeamName(slot)} x ${slot.opponent_team_name} em ${field.name}, ${dateBR(slot)}. Bom jogo!`, 'success');
+        }
+      }
     }
   } else if (!allPaid) {
     const pendingRole = shares.find(s => !(s.role === 'FIRST' ? slot.first_team_paid : slot.opponent_paid))?.role;
