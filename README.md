@@ -7,7 +7,8 @@ Sistema profissional de agendamento de partidas de futebol com inteligência art
 *   **Busca de Partidas:** Encontre adversários ou campos disponíveis.
 *   **Gestão de Campos:** Painel para donos de quadras gerenciarem horários.
 *   **Fluxo de partidas:** time 1 aprova o adversário → pagamento PIX → campo aprova → placar e avaliação.
-*   **Pagamentos (Asaas):** taxa do jogo por PIX, com split automático para o dono do campo. Criar conta e usar o app é grátis.
+*   **Pagamentos (Asaas):** taxa do jogo por PIX com split automático para quem recebe (dono do campo nos horários livres, time mandante nos jogos dele); mensalidade dos donos de time com 1ª categoria grátis e R$ 19,99 por categoria adicional.
+*   **Agenda do time:** link exclusivo, jogos em casa (arena do app ou local próprio), dias para jogar fora e convites entre mandante e visitante.
 *   **Convites:** link de convite que cria uma conta já na categoria do jogo.
 *   **Avaliações:** times avaliam o adversário e o campo (estrelas + tags).
 *   **Recorrência:** Criação automática de agenda para times mensalistas.
