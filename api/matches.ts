@@ -1,5 +1,5 @@
 import { handle, json, readJson, HttpError, assert } from './_lib/http.js';
-import { requireSession, isAdmin, type DbUser } from './_lib/auth.js';
+import { requireSession, isAdmin, requireTeamAccess, type DbUser } from './_lib/auth.js';
 import { db, notify } from './_lib/supabaseAdmin.js';
 import {
   loadSlot,
@@ -29,7 +29,6 @@ import {
 } from './_lib/payments.js';
 import { findValidInvite, markInviteUsed } from './_lib/invites.js';
 import { loadHomeTeam } from './_lib/homeTeams.js';
-import { countBillableCategories, monthlyPriceForCategories } from '../shared/pricing.js';
 import {
   canRate,
   canSetResult,
@@ -56,21 +55,7 @@ type Ctx = { user: DbUser; actor: DbUser; slot: SlotRow; field: FieldRow; body: 
 const isFieldOwner = (c: Ctx) => c.field.owner_id === c.user.id || isAdmin(c.actor);
 const money = (n: number) => `R$ ${n.toFixed(2).replace('.', ',')}`;
 
-/**
- * Mensalidade: 1ª categoria grátis; com mais categorias a assinatura precisa estar ativa e cobrir
- * todas elas (o app também bloqueia, mas a conferência que vale é esta).
- */
-const requireSubscription = (user: DbUser) => {
-  const count = countBillableCategories(user.teams);
-  if (monthlyPriceForCategories(count) <= 0) return;
-  const billed = user.billed_categories == null ? count : Number(user.billed_categories) || 0;
-  assert(
-    user.billing_status === 'ACTIVE' && billed >= count,
-    402,
-    'Sua mensalidade não cobre todas as categorias do seu time (1ª categoria grátis, R$ 19,99 por categoria adicional). Abra "Minha mensalidade" no perfil para regularizar.',
-    'NEED_SUBSCRIPTION'
-  );
-};
+const requireSubscription = requireTeamAccess;
 
 const requireFuture = (slot: SlotRow) => {
   assert(matchStart(toRuleSlot(slot)).getTime() > Date.now(), 400, 'Este horário já passou.');
@@ -542,6 +527,7 @@ const visitors = async ({ user, slot, field }: Ctx) => {
 /** Mandante convida um time que está disponível para jogar fora. */
 const inviteVisitor = async ({ user, slot, field, body }: Ctx) => {
   assert(firstTeamUserId(toRuleSlot(slot), field.owner_id) === user.id, 403, 'Somente o time mandante pode convidar.');
+  requireSubscription(user);
   assert(slot.status === 'waiting_opponent' && !slot.opponent_user_id, 409, 'Este jogo já tem adversário.', 'STALE');
   requireFuture(slot);
   const { data: a } = await db().from('team_availability').select('*').eq('id', String(body.availabilityId || '')).maybeSingle();

@@ -3,7 +3,7 @@ import { MapPin, Calendar, Loader2, X, Swords, Plane, Home, ChevronLeft, Check, 
 import { Button } from '../components/Button';
 import { PublicAgenda, AgendaHomeGame, AgendaAvailability, User } from '../types';
 import { api } from '../api';
-import { formatBRL, CATEGORY_MONTHLY_PRICE, monthlyPriceForTeams } from '../shared/pricing';
+import { formatBRL } from '../shared/pricing';
 
 interface TeamAgendaLandingProps {
   token: string;
@@ -114,26 +114,15 @@ export const TeamAgendaLanding: React.FC<TeamAgendaLandingProps> = ({ token, cur
     onDone();
   };
 
-  /** Garante que o time escolhido tem a categoria do jogo (adiciona, avisando o valor, se preciso). */
+  /** Garante que o time escolhido tem a categoria do jogo (adiciona, se preciso). */
   const ensureCategory = async (category: string): Promise<string | null> => {
     const team = myTeams[teamIdx];
     if (!team || !currentUser) return null;
     if ((team.categories || []).includes(category)) return team.name;
     const newTeams = myTeams.map((t, i) => (i === teamIdx ? { ...t, categories: [...(t.categories || []), category] } : t));
-    const newPrice = monthlyPriceForTeams(newTeams);
-    const ok = confirm(
-      newPrice > 0
-        ? `Adicionar ${category} ao ${team.name}? Cada categoria adicional custa ${formatBRL(CATEGORY_MONTHLY_PRICE)}/mês: sua mensalidade passa a ser ${formatBRL(newPrice)}/mês.`
-        : `Adicionar ${category} ao ${team.name}?`
-    );
-    if (!ok) return null;
+    if (!confirm(`Adicionar ${category} ao ${team.name}?`)) return null;
     const updated = await api.updateUser({ ...currentUser, teams: newTeams, password: undefined });
-    await api.billing('sync').catch(() => null);
     onUserUpdated(updated);
-    if (newPrice > 0) {
-      alert('Categoria adicionada. Para jogar com ela, ative a mensalidade em Perfil > Minha mensalidade.');
-      return null;
-    }
     return team.name;
   };
 
@@ -289,7 +278,7 @@ export const TeamAgendaLanding: React.FC<TeamAgendaLandingProps> = ({ token, cur
               <div className="p-6 space-y-5 max-h-[70vh] overflow-y-auto">
                 {!currentUser && (
                   <p className="text-[10px] font-bold text-gray-500 uppercase bg-grass-50 border border-grass-100 rounded-2xl p-3">
-                    Toque em <b>Jogar</b> no horário que você quer. Criar conta é grátis (1ª categoria).
+                    Toque em <b>Jogar</b> no horário que você quer. Os primeiros 30 dias são grátis.
                   </p>
                 )}
 

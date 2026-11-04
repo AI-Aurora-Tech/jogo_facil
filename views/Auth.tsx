@@ -5,7 +5,7 @@ import { Button } from '../components/Button';
 import { Shield, MapPin, AlertCircle, KeyRound, ChevronLeft, Camera, LayoutGrid, Loader2, Eye, EyeOff, Info } from 'lucide-react';
 import { api, ServerError } from '../api';
 import { openPasswordHelpWhatsApp } from '../support';
-import { formatBRL, CATEGORY_MONTHLY_PRICE, monthlyPriceForCategories } from '../shared/pricing';
+import { formatBRL, MONTHLY_PRICE, TRIAL_DAYS } from '../shared/pricing';
 import { convertFileToBase64, fetchAddressByCEP, geocodeAddressParts, GeoResult } from '../utils';
 import { ArenaLocation } from '../components/ArenaLocation';
 
@@ -74,7 +74,7 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, onCancel, initialMode, invi
   // Time da casa: o cadastro já nasce com o nome do time do convite
   const [teamName, setTeamName] = useState(teamInvite?.kind === 'LOCAL' ? teamInvite.teamName || '' : '');
   const [teamCategories, setTeamCategories] = useState<string[]>(inviteCategory ? [inviteCategory] : []);
-  const [teamGender, setTeamGender] = useState<Gender>('MASCULINO');
+  const [teamGender, setTeamGender] = useState<Gender | ''>('');
   const [teamSport, setTeamSport] = useState('Futebol');
   const [teamLogo, setTeamLogo] = useState('');
 
@@ -120,6 +120,10 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, onCancel, initialMode, invi
       if (role === UserRole.TEAM_CAPTAIN) {
         if (!teamName) {
           setError('O nome do time é obrigatório.');
+          return;
+        }
+        if (!teamGender) {
+          setError('Escolha o sexo do time: Masculino, Feminino ou Misto.');
           return;
         }
         if (teamCategories.length === 0) {
@@ -185,7 +189,7 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, onCancel, initialMode, invi
               name: teamName, 
               categories: teamCategories, 
               logoUrl: teamLogo, 
-              gender: teamGender,
+              gender: teamGender || undefined,
               sport: teamSport
           }] : [],
           teamLogoUrl: role === UserRole.TEAM_CAPTAIN ? teamLogo : undefined,
@@ -265,8 +269,8 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, onCancel, initialMode, invi
             <>
               {isInviteSignup && (
                 <div className="bg-grass-50 border border-grass-100 p-4 rounded-2xl text-[10px] font-bold text-grass-700 uppercase">
-                  O jogo que você selecionou é da categoria: <b>{inviteCategory}</b>. Seu time já começa com ela (1ª categoria grátis).
-                  <br />Cada categoria adicional custa {formatBRL(CATEGORY_MONTHLY_PRICE)}/mês. Depois do cadastro você volta direto para confirmar o jogo.
+                  O jogo que você selecionou é da categoria: <b>{inviteCategory}</b>. Seu time já começa com ela.
+                  <br />{TRIAL_DAYS} dias grátis, depois {formatBRL(MONTHLY_PRICE)}/mês. Depois do cadastro você volta direto para confirmar o jogo.
                 </div>
               )}
               {isTeamInviteSignup && (
@@ -318,10 +322,10 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, onCancel, initialMode, invi
                     <input className="w-full bg-transparent border-b-2 border-gray-100 p-2 font-black text-lg outline-none focus:border-pitch transition-colors mb-4" placeholder="Nome do Time" value={teamName} onChange={e => setTeamName(e.target.value)} readOnly={isTeamInviteSignup && teamInvite?.kind === 'LOCAL'} required />
                     
                     <div className="mb-4">
-                        <p className="text-[9px] font-bold text-gray-400 uppercase mb-2">Gênero do Time</p>
-                        <div className="flex gap-1 p-1 bg-white rounded-xl border">
-                            {['MASCULINO', 'FEMININO', 'MISTO'].map((g: any) => (
-                              <button key={g} type="button" onClick={() => setTeamGender(g)} className={`flex-1 py-2 text-[8px] font-black uppercase rounded-lg transition-all ${teamGender === g ? 'bg-pitch text-white' : 'text-gray-300 hover:text-gray-400'}`}>{g}</button>
+                        <p className="text-[9px] font-bold text-gray-400 uppercase mb-2">Sexo do time *</p>
+                        <div className={`flex gap-1 p-1 bg-white rounded-xl border ${!teamGender && error ? 'border-red-300' : ''}`}>
+                            {([['MASCULINO', 'Masculino'], ['FEMININO', 'Feminino'], ['MISTO', 'Misto']] as [Gender, string][]).map(([g, label]) => (
+                              <button key={g} type="button" onClick={() => setTeamGender(g)} className={`flex-1 py-3 text-[10px] font-black uppercase rounded-lg transition-all ${teamGender === g ? 'bg-pitch text-white' : 'text-gray-400 hover:text-gray-500'}`}>{label}</button>
                             ))}
                         </div>
                     </div>
@@ -347,10 +351,9 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, onCancel, initialMode, invi
                     <div className="mt-6 bg-blue-50 border border-blue-100 p-4 rounded-xl flex items-start gap-3">
                        <Info className="w-5 h-5 text-blue-500 shrink-0 mt-0.5" />
                        <div>
-                          <p className="text-xs font-bold text-blue-900">Mensalidade por categoria</p>
+                          <p className="text-xs font-bold text-blue-900">{TRIAL_DAYS} dias grátis</p>
                           <p className="text-[10px] text-blue-700 mt-1 leading-relaxed">
-                             A <strong>1ª categoria é grátis</strong>. Cada categoria adicional custa <strong>{formatBRL(CATEGORY_MONTHLY_PRICE)} por mês</strong>.
-                             {teamCategories.length > 1 && <> Seu time: <strong>{formatBRL(monthlyPriceForCategories(teamCategories.length))}/mês</strong>.</>}
+                             Use o app de graça por <strong>{TRIAL_DAYS} dias</strong>. Depois, <strong>{formatBRL(MONTHLY_PRICE)} por mês</strong>, com quantos times e categorias quiser.
                           </p>
                        </div>
                     </div>

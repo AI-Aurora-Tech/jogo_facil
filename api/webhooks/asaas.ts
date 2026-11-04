@@ -3,7 +3,8 @@ import { handle, json, readJson, HttpError } from '../_lib/http.js';
 import { db, notify } from '../_lib/supabaseAdmin.js';
 import { env } from '../_lib/env.js';
 import { markPaymentPaid } from '../_lib/payments.js';
-import { PAID_STATUSES, type AsaasPayment } from '../_lib/asaas.js';
+import { PAID_STATUSES, asaas, type AsaasPayment } from '../_lib/asaas.js';
+import { MONTHLY_PRICE } from '../../shared/pricing.js';
 
 /**
  * Webhook do Asaas (configurar em Asaas > Integrações > Webhooks):
@@ -21,18 +22,29 @@ const tokenOk = (given: string | null) => {
 };
 
 const handleSubscriptionPayment = async (event: string, payment: AsaasPayment) => {
-  const { data: user } = await db().from('user').select('id, billing_status').eq('asaas_subscription_id', payment.subscription).maybeSingle();
+  const { data: user } = await db().from('user').select('id, billing_status, billing_value').eq('asaas_subscription_id', payment.subscription).maybeSingle();
   if (!user) return;
+
+  // Assinatura antiga (cobrada por categoria): na próxima cobrança gerada, passa para o valor fixo
+  if (event === 'PAYMENT_CREATED' && payment.subscription && Number(user.billing_value) !== MONTHLY_PRICE) {
+    try {
+      await asaas.updateSubscriptionValue(payment.subscription, MONTHLY_PRICE, `Jogo Fácil - mensalidade do dono de time (R$ ${MONTHLY_PRICE.toFixed(2).replace('.', ',')})`);
+      await db().from('user').update({ billing_value: MONTHLY_PRICE, billing_updated_at: new Date().toISOString() }).eq('id', user.id);
+    } catch (e) {
+      console.warn('[webhook] falha ao ajustar o valor da assinatura', e);
+    }
+    return;
+  }
 
   if (PAID_STATUSES.includes(payment.status) && ['PAYMENT_CONFIRMED', 'PAYMENT_RECEIVED'].includes(event)) {
     const expiry = new Date(`${payment.dueDate || new Date().toISOString().slice(0, 10)}T12:00:00-03:00`);
     expiry.setMonth(expiry.getMonth() + 1);
     expiry.setDate(expiry.getDate() + 3); // 3 dias de tolerância
     await db().from('user').update({ billing_status: 'ACTIVE', is_subscribed: true, subscription_expiry: expiry.toISOString(), billing_updated_at: new Date().toISOString() }).eq('id', user.id);
-    if (user.billing_status !== 'ACTIVE') await notify(user.id, 'Mensalidade ativa 🏆', 'Pagamento recebido. Todas as suas categorias estão liberadas.', 'success');
+    if (user.billing_status !== 'ACTIVE') await notify(user.id, 'Mensalidade ativa 🏆', 'Pagamento recebido. Você pode marcar jogos com todos os seus times.', 'success');
   } else if (event === 'PAYMENT_OVERDUE') {
     await db().from('user').update({ billing_status: 'OVERDUE', is_subscribed: false, billing_updated_at: new Date().toISOString() }).eq('id', user.id);
-    await notify(user.id, 'Mensalidade em atraso ⚠️', 'Sua mensalidade venceu. Regularize para continuar agendando jogos com todas as categorias.', 'warning');
+    await notify(user.id, 'Mensalidade em atraso ⚠️', 'Sua mensalidade venceu. Regularize para continuar marcando jogos.', 'warning');
   }
 };
 

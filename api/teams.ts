@@ -3,7 +3,7 @@ import { requireSession, isAdmin, type DbUser } from './_lib/auth.js';
 import { db, notify } from './_lib/supabaseAdmin.js';
 import { loadField, CLEAR_HOME_TEAM } from './_lib/slots.js';
 import { env } from './_lib/env.js';
-import { addAvailability, agendaLink, myAgenda, publicAgenda, removeAvailability } from './_lib/agenda.js';
+import { addAvailability, agendaLink, myAgenda, publicAgenda, removeAvailability, teamsDirectory } from './_lib/agenda.js';
 import {
   createMensalistaSlots,
   dayLabel,
@@ -33,6 +33,7 @@ import {
  * POST /api/teams { action: 'my_agenda' }                  -> jogos em casa abertos, disponibilidade, convites recebidos
  * POST /api/teams { action: 'add_availability', ... }      -> dia/horário/categoria para jogar fora
  * POST /api/teams { action: 'remove_availability', id }
+ * POST /api/teams { action: 'directory' }                  -> times com jogo em casa aberto ou dias para jogar fora (aba "Times")
  */
 
 const cleanCategory = (c: unknown) => String(c || '').trim().slice(0, 30);
@@ -270,6 +271,8 @@ export const GET = handle(async request => {
 /** Ações da agenda do próprio time (dono de time logado). */
 const agendaAction = async (request: Request, body: any) => {
   const { user } = await requireSession(request, body.actAsUserId);
+  // Lista de times disponíveis: qualquer pessoa logada vê
+  if (body.action === 'directory') return json(await teamsDirectory(user.id));
   assert(user.role === 'TEAM_CAPTAIN', 403, 'Disponível só para donos de time.');
   switch (body.action) {
     case 'agenda_link':
@@ -300,6 +303,7 @@ export const POST = handle(async request => {
     case 'my_agenda':
     case 'add_availability':
     case 'remove_availability':
+    case 'directory':
       return agendaAction(request, body);
     default:
       throw new HttpError(400, 'Ação inválida.');

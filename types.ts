@@ -47,6 +47,8 @@ export interface User {
   /** FREE | ACTIVE | PENDING | OVERDUE | CANCELED (mensalidade por categoria) */
   billingStatus?: string;
   billingValue?: number;
+  /** Fim do teste grátis de 30 dias (dono de time). */
+  trialEndsAt?: string;
   cpfCnpj?: string;
 }
 
@@ -233,6 +235,21 @@ export interface PublicAgenda {
   team: { name: string; logoUrl: string | null; categories: string[]; gender: string | null; sport: string };
   homeGames: AgendaHomeGame[];
   awayAvailability: AgendaAvailability[];
+}
+
+/** Um time na aba "Times" (disponível para marcar jogo). */
+export interface DirectoryTeam {
+  token: string;
+  teamName: string;
+  logoUrl: string | null;
+  gender: string | null;
+  categories: string[];
+  homeGames: number;
+  awayDays: number;
+  homeCategories: string[];
+  awayCategories: string[];
+  nextDate: string | null;
+  location: { lat: number; lng: number; source: 'team' | 'arena'; label: string | null } | null;
 }
 
 export interface AgendaInvite {

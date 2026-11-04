@@ -1,7 +1,8 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { env, requireEnv } from './env.js';
 import { db } from './supabaseAdmin.js';
-import { HttpError } from './http.js';
+import { HttpError, assert } from './http.js';
+import { hasTeamAccess } from '../../shared/pricing.js';
 
 /**
  * Sessão simples assinada com HMAC (o app usa login próprio, não o Supabase Auth).
@@ -40,7 +41,7 @@ const verifySessionToken = (token: string): string | null => {
 };
 
 export const USER_COLUMNS =
-  'id, email, name, phone_number, role, subscription, subscription_expiry, teams, latitude, longitude, team_rating, team_rating_count, is_subscribed, subscription_id, created_at, cpf_cnpj, asaas_customer_id, asaas_subscription_id, billing_status, billed_categories, billing_value';
+  'id, email, name, phone_number, role, subscription, subscription_expiry, teams, latitude, longitude, team_rating, team_rating_count, is_subscribed, subscription_id, created_at, cpf_cnpj, asaas_customer_id, asaas_subscription_id, billing_status, billed_categories, billing_value, trial_ends_at';
 
 export interface DbUser {
   id: string;
@@ -55,8 +56,22 @@ export interface DbUser {
   billing_status: string | null;
   billed_categories: number | null;
   billing_value: number | null;
+  trial_ends_at?: string | null;
   [key: string]: any;
 }
+
+/**
+ * Mensalidade: dono de time usa o app no teste grátis (30 dias) ou com a assinatura ativa
+ * (R$ 19,99/mês). O app também bloqueia, mas a conferência que vale é esta.
+ */
+export const requireTeamAccess = (user: DbUser) => {
+  assert(
+    hasTeamAccess({ role: user.role, trialEndsAt: user.trial_ends_at, billingStatus: user.billing_status }),
+    402,
+    'Seu teste grátis de 30 dias acabou. Assine por R$ 19,99/mês em Perfil > Minha mensalidade para continuar marcando jogos.',
+    'NEED_SUBSCRIPTION'
+  );
+};
 
 export const isAdmin = (u: Pick<DbUser, 'role'>) => u.role === 'SUPER_ADMIN' || u.role === 'ADMIN';
 

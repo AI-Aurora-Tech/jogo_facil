@@ -117,6 +117,10 @@ export const asaas = {
   updateSubscriptionValue: (id: string, value: number, description: string) =>
     request('POST', `/subscriptions/${id}`, { value, description, updatePendingPayments: true }),
 
+  /** Próximo vencimento da assinatura (as cobranças futuras seguem a partir dele). */
+  updateSubscriptionDueDate: (id: string, nextDueDate: string) =>
+    request('POST', `/subscriptions/${id}`, { nextDueDate }),
+
   getSubscription: (id: string) => request<{ id: string; status: string; value: number; deleted?: boolean }>('GET', `/subscriptions/${id}`),
 
   cancelSubscription: (id: string) => request('DELETE', `/subscriptions/${id}`),
