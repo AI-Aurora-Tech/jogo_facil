@@ -36,6 +36,14 @@ export const Subscription: React.FC<SubscriptionProps> = ({ user, blocking, onBa
         setStatus(res.billingStatus);
         setInvoiceUrl(res.invoiceUrl || null);
         if (typeof res.trialDaysLeft === 'number') setDaysLeft(res.trialDaysLeft);
+        // Libera o app se o servidor diz que ainda está no teste ou com a mensalidade ativa
+        if ((res.billingStatus === 'TRIAL' || res.billingStatus === 'ACTIVE') && (res.trialEndsAt !== user.trialEndsAt || (res.billingStatus === 'ACTIVE' && user.billingStatus !== 'ACTIVE'))) {
+          onUserUpdated?.({
+            ...user,
+            trialEndsAt: res.trialEndsAt || user.trialEndsAt,
+            billingStatus: res.billingStatus === 'ACTIVE' ? 'ACTIVE' : user.billingStatus,
+          });
+        }
       })
       .catch(() => { /* sem servidor: mantém o que já sabemos */ });
   }, []);

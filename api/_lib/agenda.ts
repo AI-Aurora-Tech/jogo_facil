@@ -1,7 +1,8 @@
 import { randomBytes } from 'node:crypto';
 import { db } from './supabaseAdmin.js';
 import { HttpError, assert } from './http.js';
-import type { DbUser } from './auth.js';
+import { requireTeamAccess, type DbUser } from './auth.js';
+import { hasTeamAccess } from '../../shared/pricing.js';
 import { todayBR } from './homeTeams.js';
 import { opponentShare } from '../../shared/matchRules.js';
 import { toRuleSlot, type SlotRow } from './slots.js';
@@ -144,6 +145,7 @@ export const myAgenda = async (user: DbUser) => {
 
 export const addAvailability = async (user: DbUser, body: any) => {
   assert(user.role === 'TEAM_CAPTAIN', 403, 'Apenas donos de time.');
+  requireTeamAccess(user);
   const team = findOwnTeam(user, body.teamName);
   const category = String(body.category || '').trim();
   assert((team.categories || []).includes(category), 400, `O ${team.name} não tem a categoria ${category || 'escolhida'}.`);
@@ -240,36 +242,46 @@ export const teamsDirectory = async (viewerId: string) => {
   const userIds = Array.from(new Set(entries.map(e => e.userId)));
   const arenaIds = Array.from(new Set(entries.map(e => e.arenaId).filter(Boolean))) as string[];
   const [{ data: owners }, { data: arenas }, { data: pages }] = await Promise.all([
-    db().from('user').select('id, teams, latitude, longitude').in('id', userIds),
-    arenaIds.length ? db().from('field').select('id, name, location, latitude, longitude').in('id', arenaIds) : Promise.resolve({ data: [] as any[] }),
+    db().from('user').select('id, role, teams, latitude, longitude, trial_ends_at, billing_status').in('id', userIds),
+    arenaIds.length ? db().from('field').select('id, name, latitude, longitude').in('id', arenaIds) : Promise.resolve({ data: [] as any[] }),
     db().from('team_page').select('token, user_id, team_name').in('user_id', userIds),
   ]);
+  const ownerById = new Map((owners || []).map(o => [o.id, o]));
+  const arenaById = new Map((arenas || []).map((f: any) => [f.id, f]));
+  const pageKey = (userId: string, name: string) => `${userId}::${(name || '').trim().toLowerCase()}`;
+  const tokenByTeam = new Map((pages || []).map(p => [pageKey(p.user_id, p.team_name), p.token as string]));
 
+  // Só times com o teste grátis ou a mensalidade em dia (os outros não conseguem confirmar o jogo)
+  const listed = entries.flatMap(e => {
+    const owner = ownerById.get(e.userId);
+    if (!owner || !hasTeamAccess({ role: owner.role, trialEndsAt: owner.trial_ends_at, billingStatus: owner.billing_status })) return [];
+    const team = ((owner.teams || []) as any[]).find(t => sameName(t.name, e.teamName));
+    return team ? [{ e, owner, team }] : []; // time removido do perfil fica de fora
+  });
+
+  // Link da agenda: cria de uma vez os que ainda não existem
+  const missing = listed.filter(x => !tokenByTeam.has(pageKey(x.e.userId, x.team.name)));
+  if (missing.length) {
+    const rows = missing.map(x => ({ token: newToken(), user_id: x.e.userId, team_name: x.team.name }));
+    const { error } = await db().from('team_page').insert(rows);
+    if (error) console.warn('[teams] falha ao criar links da agenda (outra busca pode ter criado antes)', error);
+    const { data: again } = await db().from('team_page').select('token, user_id, team_name').in('user_id', Array.from(new Set(missing.map(x => x.e.userId))));
+    for (const p of again || []) tokenByTeam.set(pageKey(p.user_id, p.team_name), p.token);
+  }
+
+  // Posição aproximada (~1 km): serve para a distância sem expor o endereço do time
+  const approx = (n: number) => Math.round(n * 100) / 100;
   const teams = [];
-  for (const e of entries) {
-    const owner = (owners || []).find(o => o.id === e.userId);
-    const team = ((owner?.teams || []) as any[]).find(t => sameName(t.name, e.teamName));
-    if (!owner || !team) continue; // time removido do perfil
-
-    // Link da agenda (cria se ainda não existe)
-    let token = (pages || []).find(p => p.user_id === e.userId && sameName(p.team_name, team.name))?.token as string | undefined;
-    if (!token) {
-      token = newToken();
-      const { error } = await db().from('team_page').insert([{ token, user_id: e.userId, team_name: team.name }]);
-      if (error) {
-        const { data: again } = await db().from('team_page').select('token, team_name').eq('user_id', e.userId);
-        token = (again || []).find(p => sameName(p.team_name, team.name))?.token;
-        if (!token) continue;
-      }
-    }
-
-    const arena = e.arenaId ? (arenas || []).find((f: any) => f.id === e.arenaId) : null;
+  for (const { e, owner, team } of listed) {
+    const token = tokenByTeam.get(pageKey(e.userId, team.name));
+    if (!token) continue;
+    const arena = e.arenaId ? arenaById.get(e.arenaId) : null;
     const ownLat = Number(owner.latitude);
     const ownLng = Number(owner.longitude);
     const location = Number.isFinite(ownLat) && Number.isFinite(ownLng) && Math.abs(ownLat) > 0.0001
-      ? { lat: ownLat, lng: ownLng, source: 'team' as const, label: null }
+      ? { lat: approx(ownLat), lng: approx(ownLng), source: 'team' as const, label: null }
       : arena && Math.abs(Number(arena.latitude)) > 0.0001
-        ? { lat: Number(arena.latitude), lng: Number(arena.longitude), source: 'arena' as const, label: arena.name }
+        ? { lat: Number(arena.latitude), lng: Number(arena.longitude), source: 'arena' as const, label: arena.name as string }
         : null;
 
     teams.push({

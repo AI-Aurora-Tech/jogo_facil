@@ -322,7 +322,16 @@ const App: React.FC = () => {
             localStorage.removeItem('jf_session_user');
             setAuthOptions({ mode: 'LOGIN' });
           } else if (u && u.id) {
-            setUser(u);
+            let current: User = u;
+            if (u.role === UserRole.TEAM_CAPTAIN) {
+              // Dados da mensalidade/teste grátis sempre do servidor (a sessão salva pode ser de uma versão antiga)
+              try {
+                current = await api.getUserById(u.id);
+                localStorage.setItem('jf_session_user', JSON.stringify(current));
+              } catch { /* sem conexão: usa a sessão salva */ }
+              api.billing('status').catch(() => { /* acerta assinaturas antigas; ignora sem servidor */ });
+            }
+            setUser(current);
             setView('APP'); 
             if (u.role === UserRole.SUPER_ADMIN) setActiveTab('SUPER');
             else if (u.role === UserRole.FIELD_OWNER) setActiveTab('ADMIN');

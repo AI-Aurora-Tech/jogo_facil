@@ -1,5 +1,5 @@
 import { handle, json, readJson, HttpError, assert } from './_lib/http.js';
-import { requireSession, isAdmin, type DbUser } from './_lib/auth.js';
+import { requireSession, isAdmin, requireTeamAccess, type DbUser } from './_lib/auth.js';
 import { db, notify } from './_lib/supabaseAdmin.js';
 import {
   loadSlot,
@@ -29,7 +29,6 @@ import {
 } from './_lib/payments.js';
 import { findValidInvite, markInviteUsed } from './_lib/invites.js';
 import { loadHomeTeam } from './_lib/homeTeams.js';
-import { hasTeamAccess } from '../shared/pricing.js';
 import {
   canRate,
   canSetResult,
@@ -56,18 +55,7 @@ type Ctx = { user: DbUser; actor: DbUser; slot: SlotRow; field: FieldRow; body: 
 const isFieldOwner = (c: Ctx) => c.field.owner_id === c.user.id || isAdmin(c.actor);
 const money = (n: number) => `R$ ${n.toFixed(2).replace('.', ',')}`;
 
-/**
- * Mensalidade: dono de time usa o app no teste grátis (30 dias) ou com a assinatura ativa
- * (R$ 19,99/mês). O app também bloqueia, mas a conferência que vale é esta.
- */
-const requireSubscription = (user: DbUser) => {
-  assert(
-    hasTeamAccess({ role: user.role, trialEndsAt: user.trial_ends_at, billingStatus: user.billing_status }),
-    402,
-    'Seu teste grátis de 30 dias acabou. Assine por R$ 19,99/mês em Perfil > Minha mensalidade para continuar marcando jogos.',
-    'NEED_SUBSCRIPTION'
-  );
-};
+const requireSubscription = requireTeamAccess;
 
 const requireFuture = (slot: SlotRow) => {
   assert(matchStart(toRuleSlot(slot)).getTime() > Date.now(), 400, 'Este horário já passou.');
@@ -539,6 +527,7 @@ const visitors = async ({ user, slot, field }: Ctx) => {
 /** Mandante convida um time que está disponível para jogar fora. */
 const inviteVisitor = async ({ user, slot, field, body }: Ctx) => {
   assert(firstTeamUserId(toRuleSlot(slot), field.owner_id) === user.id, 403, 'Somente o time mandante pode convidar.');
+  requireSubscription(user);
   assert(slot.status === 'waiting_opponent' && !slot.opponent_user_id, 409, 'Este jogo já tem adversário.', 'STALE');
   requireFuture(slot);
   const { data: a } = await db().from('team_availability').select('*').eq('id', String(body.availabilityId || '')).maybeSingle();

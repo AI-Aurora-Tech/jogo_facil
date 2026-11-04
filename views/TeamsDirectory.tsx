@@ -140,7 +140,7 @@ export const TeamsDirectory: React.FC<TeamsDirectoryProps> = ({ currentUser, onO
       if (kind === 'HOME' && t.homeGames === 0) return false;
       if (kind === 'AWAY' && t.awayDays === 0) return false;
       if (category) {
-        const cats = kind === 'HOME' ? t.homeCategories : kind === 'AWAY' ? t.awayCategories : [...t.homeCategories, ...t.awayCategories, ...t.categories];
+        const cats = kind === 'HOME' ? t.homeCategories : kind === 'AWAY' ? t.awayCategories : [...t.homeCategories, ...t.awayCategories];
         if (!cats.includes(category)) return false;
       }
       if (radius !== null && coords) {
@@ -153,7 +153,7 @@ export const TeamsDirectory: React.FC<TeamsDirectoryProps> = ({ currentUser, onO
   }, [withDistance, search, gender, kind, category, radius, coords]);
 
   const categoryOptions = useMemo(() => {
-    const present = new Set(teams.flatMap(t => [...t.categories, ...t.homeCategories, ...t.awayCategories]));
+    const present = new Set(teams.flatMap(t => [...t.homeCategories, ...t.awayCategories]));
     return CATEGORY_ORDER.filter(c => present.has(c) || myCategories.includes(c));
   }, [teams, myCategories]);
 
@@ -230,7 +230,7 @@ export const TeamsDirectory: React.FC<TeamsDirectoryProps> = ({ currentUser, onO
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
             <p className="text-[9px] font-black uppercase text-gray-400 mb-1">Sexo</p>
             <div className="flex gap-1 flex-wrap">

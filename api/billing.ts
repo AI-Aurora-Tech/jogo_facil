@@ -50,16 +50,42 @@ const summary = (user: DbUser) => ({
   billingStatus: effectiveStatus(user),
 });
 
-/** Assinatura antiga (cobrada por categoria) passa para o valor fixo. */
+/** Dia (horário de Brasília) em que o teste grátis acaba, se ainda está no teste. */
+const trialEndDay = (user: DbUser) =>
+  user.trial_ends_at && isTrialActive(user.trial_ends_at)
+    ? new Date(new Date(user.trial_ends_at).getTime() - 3 * 3600_000).toISOString().slice(0, 10)
+    : null;
+
+/**
+ * Acerta uma assinatura que já existia:
+ * - assinatura antiga (cobrada por categoria) passa para o valor fixo;
+ * - no teste grátis, nada é cobrado antes do fim do teste (cobranças em aberto vencendo antes são apagadas
+ *   e o próximo vencimento vai para o fim do teste).
+ */
 const sync = async (user: DbUser) => {
-  if (user.asaas_subscription_id && Number(user.billing_value) !== MONTHLY_PRICE) {
-    try {
-      await asaas.updateSubscriptionValue(user.asaas_subscription_id, MONTHLY_PRICE, DESCRIPTION);
+  const subscriptionId = user.asaas_subscription_id;
+  if (!subscriptionId) return summary(user);
+  try {
+    if (Number(user.billing_value) !== MONTHLY_PRICE) {
+      await asaas.updateSubscriptionValue(subscriptionId, MONTHLY_PRICE, DESCRIPTION);
       await saveBilling(user, { billing_value: MONTHLY_PRICE });
       user.billing_value = MONTHLY_PRICE;
-    } catch (e) {
-      console.warn('[billing] falha ao ajustar o valor da assinatura', e);
     }
+    const end = trialEndDay(user);
+    if (end && user.billing_status !== 'ACTIVE') {
+      const { data } = await asaas.listSubscriptionPayments(subscriptionId);
+      const early = (data || []).filter(p => ['PENDING', 'OVERDUE'].includes(p.status) && (p.dueDate || '') < end);
+      if (early.length) {
+        await asaas.updateSubscriptionDueDate(subscriptionId, end);
+        for (const p of early) await asaas.deletePayment(p.id);
+        if (user.billing_status === 'OVERDUE') {
+          await saveBilling(user, { billing_status: 'PENDING' });
+          user.billing_status = 'PENDING';
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('[billing] falha ao acertar a assinatura', e);
   }
   return summary(user);
 };
@@ -98,23 +124,23 @@ export const POST = handle(async request => {
       }
       if (!subscriptionId) {
         // Assinou durante o teste grátis: a 1ª cobrança é no dia em que o teste acaba
-        const trialEndDay = user.trial_ends_at && isTrialActive(user.trial_ends_at)
-          ? new Date(new Date(user.trial_ends_at).getTime() - 3 * 3600_000).toISOString().slice(0, 10)
-          : null;
+        const end = trialEndDay(user);
         const sub = await asaas.createSubscription({
           customer,
           value: MONTHLY_PRICE,
-          nextDueDate: trialEndDay && trialEndDay > dueDate(0) ? trialEndDay : dueDate(0),
+          nextDueDate: end && end > dueDate(0) ? end : dueDate(0),
           description: DESCRIPTION,
           externalReference: `subscription:${user.id}`,
         });
         subscriptionId = sub.id;
-      } else if (Number(user.billing_value) !== MONTHLY_PRICE) {
-        await asaas.updateSubscriptionValue(subscriptionId, MONTHLY_PRICE, DESCRIPTION);
+        await saveBilling(user, { billing_value: MONTHLY_PRICE });
+        user.billing_value = MONTHLY_PRICE;
       }
       const status = user.billing_status === 'ACTIVE' ? 'ACTIVE' : 'PENDING';
-      await saveBilling(user, { asaas_subscription_id: subscriptionId, billing_status: status, billing_value: MONTHLY_PRICE });
+      await saveBilling(user, { asaas_subscription_id: subscriptionId, billing_status: status });
       user.billing_status = status;
+      user.asaas_subscription_id = subscriptionId;
+      await sync(user); // assinatura antiga: valor fixo e nada cobrado antes do fim do teste
       const invoiceUrl = await pendingInvoiceUrl(subscriptionId);
       return json({ ...summary(user), invoiceUrl });
     }

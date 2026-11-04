@@ -114,6 +114,8 @@ Para concluir: ajude a pessoa a abrir a conta Asaas dela, pegue o **Wallet ID**,
   tipo de jogo (na casa deles / na sua casa) e nome.
 - Posição do time para a distância: a localização marcada pelo dono do time na própria aba ("Usar GPS");
   sem ela, a arena do próximo jogo em casa. Times sem posição só aparecem com o filtro "Qualquer" distância.
+  A posição do time é enviada arredondada (~1 km), sem expor o endereço.
+- Só aparecem times no teste grátis ou com a mensalidade em dia.
 - O cadastro de dono de time agora exige o **sexo do time**. Times antigos sem essa informação são perguntados na aba.
 
 ## 5. Convites
@@ -204,7 +206,7 @@ App (React/Vite)  ──>  Supabase (leitura e cadastros simples)
 ## 10. Mudanças de comportamento importantes
 
 - Todos precisam **entrar de novo** uma vez (a sessão agora é validada no servidor).
-- Mensalidade dos donos de time: 30 dias grátis e depois R$ 19,99/mês fixo, qualquer quantidade de categorias. Assinaturas antigas com outro valor passam para R$ 19,99 na próxima vez que o perfil é salvo ou a assinatura é consultada.
+- Mensalidade dos donos de time: 30 dias grátis e depois R$ 19,99/mês fixo, qualquer quantidade de categorias. Assinaturas antigas com outro valor passam para R$ 19,99 sozinhas: quando o dono abre o app ou quando o Asaas gera a próxima cobrança (webhook). Quem tinha assinatura não paga e ganhou o teste não é cobrado antes do fim dos 30 dias.
 - Horário com mandante: quem aprova, define a taxa e recebe é o time mandante; o campo não aprova esses jogos.
 - O envio de comprovante PIX com verificação por IA foi substituído pelo PIX automático. Jogos antigos que estavam "aguardando validação" ainda podem ser aprovados pelo campo.
 - Antes, mensalista dividia a taxa 50/50 — agora o adversário paga 100%, como pedido.

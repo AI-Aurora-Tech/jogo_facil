@@ -15,7 +15,7 @@ ALTER TABLE "user" ADD COLUMN IF NOT EXISTS trial_ends_at TIMESTAMPTZ DEFAULT (N
 
 UPDATE "user"
 SET trial_ends_at = NOW() + INTERVAL '30 days'
-WHERE role = 'TEAM_CAPTAIN' AND (trial_ends_at IS NULL OR trial_ends_at < NOW() + INTERVAL '30 days')
+WHERE role = 'TEAM_CAPTAIN' AND trial_ends_at IS NULL
   AND COALESCE(billing_status, '') <> 'ACTIVE';
 
 -- O cadastro pelo app não pode escolher a data do teste
