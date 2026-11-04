@@ -37,7 +37,7 @@ export const agendaLink = async (user: DbUser, teamName: unknown, origin: string
   const url = `${origin}/?agenda=${token}`;
   const message =
     `⚽ Agenda do ${team.name} no Jogo Fácil!\nVeja nossos jogos em casa e os dias em que jogamos fora, e marque um jogo com a gente.\n` +
-    `Criar conta é grátis (1ª categoria): ${url}`;
+    `Os primeiros 30 dias são grátis: ${url}`;
   return { token, url, message };
 };
 
@@ -171,4 +171,121 @@ export const removeAvailability = async (user: DbUser, id: unknown) => {
   const { error } = await db().from('team_availability').delete().eq('id', String(id || '')).eq('user_id', user.id);
   if (error) throw error;
   return { message: 'Disponibilidade removida.' };
+};
+
+/**
+ * Times disponíveis para marcar jogo (aba "Times"): quem tem jogo em casa aberto ou
+ * dias em que quer jogar fora. Cada time vem com o link da agenda (para o botão "Jogar")
+ * e uma posição para o filtro de distância:
+ * - a localização marcada pelo dono do time; ou
+ * - a arena do próximo jogo em casa.
+ */
+export const teamsDirectory = async (viewerId: string) => {
+  const today = todayBR();
+  const [{ data: games, error: gErr }, { data: avail, error: aErr }] = await Promise.all([
+    db()
+      .from('match_slot')
+      .select('id, field_id, date, time, local_team_name, local_team_category, allowed_opponent_categories, home_team_user_id, custom_location')
+      .eq('status', 'waiting_opponent')
+      .eq('has_local_team', true)
+      .not('home_team_user_id', 'is', null)
+      .gte('date', today)
+      .order('date')
+      .order('time'),
+    db().from('team_availability').select('user_id, team_name, category, date').gte('date', today).order('date'),
+  ]);
+  if (gErr) throw gErr;
+  if (aErr) throw aErr;
+
+  type Entry = {
+    userId: string;
+    teamName: string;
+    homeGames: number;
+    awayDays: number;
+    homeCategories: Set<string>;
+    awayCategories: Set<string>;
+    nextDate: string | null;
+    arenaId: string | null;
+  };
+  const byTeam = new Map<string, Entry>();
+  const keyOf = (userId: string, name: string) => `${userId}::${(name || '').trim().toLowerCase()}`;
+  const entry = (userId: string, name: string) => {
+    const k = keyOf(userId, name);
+    let e = byTeam.get(k);
+    if (!e) {
+      e = { userId, teamName: name, homeGames: 0, awayDays: 0, homeCategories: new Set(), awayCategories: new Set(), nextDate: null, arenaId: null };
+      byTeam.set(k, e);
+    }
+    return e;
+  };
+
+  for (const g of games || []) {
+    if (!g.home_team_user_id || g.home_team_user_id === viewerId || !g.local_team_name) continue;
+    const e = entry(g.home_team_user_id, g.local_team_name);
+    e.homeGames += 1;
+    for (const c of g.allowed_opponent_categories?.length ? g.allowed_opponent_categories : [g.local_team_category]) if (c) e.homeCategories.add(c);
+    if (!e.nextDate || g.date < e.nextDate) e.nextDate = g.date;
+    if (!e.arenaId && g.field_id) e.arenaId = g.field_id;
+  }
+  for (const a of avail || []) {
+    if (a.user_id === viewerId) continue;
+    const e = entry(a.user_id, a.team_name);
+    e.awayDays += 1;
+    e.awayCategories.add(a.category);
+    if (!e.nextDate || a.date < e.nextDate) e.nextDate = a.date;
+  }
+  const entries = Array.from(byTeam.values());
+  if (entries.length === 0) return { teams: [] };
+
+  const userIds = Array.from(new Set(entries.map(e => e.userId)));
+  const arenaIds = Array.from(new Set(entries.map(e => e.arenaId).filter(Boolean))) as string[];
+  const [{ data: owners }, { data: arenas }, { data: pages }] = await Promise.all([
+    db().from('user').select('id, teams, latitude, longitude').in('id', userIds),
+    arenaIds.length ? db().from('field').select('id, name, location, latitude, longitude').in('id', arenaIds) : Promise.resolve({ data: [] as any[] }),
+    db().from('team_page').select('token, user_id, team_name').in('user_id', userIds),
+  ]);
+
+  const teams = [];
+  for (const e of entries) {
+    const owner = (owners || []).find(o => o.id === e.userId);
+    const team = ((owner?.teams || []) as any[]).find(t => sameName(t.name, e.teamName));
+    if (!owner || !team) continue; // time removido do perfil
+
+    // Link da agenda (cria se ainda não existe)
+    let token = (pages || []).find(p => p.user_id === e.userId && sameName(p.team_name, team.name))?.token as string | undefined;
+    if (!token) {
+      token = newToken();
+      const { error } = await db().from('team_page').insert([{ token, user_id: e.userId, team_name: team.name }]);
+      if (error) {
+        const { data: again } = await db().from('team_page').select('token, team_name').eq('user_id', e.userId);
+        token = (again || []).find(p => sameName(p.team_name, team.name))?.token;
+        if (!token) continue;
+      }
+    }
+
+    const arena = e.arenaId ? (arenas || []).find((f: any) => f.id === e.arenaId) : null;
+    const ownLat = Number(owner.latitude);
+    const ownLng = Number(owner.longitude);
+    const location = Number.isFinite(ownLat) && Number.isFinite(ownLng) && Math.abs(ownLat) > 0.0001
+      ? { lat: ownLat, lng: ownLng, source: 'team' as const, label: null }
+      : arena && Math.abs(Number(arena.latitude)) > 0.0001
+        ? { lat: Number(arena.latitude), lng: Number(arena.longitude), source: 'arena' as const, label: arena.name }
+        : null;
+
+    teams.push({
+      token,
+      teamName: team.name,
+      logoUrl: team.logoUrl || null,
+      gender: team.gender || null,
+      categories: team.categories || [],
+      homeGames: e.homeGames,
+      awayDays: e.awayDays,
+      homeCategories: Array.from(e.homeCategories),
+      awayCategories: Array.from(e.awayCategories),
+      nextDate: e.nextDate,
+      location,
+    });
+  }
+  teams.sort((a, b) => (a.nextDate || '').localeCompare(b.nextDate || ''));
+  return { teams };
 };

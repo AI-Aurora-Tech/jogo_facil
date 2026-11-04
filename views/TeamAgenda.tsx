@@ -260,7 +260,7 @@ export const TeamAgenda: React.FC<TeamAgendaProps> = ({ currentUser, fields, onC
       {/* Link exclusivo */}
       <div className="bg-pitch text-white rounded-[2rem] p-5 space-y-3">
         <p className="text-[10px] font-black uppercase text-grass-500 flex items-center gap-2"><Link2 className="w-4 h-4" /> Link exclusivo do {team.name}</p>
-        <p className="text-[10px] font-bold text-gray-300">Quem abre vê seus jogos em casa e os dias em que você joga fora, cria a conta (1ª categoria grátis) e marca jogo com você.</p>
+        <p className="text-[10px] font-bold text-gray-300">Quem abre vê seus jogos em casa e os dias em que você joga fora, cria a conta (30 dias grátis) e marca jogo com você.</p>
         <div className="grid grid-cols-2 gap-2">
           <button onClick={() => copyLink('copy')} className="py-3 rounded-xl bg-white/10 text-[9px] font-black uppercase flex items-center justify-center gap-1"><Copy className="w-4 h-4" /> Copiar link</button>
           <button onClick={() => copyLink('whatsapp')} className="py-3 rounded-xl bg-grass-500 text-pitch text-[9px] font-black uppercase flex items-center justify-center gap-1"><Send className="w-4 h-4" /> WhatsApp</button>

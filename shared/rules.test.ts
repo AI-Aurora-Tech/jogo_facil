@@ -1,7 +1,7 @@
 // Testes das regras de negócio. Rodar com: npm test
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { countBillableCategories, monthlyPriceForCategories, monthlyPriceForTeams } from './pricing.ts';
+import { MONTHLY_PRICE, TRIAL_DAYS, trialDaysLeft, hasTeamAccess } from './pricing.ts';
 import {
   computeShares,
   opponentApproverId,
@@ -29,23 +29,29 @@ const baseSlot = (over: Partial<SlotLike> = {}): SlotLike => ({
   ...over,
 });
 
-test('mensalidade: 1ª categoria grátis', () => {
-  assert.equal(monthlyPriceForCategories(0), 0);
-  assert.equal(monthlyPriceForCategories(1), 0);
+test('mensalidade: 30 dias grátis e depois R$ 19,99 fixo', () => {
+  assert.equal(TRIAL_DAYS, 30);
+  assert.equal(MONTHLY_PRICE, 19.99);
 });
 
-test('mensalidade: R$ 19,99 por categoria adicional', () => {
-  assert.equal(monthlyPriceForCategories(2), 19.99);
-  assert.equal(monthlyPriceForCategories(3), 39.98);
+test('mensalidade: dias de teste restantes', () => {
+  const now = new Date('2026-11-04T12:00:00Z');
+  assert.equal(trialDaysLeft('2026-12-04T12:00:00Z', now), 30);
+  assert.equal(trialDaysLeft('2026-11-05T00:00:00Z', now), 1);
+  assert.equal(trialDaysLeft('2026-11-04T11:00:00Z', now), 0);
+  assert.equal(trialDaysLeft(null, now), 0);
 });
 
-test('mensalidade: conta categorias por time, sem duplicar', () => {
-  const teams = [
-    { name: 'Time A', categories: ['Sub-11', 'Sub-12', 'sub-11'] },
-    { name: 'Time B', categories: ['Sub-11'] },
-  ];
-  assert.equal(countBillableCategories(teams), 3);
-  assert.equal(monthlyPriceForTeams(teams), 39.98);
+test('mensalidade: acesso do dono de time', () => {
+  const now = new Date('2026-11-04T12:00:00Z');
+  // No teste grátis: libera, com qualquer quantidade de categorias
+  assert.equal(hasTeamAccess({ role: 'TEAM_CAPTAIN', trialEndsAt: '2026-11-20T00:00:00Z', billingStatus: 'FREE' }, now), true);
+  // Teste acabou e não assinou: bloqueia
+  assert.equal(hasTeamAccess({ role: 'TEAM_CAPTAIN', trialEndsAt: '2026-11-01T00:00:00Z', billingStatus: 'PENDING' }, now), false);
+  // Assinatura ativa: libera
+  assert.equal(hasTeamAccess({ role: 'TEAM_CAPTAIN', trialEndsAt: '2026-11-01T00:00:00Z', billingStatus: 'ACTIVE' }, now), true);
+  // Dono de campo não paga
+  assert.equal(hasTeamAccess({ role: 'FIELD_OWNER', trialEndsAt: null, billingStatus: null }, now), true);
 });
 
 test('taxa: 2 times de fora pagam 50% cada', () => {

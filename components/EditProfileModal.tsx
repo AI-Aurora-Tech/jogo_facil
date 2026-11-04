@@ -6,7 +6,7 @@ import { WalletSetup } from './WalletSetup';
 import { X, User as UserIcon, Shield, Check, Plus, AlertCircle, Building2, MapPin, Smartphone, Camera, Trash2, LayoutGrid, Tag, Lock, PlusCircle, Globe, Search, Eye, EyeOff } from 'lucide-react';
 import { formatCategory, convertFileToBase64, geocodeAddressParts, fetchAddressByCEP, GeoResult } from '../utils';
 import { ArenaLocation } from './ArenaLocation';
-import { countBillableCategories, monthlyPriceForTeams, formatBRL, CATEGORY_MONTHLY_PRICE } from '../shared/pricing';
+import { MONTHLY_PRICE, formatBRL, isTrialActive, trialDaysLeft } from '../shared/pricing';
 
 interface EditProfileModalProps {
   categories: string[];
@@ -490,17 +490,13 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({ categories, 
           {user.role === UserRole.TEAM_CAPTAIN && (
             <div className="bg-pitch text-white rounded-[2rem] p-5 space-y-2">
               <p className="text-[10px] font-black uppercase text-grass-500">Sua mensalidade</p>
-              {teams.map((t, i) => (
-                <div key={i} className="flex justify-between text-[10px] font-bold uppercase">
-                  <span className="truncate mr-2">{t.name || 'Time'}</span>
-                  <span>{t.categories.length} categoria(s)</span>
-                </div>
-              ))}
-              <div className="flex justify-between items-end border-t border-white/10 pt-2">
-                <span className="text-[10px] font-bold uppercase text-gray-300">{countBillableCategories(teams)} categoria(s) no total</span>
-                <span className="text-xl font-black">{monthlyPriceForTeams(teams) > 0 ? `${formatBRL(monthlyPriceForTeams(teams))}/mês` : 'Grátis'}</span>
+              <div className="flex justify-between items-end">
+                <span className="text-[10px] font-bold uppercase text-gray-300">
+                  {user.billingStatus === 'ACTIVE' ? 'Ativa' : isTrialActive(user.trialEndsAt) ? `Teste grátis: ${trialDaysLeft(user.trialEndsAt)} dia(s)` : 'Teste grátis encerrado'}
+                </span>
+                <span className="text-xl font-black">{formatBRL(MONTHLY_PRICE)}/mês</span>
               </div>
-              <p className="text-[9px] font-bold text-gray-400 uppercase">1ª categoria grátis • {formatBRL(CATEGORY_MONTHLY_PRICE)} por categoria adicional • o valor da assinatura é atualizado ao salvar</p>
+              <p className="text-[9px] font-bold text-gray-400 uppercase">Valor fixo • quantos times e categorias quiser</p>
             </div>
           )}
 

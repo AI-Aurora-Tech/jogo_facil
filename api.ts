@@ -1,8 +1,8 @@
 import { supabase } from './supabaseClient';
-import { User, Field, MatchSlot, RegisteredTeam, PendingUpdate, UserRole, InAppNotification, SubscriptionPlan, TutorialVideo, MatchPaymentInfo, InvitePreview, TeamInvitePreview, PublicAgenda, MyAgenda } from './types';
+import { User, Field, MatchSlot, RegisteredTeam, PendingUpdate, UserRole, InAppNotification, SubscriptionPlan, TutorialVideo, MatchPaymentInfo, InvitePreview, TeamInvitePreview, PublicAgenda, MyAgenda, DirectoryTeam } from './types';
 
 const SESSION_TOKEN_KEY = 'jf_session_token';
-const USER_COLUMNS = 'id, email, name, phone_number, role, subscription, subscription_expiry, teams, latitude, longitude, team_rating, team_rating_count, is_subscribed, subscription_id, created_at, billing_status, billing_value, cpf_cnpj';
+const USER_COLUMNS = 'id, email, name, phone_number, role, subscription, subscription_expiry, teams, latitude, longitude, team_rating, team_rating_count, is_subscribed, subscription_id, created_at, billing_status, billing_value, cpf_cnpj, trial_ends_at';
 
 export const sessionToken = {
   get: (): string | null => {
@@ -205,6 +205,7 @@ const mapUserFromDb = (u: any): User => ({
   subscriptionId: u.subscription_id,
   billingStatus: u.billing_status || undefined,
   billingValue: u.billing_value != null ? Number(u.billing_value) : undefined,
+  trialEndsAt: u.trial_ends_at || undefined,
   cpfCnpj: u.cpf_cnpj || undefined,
 });
 
@@ -613,6 +614,15 @@ export const api = {
   /** Página pública do link (sem login). */
   getPublicAgenda: (token: string) => callServer<PublicAgenda>(`/api/teams?agenda=${encodeURIComponent(token)}`, undefined, 'GET'),
 
+  /** Aba "Times": times com jogo em casa aberto ou dias para jogar fora. */
+  teamsDirectory: () => callServer<{ teams: DirectoryTeam[] }>('/api/teams', { action: 'directory' }),
+
+  /** Localização do time (usada no filtro por distância da aba "Times"). */
+  setTeamLocation: async (userId: string, lat: number, lng: number): Promise<void> => {
+    const { error } = await supabase.from('user').update({ latitude: lat, longitude: lng }).eq('id', userId);
+    if (error) throw error;
+  },
+
   /** Jogos em casa abertos, disponibilidade para jogar fora e convites recebidos. */
   myAgenda: () => callServer<MyAgenda>('/api/teams', { action: 'my_agenda' }),
 
@@ -625,9 +635,9 @@ export const api = {
   createHomeGame: (params: { teamName: string; category: string; date: string; time: string; durationMinutes: number; location: string; price: number; matchType?: string; prizeDescription?: string; inviteAvailabilityId?: string }) =>
     callServer<{ slot: any; message: string }>('/api/matches', { action: 'create_home_game', ...params }),
 
-  /** Mensalidade do dono de time (1ª categoria grátis, R$ 19,99 por categoria adicional). */
+  /** Mensalidade do dono de time (30 dias grátis, depois R$ 19,99/mês). */
   billing: (action: 'status' | 'subscribe' | 'sync' | 'set_document', params: Record<string, unknown> = {}) =>
-    callServer<{ categories: number; value: number; billingStatus: string; invoiceUrl?: string | null; hasCpf?: boolean }>('/api/billing', { action, ...params }),
+    callServer<{ value: number; billingStatus: string; trialEndsAt?: string | null; trialDaysLeft?: number; invoiceUrl?: string | null; hasCpf?: boolean }>('/api/billing', { action, ...params }),
 
   /** Link de convite de um time do campo (mensalista ou time da casa). Só o dono do campo. */
   createTeamInvite: (teamId: string) => callServer<{ token: string; url: string; message: string }>('/api/teams', { action: 'invite', teamId }),

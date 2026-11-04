@@ -40,7 +40,7 @@ const verifySessionToken = (token: string): string | null => {
 };
 
 export const USER_COLUMNS =
-  'id, email, name, phone_number, role, subscription, subscription_expiry, teams, latitude, longitude, team_rating, team_rating_count, is_subscribed, subscription_id, created_at, cpf_cnpj, asaas_customer_id, asaas_subscription_id, billing_status, billed_categories, billing_value';
+  'id, email, name, phone_number, role, subscription, subscription_expiry, teams, latitude, longitude, team_rating, team_rating_count, is_subscribed, subscription_id, created_at, cpf_cnpj, asaas_customer_id, asaas_subscription_id, billing_status, billed_categories, billing_value, trial_ends_at';
 
 export interface DbUser {
   id: string;

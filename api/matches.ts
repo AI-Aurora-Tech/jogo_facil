@@ -29,7 +29,7 @@ import {
 } from './_lib/payments.js';
 import { findValidInvite, markInviteUsed } from './_lib/invites.js';
 import { loadHomeTeam } from './_lib/homeTeams.js';
-import { countBillableCategories, monthlyPriceForCategories } from '../shared/pricing.js';
+import { hasTeamAccess } from '../shared/pricing.js';
 import {
   canRate,
   canSetResult,
@@ -57,17 +57,14 @@ const isFieldOwner = (c: Ctx) => c.field.owner_id === c.user.id || isAdmin(c.act
 const money = (n: number) => `R$ ${n.toFixed(2).replace('.', ',')}`;
 
 /**
- * Mensalidade: 1ª categoria grátis; com mais categorias a assinatura precisa estar ativa e cobrir
- * todas elas (o app também bloqueia, mas a conferência que vale é esta).
+ * Mensalidade: dono de time usa o app no teste grátis (30 dias) ou com a assinatura ativa
+ * (R$ 19,99/mês). O app também bloqueia, mas a conferência que vale é esta.
  */
 const requireSubscription = (user: DbUser) => {
-  const count = countBillableCategories(user.teams);
-  if (monthlyPriceForCategories(count) <= 0) return;
-  const billed = user.billed_categories == null ? count : Number(user.billed_categories) || 0;
   assert(
-    user.billing_status === 'ACTIVE' && billed >= count,
+    hasTeamAccess({ role: user.role, trialEndsAt: user.trial_ends_at, billingStatus: user.billing_status }),
     402,
-    'Sua mensalidade não cobre todas as categorias do seu time (1ª categoria grátis, R$ 19,99 por categoria adicional). Abra "Minha mensalidade" no perfil para regularizar.',
+    'Seu teste grátis de 30 dias acabou. Assine por R$ 19,99/mês em Perfil > Minha mensalidade para continuar marcando jogos.',
     'NEED_SUBSCRIPTION'
   );
 };

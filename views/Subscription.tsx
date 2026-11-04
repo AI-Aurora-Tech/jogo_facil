@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { ShieldCheck, LogOut, Layers, ExternalLink, Loader2, ChevronLeft, Pencil } from 'lucide-react';
+import { ShieldCheck, LogOut, ExternalLink, Loader2, ChevronLeft, Pencil, Gift } from 'lucide-react';
 import { User } from '../types';
 import { api, ServerError } from '../api';
-import { countBillableCategories, monthlyPriceForCategories, formatBRL, CATEGORY_MONTHLY_PRICE, FREE_CATEGORY_LIMIT } from '../shared/pricing';
+import { MONTHLY_PRICE, TRIAL_DAYS, formatBRL, isTrialActive, trialDaysLeft } from '../shared/pricing';
 
 interface SubscriptionProps {
   user: User;
@@ -15,15 +15,15 @@ interface SubscriptionProps {
 }
 
 /**
- * Mensalidade do dono de time: 1ª categoria grátis, R$ 19,99 por categoria adicional.
+ * Mensalidade do dono de time: 30 dias grátis e depois R$ 19,99 por mês,
+ * qualquer que seja a quantidade de times e categorias.
  * A cobrança é uma assinatura recorrente no Asaas (PIX, boleto ou cartão).
  */
 export const Subscription: React.FC<SubscriptionProps> = ({ user, blocking, onBack, onLogout, onEditCategories, onUserUpdated }) => {
-  const categories = countBillableCategories(user.teams);
-  const value = monthlyPriceForCategories(categories);
-  // Conta nova nasce como 'FREE' no banco: com valor a pagar, a situação é "aguardando pagamento"
-  const initialStatus = value === 0 ? 'FREE' : !user.billingStatus || user.billingStatus === 'FREE' ? 'PENDING' : user.billingStatus;
+  const inTrial = isTrialActive(user.trialEndsAt);
+  const initialStatus = user.billingStatus === 'ACTIVE' ? 'ACTIVE' : inTrial ? 'TRIAL' : !user.billingStatus || user.billingStatus === 'FREE' ? 'PENDING' : user.billingStatus;
   const [status, setStatus] = useState<string>(initialStatus);
+  const [daysLeft, setDaysLeft] = useState(trialDaysLeft(user.trialEndsAt));
   const [invoiceUrl, setInvoiceUrl] = useState<string | null>(null);
   const [needsCpf, setNeedsCpf] = useState(false);
   const [cpf, setCpf] = useState('');
@@ -35,6 +35,7 @@ export const Subscription: React.FC<SubscriptionProps> = ({ user, blocking, onBa
       .then(res => {
         setStatus(res.billingStatus);
         setInvoiceUrl(res.invoiceUrl || null);
+        if (typeof res.trialDaysLeft === 'number') setDaysLeft(res.trialDaysLeft);
       })
       .catch(() => { /* sem servidor: mantém o que já sabemos */ });
   }, []);
@@ -49,6 +50,8 @@ export const Subscription: React.FC<SubscriptionProps> = ({ user, blocking, onBa
       if (res.invoiceUrl) {
         setInvoiceUrl(res.invoiceUrl);
         window.open(res.invoiceUrl, '_blank');
+      } else if (res.billingStatus === 'TRIAL') {
+        alert('Assinatura criada! A 1ª cobrança é no fim do seu teste grátis.');
       }
     } catch (e: any) {
       if (e instanceof ServerError && e.code === 'NEED_CPF') setNeedsCpf(true);
@@ -63,13 +66,19 @@ export const Subscription: React.FC<SubscriptionProps> = ({ user, blocking, onBa
     try {
       const updated = await api.getUserById(user.id);
       onUserUpdated?.(updated);
-      setStatus(updated.billingStatus || status);
+      setStatus(updated.billingStatus === 'ACTIVE' ? 'ACTIVE' : status);
       if (updated.billingStatus === 'ACTIVE') alert('Mensalidade ativa! ✅');
       else alert('Ainda não identificamos o pagamento. Pode levar alguns minutos.');
     } finally {
       setLoading(false);
     }
   };
+
+  const statusText =
+    status === 'ACTIVE' ? 'Mensalidade ativa'
+      : status === 'TRIAL' ? `Teste grátis: ${daysLeft} dia(s) restante(s)`
+        : status === 'OVERDUE' ? 'Mensalidade em atraso'
+          : 'Teste grátis encerrado';
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4 font-sans">
@@ -79,29 +88,27 @@ export const Subscription: React.FC<SubscriptionProps> = ({ user, blocking, onBa
       <div className="text-center mb-8">
         <h1 className="text-3xl font-black text-pitch italic uppercase tracking-tighter">Sua mensalidade</h1>
         <p className="text-gray-500 mt-2 text-sm">
-          {FREE_CATEGORY_LIMIT}ª categoria grátis. {formatBRL(CATEGORY_MONTHLY_PRICE)} por mês para cada categoria adicional.
+          {TRIAL_DAYS} dias grátis. Depois, {formatBRL(MONTHLY_PRICE)} por mês com quantas categorias quiser.
         </p>
       </div>
 
       <div className="w-full max-w-sm bg-pitch rounded-3xl shadow-2xl overflow-hidden">
         <div className="p-8 text-white space-y-6">
-          <div className="space-y-2">
-            {(user.teams || []).map(team => (
-              <div key={team.name} className="flex justify-between items-start gap-3 text-sm">
-                <span className="font-black uppercase">{team.name}</span>
-                <span className="text-right text-gray-300 text-xs">{(team.categories || []).join(', ') || '—'}</span>
-              </div>
-            ))}
+          <div className="flex items-center gap-3">
+            <Gift className="w-8 h-8 text-grass-500 shrink-0" />
+            <div>
+              <p className="text-xs font-black uppercase text-grass-500">{statusText}</p>
+              {blocking && <p className="text-[10px] font-bold text-gray-300 uppercase mt-1">Assine para continuar marcando jogos.</p>}
+            </div>
           </div>
 
           <div className="border-t border-white/10 pt-4 flex justify-between items-center">
-            <span className="flex items-center gap-2 text-sm text-gray-300"><Layers className="w-4 h-4" /> {categories} categoria(s)</span>
-            <span className="text-3xl font-black">{value === 0 ? 'Grátis' : formatBRL(value)}</span>
+            <span className="text-sm text-gray-300">Plano dono de time</span>
+            <span className="text-3xl font-black">{formatBRL(MONTHLY_PRICE)}</span>
           </div>
-          {value > 0 && <p className="text-[10px] text-gray-400 uppercase text-right -mt-4">por mês</p>}
+          <p className="text-[10px] text-gray-400 uppercase text-right -mt-4">por mês • todos os times e categorias</p>
 
-
-          {value > 0 && status !== 'ACTIVE' && (
+          {status !== 'ACTIVE' && (
             <>
               {needsCpf && (
                 <input
@@ -119,8 +126,11 @@ export const Subscription: React.FC<SubscriptionProps> = ({ user, blocking, onBa
                 className="w-full bg-grass-500 hover:bg-grass-600 text-white font-bold uppercase py-4 rounded-xl transition-all shadow-lg active:scale-95 flex items-center justify-center gap-2 disabled:opacity-60"
               >
                 {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <ShieldCheck className="w-5 h-5" />}
-                {invoiceUrl ? 'Gerar/abrir fatura' : `Assinar por ${formatBRL(value)}/mês`}
+                {invoiceUrl ? 'Gerar/abrir fatura' : `Assinar por ${formatBRL(MONTHLY_PRICE)}/mês`}
               </button>
+              {status === 'TRIAL' && !invoiceUrl && (
+                <p className="text-[10px] text-gray-300 text-center">Assinando agora, a 1ª cobrança é só no fim do teste grátis.</p>
+              )}
               {invoiceUrl && (
                 <a href={invoiceUrl} target="_blank" rel="noreferrer" className="w-full py-3 rounded-xl border border-white/20 text-xs font-black uppercase flex items-center justify-center gap-2">
                   <ExternalLink className="w-4 h-4" /> Abrir fatura (PIX, boleto ou cartão)
@@ -130,7 +140,7 @@ export const Subscription: React.FC<SubscriptionProps> = ({ user, blocking, onBa
             </>
           )}
 
-          <p className="text-center text-gray-400 text-xs">Sem fidelidade • O valor muda sozinho quando você adiciona ou remove categorias</p>
+          <p className="text-center text-gray-400 text-xs">Sem fidelidade • Valor fixo, não muda com as categorias</p>
         </div>
       </div>
 
